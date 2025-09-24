@@ -1,5 +1,8 @@
+// main.tsx
 import { StrictMode } from 'react'
 import ReactDOM from 'react-dom/client'
+import '@radix-ui/themes/styles.css'
+import { Theme } from '@radix-ui/themes'
 import {
   Outlet,
   RouterProvider,
@@ -13,23 +16,54 @@ import './styles.css'
 import reportWebVitals from './reportWebVitals.ts'
 
 import App from './App.tsx'
+import Home from './pages/Home.tsx'
+import Inventory from './pages/Inventory.tsx'
+import ItemDetail from './pages/ItemDetail.tsx'
 
+// Root: render your layout (App). App MUST contain <Outlet />.
 const rootRoute = createRootRoute({
   component: () => (
     <>
-      <Outlet />
+      <App />
       <TanStackRouterDevtools />
     </>
   ),
 })
 
-const indexRoute = createRoute({
+// "/" (index) under root
+const homeRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/',
-  component: App,
+  path: '/', // index route under root
+  component: Home,
 })
 
-const routeTree = rootRoute.addChildren([indexRoute])
+// "/inventory"
+const inventoryRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'inventory',
+  component: Inventory,
+})
+
+// "/inventory/:itemId"
+const itemDetailRoute = createRoute({
+  getParentRoute: () => inventoryRoute,
+  path: '$itemId',
+  component: ItemDetail,
+})
+
+// 404
+const notFoundRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '*',
+  component: () => <div>Not found</div>,
+})
+
+// ✅ Do NOT nest homeRoute under itself, and only add it once
+const routeTree = rootRoute.addChildren([
+  homeRoute,
+  inventoryRoute.addChildren([itemDetailRoute]),
+  notFoundRoute,
+])
 
 const router = createRouter({
   routeTree,
@@ -46,17 +80,16 @@ declare module '@tanstack/react-router' {
   }
 }
 
-const rootElement = document.getElementById('app')
+const rootElement = document.getElementById('root')
 if (rootElement && !rootElement.innerHTML) {
   const root = ReactDOM.createRoot(rootElement)
   root.render(
     <StrictMode>
-      <RouterProvider router={router} />
+      <Theme radius="small" appearance="dark">
+        <RouterProvider router={router} />
+      </Theme>
     </StrictMode>,
   )
 }
 
-// If you want to start measuring performance in your app, pass a function
-// to log results (for example: reportWebVitals(console.log))
-// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
 reportWebVitals()
