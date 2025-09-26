@@ -1,6 +1,6 @@
 import { useParams } from '@tanstack/react-router'
 
-export default function ItemDetail() {
+export default function ItemPage() {
   const { itemId } = useParams({ from: '/inventory/$itemId' })
   return (
     <section>

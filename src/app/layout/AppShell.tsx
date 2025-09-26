@@ -19,7 +19,7 @@ const SIDEBAR_EXPANDED = 300
 const SIDEBAR_COLLAPSED = 64
 const CONTENT_MAX_WIDTH = 1080 // constant width for main content
 
-export default function App() {
+export default function AppShell() {
   const [open, setOpen] = React.useState(true)
   const routerState = useRouterState()
   const currentPath = routerState.location.pathname

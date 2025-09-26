@@ -12,7 +12,7 @@ import {
 } from '@radix-ui/themes'
 import { Bell, Calendar, CheckCircle, Package } from 'iconoir-react'
 
-export default function Home() {
+export default function HomePage() {
   return (
     <Box p="4" style={{ width: '100%' }}>
       <Heading size="8" mb="1">
