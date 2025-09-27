@@ -2,6 +2,7 @@
 import * as React from 'react'
 import { Link } from '@tanstack/react-router'
 import iconSmall from '@shared/assets/subbLogo/svg/white/IconSmallWhite.svg'
+import logoWhite from '@shared/assets/subbLogo/svg/white/LogoWhite.svg'
 import {
   Box,
   Button,
@@ -12,17 +13,30 @@ import {
   Tooltip,
 } from '@radix-ui/themes'
 import * as ScrollArea from '@radix-ui/react-scroll-area'
-import { Archive, HomeAlt, Menu } from 'iconoir-react'
+import {
+  Archive,
+  BoxIso,
+  Calendar,
+  Car,
+  GoogleDocs,
+  Group,
+  HomeAlt,
+  Menu,
+} from 'iconoir-react'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 
-const SIDEBAR_EXPANDED = 300
+const SIDEBAR_EXPANDED = 240
 const SIDEBAR_COLLAPSED = 64
 
 type NavItem = { to: string; label: string; icon: React.ReactNode }
 
 const NAV: Array<NavItem> = [
   { to: '/', label: 'Home', icon: <HomeAlt /> },
-  { to: '/inventory', label: 'Inventory', icon: <Archive /> },
+  { to: '/inventory', label: 'Inventory', icon: <BoxIso /> },
+  { to: '/calendar', label: 'Calendar', icon: <Calendar /> },
+  { to: '/vehicles', label: 'Vehicles', icon: <Car /> },
+  { to: '/jobs', label: 'Jobs', icon: <GoogleDocs /> },
+  { to: '/crew', label: 'Crew', icon: <Group /> },
 ]
 
 export function Sidebar({
@@ -142,19 +156,27 @@ function SidebarContent({
   showCollapseButton?: boolean
 }) {
   return (
-    <aside>
+    <aside
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100dvh',
+      }}
+    >
       {/* Header */}
       <Flex align="center" justify="between" px="3" py="3" gap="3">
         <Flex align="center" gap="2" style={{ minWidth: 0 }}>
-          <img
-            src={iconSmall}
-            alt="App logo"
-            style={{ width: 28, height: 28 }}
-          />
           {open && (
-            <Text size="3" weight="bold" truncate>
-              Ekte Lyd AS
-            </Text>
+            <>
+              <img
+                src={iconSmall}
+                alt="App logo"
+                style={{ width: 28, height: 28 }}
+              />
+              <Text size="3" weight="bold" truncate>
+                Ekte Lyd AS
+              </Text>
+            </>
           )}
         </Flex>
 
@@ -174,28 +196,43 @@ function SidebarContent({
 
       <Separator size="4" />
 
-      {/* Nav */}
-      <ScrollArea.Root style={{ height: 'calc(100dvh - 64px)' }}>
-        <ScrollArea.Viewport style={{ padding: '8px 8px 16px' }}>
-          <Flex direction="column" gap="2">
-            {NAV.map((n) => (
-              <NavItem
-                key={n.to}
-                to={n.to}
-                icon={n.icon}
-                label={n.label}
-                open={open}
-                currentPath={currentPath}
-                isMobile={isMobile}
-                onCloseMobile={() => onToggle(false)}
-              />
-            ))}
+      {/* Main nav area */}
+      <Box flexGrow="1" style={{ minHeight: 0 }}>
+        <ScrollArea.Root style={{ height: '100%' }}>
+          <ScrollArea.Viewport style={{ padding: '8px 8px 16px' }}>
+            <Flex direction="column" gap="4">
+              {NAV.map((n) => (
+                <NavItem
+                  key={n.to}
+                  to={n.to}
+                  icon={n.icon}
+                  label={n.label}
+                  open={open}
+                  currentPath={currentPath}
+                  isMobile={isMobile}
+                  onCloseMobile={() => onToggle(false)}
+                />
+              ))}
+            </Flex>
+          </ScrollArea.Viewport>
+          <ScrollArea.Scrollbar orientation="vertical">
+            <ScrollArea.Thumb />
+          </ScrollArea.Scrollbar>
+        </ScrollArea.Root>
+      </Box>
+
+      {/* Footer image (only when open) */}
+      {open && (
+        <Box px="3" py="3">
+          <Flex align="center" justify="center">
+            <img
+              src={logoWhite}
+              alt="Footer illustration"
+              style={{ maxWidth: '50%', borderRadius: 6 }}
+            />
           </Flex>
-        </ScrollArea.Viewport>
-        <ScrollArea.Scrollbar orientation="vertical">
-          <ScrollArea.Thumb />
-        </ScrollArea.Scrollbar>
-      </ScrollArea.Root>
+        </Box>
+      )}
     </aside>
   )
 }
