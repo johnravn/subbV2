@@ -3,18 +3,12 @@ import { StrictMode } from 'react'
 import ReactDOM from 'react-dom/client'
 import '@radix-ui/themes/styles.css'
 import { Theme } from '@radix-ui/themes'
-import {
-  Outlet,
-  RouterProvider,
-  createRootRoute,
-  createRoute,
-  createRouter,
-} from '@tanstack/react-router'
-import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
+import { RouterProvider } from '@tanstack/react-router'
 
 import './app/styles.css'
-import AppShell from '@app/layout/AppShell.tsx'
 import { router } from '@app/router/routes.tsx'
+import { QueryProvider } from '@app/providers/QueryProvider.tsx'
+import { AuthProvider } from '@app/providers/AuthProvider.tsx'
 import reportWebVitals from './reportWebVitals.ts'
 
 declare module '@tanstack/react-router' {
@@ -29,7 +23,11 @@ if (rootElement && !rootElement.innerHTML) {
   root.render(
     <StrictMode>
       <Theme radius="small" appearance="dark">
-        <RouterProvider router={router} />
+        <QueryProvider>
+          <AuthProvider>
+            <RouterProvider router={router} />
+          </AuthProvider>
+        </QueryProvider>
       </Theme>
     </StrictMode>,
   )

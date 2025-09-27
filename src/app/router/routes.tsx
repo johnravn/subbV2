@@ -1,5 +1,6 @@
 // src/app/router/routes.tsx
 import {
+  Outlet,
   createRootRoute,
   createRoute,
   createRouter,
@@ -13,9 +14,12 @@ import CrewPage from '@features/crew/pages/CrewPage'
 import InventoryPage from '@features/inventory/pages/InventoryPage'
 import ItemPage from '@features/inventory/pages/ItemPage'
 import HomePage from '@features/home/pages/HomePage'
+import LoginPage from '@features/login/pages/LoginPage'
+import { supabase } from '@shared/api/supabase'
 import AppShell from '../layout/AppShell'
+// import { Outlet } from '@tanstack/react-router'
 
-// const rootRoute = createRootRoute({ component: AppShell })
+// Root keeps your shell & devtools as-is
 const rootRoute = createRootRoute({
   component: () => (
     <>
@@ -25,14 +29,41 @@ const rootRoute = createRootRoute({
   ),
 })
 
-const homeRoute = createRoute({
+// --- PUBLIC: Login route -----------------------------------------------------
+const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
+  path: 'login',
+  component: LoginPage,
+})
+
+// --- AUTH GUARD: Parent route that protects children -------------------------
+const authedRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: 'authed',
+  // Runs before any child route loads. Redirects to /login if no session.
+  beforeLoad: async ({ location }) => {
+    const { data } = await supabase.auth.getSession()
+    const session = data.session
+    if (!session?.user) {
+      throw redirect({
+        to: '/login',
+        // After login, send the user back here:
+        search: { redirect: location.href },
+      })
+    }
+  },
+  component: () => <Outlet />,
+})
+
+// --- Your existing pages, now nested under authedRoute -----------------------
+const homeRoute = createRoute({
+  getParentRoute: () => authedRoute,
   path: '/',
   component: HomePage,
 })
 
 const inventoryRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => authedRoute,
   path: 'inventory',
   component: InventoryPage,
 })
@@ -43,40 +74,48 @@ const itemRoute = createRoute({
   component: ItemPage,
 })
 
+const calendarRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: 'calendar',
+  component: CalendarPage,
+})
+
+const vehiclesRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: 'vehicles',
+  component: VehiclesPage,
+})
+
+const jobsRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: 'jobs',
+  component: JobsPage,
+})
+
+const crewRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: 'crew',
+  component: CrewPage,
+})
+
+// --- Not Found stays under root (public) -------------------------------------
 const notFoundRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '*',
   component: () => <div>Not found</div>,
 })
 
-const calendarRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: 'calendar',
-  component: CalendarPage,
-})
-const vehiclesRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: 'vehicles',
-  component: VehiclesPage,
-})
-const jobsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: 'jobs',
-  component: JobsPage,
-})
-const crewRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: 'crew',
-  component: CrewPage,
-})
-
 const routeTree = rootRoute.addChildren([
-  homeRoute,
-  inventoryRoute.addChildren([itemRoute]),
-  calendarRoute,
-  vehiclesRoute,
-  jobsRoute,
-  crewRoute,
+  loginRoute, // public
+  authedRoute.addChildren([
+    // protected
+    homeRoute,
+    inventoryRoute.addChildren([itemRoute]),
+    calendarRoute,
+    vehiclesRoute,
+    jobsRoute,
+    crewRoute,
+  ]),
   notFoundRoute,
 ])
 
@@ -88,3 +127,9 @@ export const router = createRouter({
   defaultStructuralSharing: true,
   defaultPreloadStaleTime: 0,
 })
+
+declare module '@tanstack/react-router' {
+  interface Register {
+    router: typeof router
+  }
+}

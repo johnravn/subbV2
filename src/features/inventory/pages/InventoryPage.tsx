@@ -1,8 +1,12 @@
+import { Card } from '@radix-ui/themes'
+import InventoryTable from '../components/InventoryTable'
+
 export default function InventoryPage() {
   return (
     <section>
-      <h1 className="text-2xl font-semibold">Inventory</h1>
-      <p>List your items here…</p>
+      <Card>
+        <InventoryTable />
+      </Card>
     </section>
   )
 }

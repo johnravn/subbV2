@@ -14,7 +14,6 @@ import {
 } from '@radix-ui/themes'
 import * as ScrollArea from '@radix-ui/react-scroll-area'
 import {
-  Archive,
   BoxIso,
   Calendar,
   Car,
@@ -91,7 +90,7 @@ export function Sidebar({
                 left: 0,
                 height: '100dvh',
                 width: Math.min(320, Math.floor(window.innerWidth * 0.85)),
-                background: 'var(--gray-1)',
+                background: 'var(--black-a9)',
                 borderRight: '1px solid var(--gray-a6)',
                 zIndex: 51,
                 boxShadow: '0 10px 40px var(--black-a6)',

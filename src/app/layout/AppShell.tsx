@@ -1,8 +1,9 @@
-// src/app/layout/AppShell.tsx  (was App.tsx)
+// src/app/layout/AppShell.tsx
 import * as React from 'react'
-import { Outlet, useRouterState } from '@tanstack/react-router'
-import { Box, Flex, IconButton, Text } from '@radix-ui/themes'
+import { Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
+import { Box, Button, Flex, IconButton, Text } from '@radix-ui/themes'
 import { Menu } from 'iconoir-react'
+import { supabase } from '@shared/api/supabase'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { Sidebar } from './Sidebar'
 
@@ -11,41 +12,40 @@ export default function AppShell() {
   const routerState = useRouterState()
   const currentPath = routerState.location.pathname
   const isMobile = useMediaQuery('(max-width: 768px)')
+  const navigate = useNavigate()
 
-  // On mobile, start closed
   React.useEffect(() => {
     if (isMobile) setOpen(false)
   }, [isMobile])
 
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    navigate({ to: '/login' })
+  }
+
   const title = getPageTitle(currentPath)
+  const isLogin = currentPath === '/login'
 
   return (
     <Flex
-      height="100dvh"
+      height="100svh" // was 100dvh
       width="100%"
       direction="row"
-      style={{ position: 'relative' }}
+      style={{ position: 'relative', minHeight: 0 }} // allow children to shrink
     >
-      {/* Sidebar (static slot + actual content handled inside) */}
-      <Sidebar
-        open={open}
-        onToggle={(next) => setOpen(next ?? !open)}
-        currentPath={currentPath}
-      />
+      {!isLogin && (
+        <Sidebar
+          open={open}
+          onToggle={(next) => setOpen(next ?? !open)}
+          currentPath={currentPath}
+        />
+      )}
 
-      {/* Main content */}
-      <Box flexGrow="1">
-        <Flex direction="column" height="100%">
+      <Box style={{ flex: 1, minWidth: 0 }}>
+        <Flex direction="column" style={{ height: '100%', minHeight: 0 }}>
           {/* Top bar */}
-          <Flex
-            align="center"
-            justify="between"
-            px="4"
-            py="3"
-            // style={{ borderBottom: '1px solid var(--gray-a6)' }}
-          >
-            {/* Left: persistent menu button */}
-            {isMobile && (
+          <Flex align="center" justify="between" px="4" py="3">
+            {!isLogin && isMobile && (
               <IconButton
                 size="2"
                 variant="ghost"
@@ -55,17 +55,31 @@ export default function AppShell() {
                 <Menu />
               </IconButton>
             )}
-            {/* Title */}
-            <Text size="7" weight="bold">
-              {title}
-            </Text>
-
-            {/* Right-aligned actions placeholder */}
-            <Box style={{ width: 32 /* keeps layout balanced */ }} />
+            {!isLogin && (
+              <Text size="8" weight="light">
+                {title}
+              </Text>
+            )}
+            {!isLogin ? (
+              <Box>
+                <Button variant="soft" onClick={handleLogout}>
+                  Logout
+                </Button>
+              </Box>
+            ) : (
+              <Box style={{ width: 32 }} />
+            )}
           </Flex>
 
-          {/* Outlet area */}
-          <Box p="4" style={{ overflow: 'auto', height: '100%' }}>
+          {/* Content area should be the ONLY scroller */}
+          <Box
+            p="4"
+            style={{
+              flex: 1, // <-- grow to fill
+              minHeight: 0, // <-- allow scrolling area to shrink
+              overflow: 'auto', // <-- scroll here
+            }}
+          >
             <Outlet />
           </Box>
         </Flex>
@@ -78,5 +92,10 @@ export default function AppShell() {
 function getPageTitle(path: string) {
   if (path === '/') return 'Home'
   if (path.startsWith('/inventory')) return 'Inventory'
+  if (path.startsWith('/calendar')) return 'Calendar'
+  if (path.startsWith('/vehicles')) return 'Vehicles'
+  if (path.startsWith('/jobs')) return 'Jobs'
+  if (path.startsWith('/crew')) return 'Crew'
+  if (path === '/login') return 'Login'
   return 'Page'
 }
