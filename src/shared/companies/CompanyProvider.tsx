@@ -20,7 +20,7 @@ const CompanyCtx = React.createContext<Ctx>({
   loading: true,
 })
 
-const LS_KEY = 'current-company-id'
+const LS_KEY = 'selected-company-id'
 
 export function CompanyProvider({ children }: { children: React.ReactNode }) {
   const [companyId, _setCompanyId] = React.useState<string | null>(() =>

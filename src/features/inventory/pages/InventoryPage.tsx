@@ -1,7 +1,7 @@
 // src/features/inventory/pages/InventoryPage.tsx
 import * as React from 'react'
 import { Box, Card, Flex, Heading, Separator } from '@radix-ui/themes'
-import { useCompanyId } from '@shared/hooks/useCompanyId'
+import { useCompany } from '@shared/companies/CompanyProvider'
 import InventoryTable from '../components/InventoryTable'
 import InventoryInspector from '../components/InventoryInspector'
 import AddInventoryDialog from '../components/AddInventoryDialog'
@@ -9,10 +9,8 @@ import AddInventoryDialog from '../components/AddInventoryDialog'
 export default function InventoryPage() {
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
   const [addOpen, setAddOpen] = React.useState(false)
-  const { data: companyId, isLoading } = useCompanyId()
+  const { companyId } = useCompany()
 
-  // optionally block UI until we know company
-  if (isLoading) return null
   if (!companyId) return <div>No company selected.</div>
 
   return (
