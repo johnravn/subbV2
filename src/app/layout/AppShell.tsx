@@ -1,7 +1,14 @@
 // src/app/layout/AppShell.tsx
 import * as React from 'react'
 import { Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
-import { Box, Button, Flex, IconButton, Text } from '@radix-ui/themes'
+import {
+  Box,
+  Button,
+  Flex,
+  IconButton,
+  Text,
+  TextField,
+} from '@radix-ui/themes'
 import { Menu } from 'iconoir-react'
 import { supabase } from '@shared/api/supabase'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -10,6 +17,7 @@ import { Sidebar } from './Sidebar'
 
 export default function AppShell() {
   const [open, setOpen] = React.useState(true)
+  const [userName, setUserName] = React.useState<string | null>(null)
   const routerState = useRouterState()
   const currentPath = routerState.location.pathname
   const isMobile = useMediaQuery('(max-width: 768px)')
@@ -18,6 +26,16 @@ export default function AppShell() {
   React.useEffect(() => {
     if (isMobile) setOpen(false)
   }, [isMobile])
+
+  React.useEffect(() => {
+    async function fetchUser() {
+      const { data } = await supabase.auth.getUser()
+      if (data?.user) {
+        setUserName(data.user.user_metadata?.uid || data.user.email) // FIX THIS LATER
+      }
+    }
+    fetchUser()
+  }, [])
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -65,11 +83,14 @@ export default function AppShell() {
               </Text>
             )}
             {!isLogin && (
-              <Box>
+              <Flex align="center" gap="2">
+                <Text size="2" style={{ minWidth: 180 }}>
+                  {userName || ''}
+                </Text>
                 <Button variant="soft" onClick={handleLogout}>
                   Logout
                 </Button>
-              </Box>
+              </Flex>
             )}
           </Flex>
 

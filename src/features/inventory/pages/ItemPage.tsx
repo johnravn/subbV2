@@ -1,7 +1,7 @@
 import { useParams } from '@tanstack/react-router'
 
 export default function ItemPage() {
-  const { itemId } = useParams({ from: '/inventory/$itemId' })
+  const { itemId } = useParams({ from: '/authed/inventory/$itemId' })
   return (
     <section>
       <h1 className="text-xl font-semibold">Item: {itemId}</h1>

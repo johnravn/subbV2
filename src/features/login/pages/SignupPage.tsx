@@ -36,7 +36,9 @@ export default function SignupPage() {
     }
 
     setLoading(true)
-    const { error } = await supabase.auth.signUp({
+
+    // 1) Create the auth user
+    const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -49,34 +51,55 @@ export default function SignupPage() {
         },
       },
     })
-    setLoading(false)
 
-    if (error) {
-      setError(error.message)
+    if (signUpErr) {
+      setLoading(false)
+      setError(signUpErr.message)
       return
     }
 
-    setInfo('Check your email to confirm your account.')
+    // 2) If a session exists immediately (email confirmation OFF),
+    //    we can upsert into public.profiles right now.
+    const { data: sessionData } = await supabase.auth.getSession()
+    const session = sessionData.session
+
+    if (session?.user) {
+      const userId = session.user.id
+      const { error: upsertErr } = await supabase.from('profiles').upsert(
+        {
+          user_id: userId,
+          display_name: `${firstName} ${lastName}`.trim(),
+          first_name: firstName,
+          last_name: lastName,
+          phone,
+          email, // convenience duplicate of auth.users.email
+        },
+        { onConflict: 'user_id' },
+      )
+      if (upsertErr) {
+        // Not fatal for sign-up; show a note for visibility.
+        console.warn('profiles upsert failed:', upsertErr.message)
+      }
+      setLoading(false)
+      navigate({ to: '/' })
+      return
+    }
+
+    // 3) If no session yet (email confirmation ON), show next steps.
+    setLoading(false)
+    setInfo(
+      'Check your email to confirm your account. Your profile will be created after confirmation.',
+    )
   }
 
   return (
     <Flex
       align="center"
       justify="center"
-      style={{
-        minHeight: '100%',
-        padding: '24px',
-      }}
+      style={{ minHeight: '100%', padding: '24px' }}
     >
-      <Card
-        size="4"
-        style={{
-          width: '100%',
-          maxWidth: 520,
-        }}
-      >
+      <Card size="4" style={{ width: '100%', maxWidth: 520 }}>
         <Flex direction="column" gap="4">
-          {/* Header */}
           <Box>
             <Heading size="7" mb="1">
               Create your account
@@ -139,10 +162,10 @@ export default function SignupPage() {
                 </Text>
                 <TextField.Root
                   type="tel"
-                  placeholder="12345678"
+                  placeholder="+47 12345678"
                   value={phone}
-                  required
                   onChange={(e) => setPhone(e.target.value)}
+                  required
                   size="3"
                 />
               </Box>

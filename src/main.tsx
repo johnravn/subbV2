@@ -9,6 +9,7 @@ import './app/styles.css'
 import { router } from '@app/router/routes.tsx'
 import { QueryProvider } from '@app/providers/QueryProvider.tsx'
 import { AuthProvider } from '@app/providers/AuthProvider.tsx'
+import { CompanyProvider } from '@shared/companies/CompanyProvider.tsx'
 import reportWebVitals from './reportWebVitals.ts'
 
 declare module '@tanstack/react-router' {
@@ -25,7 +26,9 @@ if (rootElement && !rootElement.innerHTML) {
       <Theme radius="small" appearance="dark">
         <QueryProvider>
           <AuthProvider>
-            <RouterProvider router={router} />
+            <CompanyProvider>
+              <RouterProvider router={router} />
+            </CompanyProvider>
           </AuthProvider>
         </QueryProvider>
       </Theme>

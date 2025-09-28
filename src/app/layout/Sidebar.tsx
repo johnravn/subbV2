@@ -1,13 +1,14 @@
+// src/app/layout/Sidebar.tsx
 import * as React from 'react'
 import { Link } from '@tanstack/react-router'
-import iconSmall from '@shared/assets/subbLogo/svg/white/IconSmallWhite.svg'
 import logoWhite from '@shared/assets/subbLogo/svg/white/LogoWhite.svg'
-import { motion } from 'framer-motion'
+import { useCompany } from '@shared/companies/CompanyProvider'
 import {
   Box,
   Button,
   Flex,
   IconButton,
+  Select,
   Separator,
   Text,
   Tooltip,
@@ -48,20 +49,16 @@ export function Sidebar({
   currentPath: string
 }) {
   const isMobile = useMediaQuery('(max-width: 768px)')
-
-  // Desktop: we render a static sidebar block that takes space in the flex row.
-  // Mobile: we render an off-canvas drawer (position: fixed). The static slot collapses to 0px.
   const staticWidth = isMobile ? 0 : open ? SIDEBAR_EXPANDED : SIDEBAR_COLLAPSED
 
   return (
     <>
-      {/* Static slot (takes horizontal space in desktop; hidden on mobile) */}
+      {/* Static slot (desktop width reservation) */}
       <Box
         asChild
         style={{
           width: staticWidth,
           transition: 'width 180ms ease',
-          //   borderRight: staticWidth ? '1px solid var(--gray-a6)' : 'none',
         }}
       >
         <aside aria-label="Sidebar navigation" />
@@ -69,7 +66,6 @@ export function Sidebar({
 
       {/* Actual sidebar content */}
       {isMobile ? (
-        // Off-canvas: only render when open
         open && (
           <>
             {/* Backdrop */}
@@ -97,7 +93,7 @@ export function Sidebar({
               }}
             >
               <SidebarContent
-                open // in mobile drawer we always show labels
+                open
                 onToggle={onToggle}
                 currentPath={currentPath}
                 isMobile={isMobile}
@@ -107,12 +103,9 @@ export function Sidebar({
           </>
         )
       ) : (
-        // Desktop inline sidebar (expanded/collapsed)
         <Box
           style={{
             position: 'absolute',
-            // visually hidden; the actual occupied space is the static slot above.
-            // We position this content on top of the static slot.
             left: 0,
             top: 0,
             bottom: 0,
@@ -154,6 +147,8 @@ function SidebarContent({
   isMobile: boolean
   showCollapseButton?: boolean
 }) {
+  const { companies, company, companyId, setCompanyId, loading } = useCompany()
+
   return (
     <aside
       style={{
@@ -162,20 +157,53 @@ function SidebarContent({
         height: '100dvh',
       }}
     >
-      {/* Header */}
+      {/* Header / Company selector */}
       <Flex align="center" justify="between" px="3" py="3" gap="3">
-        <Flex align="center" gap="2" style={{ minWidth: 0 }}>
-          {open && (
-            <>
-              <img
-                src={iconSmall}
-                alt="App logo"
-                style={{ width: 28, height: 28 }}
-              />
-              <Text size="3" weight="bold" truncate>
-                Ekte Lyd AS
+        <Flex align="center" gap="2" style={{ minWidth: 0, flex: 1 }}>
+          {open ? (
+            <div style={{ width: '100%' }}>
+              <Text as="div" size="1" color="gray" style={{ marginBottom: 4 }}>
+                Company
               </Text>
-            </>
+              <Select.Root
+                value={companyId ?? ''}
+                onValueChange={setCompanyId}
+                disabled={loading || companies.length === 0}
+              >
+                <Select.Trigger placeholder="Select company" />
+                <Select.Content>
+                  {companies.map((c) => (
+                    <Select.Item key={c.id} value={c.id}>
+                      {c.name}
+                    </Select.Item>
+                  ))}
+                </Select.Content>
+              </Select.Root>
+            </div>
+          ) : (
+            // Collapsed: initials pill with tooltip
+            <Tooltip content={company?.name ?? 'Company'} delayDuration={300}>
+              <Box
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 6,
+                  background: 'var(--accent-9)',
+                  display: 'grid',
+                  placeItems: 'center',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  letterSpacing: 0.3,
+                }}
+              >
+                {(company?.name ?? '—')
+                  .split(' ')
+                  .map((s) => s[0])
+                  .slice(0, 2)
+                  .join('')
+                  .toUpperCase()}
+              </Box>
+            </Tooltip>
           )}
         </Flex>
 
@@ -260,12 +288,9 @@ function NavItem({
 
   function handleClick(e: React.MouseEvent) {
     if (!isMobile) return
-    // respect modifier/middle clicks so users can open in new tab
     const modified =
       e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0
-    if (!modified) {
-      onCloseMobile()
-    }
+    if (!modified) onCloseMobile()
   }
 
   const content = (
