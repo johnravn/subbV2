@@ -1,4 +1,3 @@
-// src/features/login/pages/LoginPage.tsx
 import * as React from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { supabase } from '@shared/api/supabase'
@@ -12,7 +11,6 @@ import {
   Text,
   TextField,
 } from '@radix-ui/themes'
-import { Google } from 'iconoir-react'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -34,94 +32,93 @@ export default function LoginPage() {
     navigate({ to: '/' })
   }
 
-  async function signUp() {
-    setLoading(true)
-    setError(null)
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: email.split('@')[0] } },
-    })
-    setLoading(false)
-    if (error) return setError(error.message)
-    // If email confirmations are enabled, user must confirm via email before session exists.
-  }
-
-  async function magicLink() {
-    setLoading(true)
-    setError(null)
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-    })
-    setLoading(false)
-    if (error) return setError(error.message)
-  }
-
-  async function signInGoogle() {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
-    })
-    if (error) setError(error.message)
-  }
-
   return (
     <Flex
       align="center"
       justify="center"
-      style={{ minHeight: '100%', padding: 16 }}
+      style={{
+        minHeight: '100%', // true full viewport height
+        padding: '24px', // comfy outer padding on mobile
+      }}
     >
-      <Card size="3" style={{ width: 420 }}>
-        <Heading size="6" mb="3">
-          Sign in
-        </Heading>
-        <form onSubmit={signIn}>
-          <Flex direction="column" gap="3">
-            <TextField.Root
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-            <TextField.Root
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-            {error && <Text color="red">{error}</Text>}
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Signing in…' : 'Sign in'}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={signUp}
-              disabled={loading}
-            >
-              Create account
-            </Button>
-          </Flex>
-        </form>
+      <Card
+        size="4" // a bit roomier than size="3"
+        style={{
+          width: '100%',
+          maxWidth: 480, // responsive cap on larger screens
+        }}
+      >
+        <Flex direction="column" gap="4">
+          {/* Header */}
+          <Box>
+            <Heading size="7" mb="1">
+              Sign in
+            </Heading>
+            <Text color="gray">Welcome back. Please enter your details.</Text>
+          </Box>
 
-        <Separator my="3" />
+          <Separator size="4" />
 
-        <Flex direction="column" gap="2">
-          <Button
-            variant="soft"
-            onClick={magicLink}
-            disabled={!email || loading}
-          >
-            Send magic link
-          </Button>
-          <Button variant="soft" onClick={signInGoogle}>
-            <Flex align="center" gap="2">
-              <Google width={18} height={18} /> Sign in with Google
+          {/* Form */}
+          <form onSubmit={signIn}>
+            <Flex direction="column" gap="3">
+              <Box>
+                <Text
+                  as="label"
+                  size="2"
+                  color="gray"
+                  mb="1"
+                  style={{ display: 'block' }}
+                >
+                  Email
+                </Text>
+                <TextField.Root
+                  type="email"
+                  placeholder="you@company.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  size="3"
+                  required
+                />
+              </Box>
+
+              <Box>
+                <Flex justify="between" align="center" mb="1">
+                  <Text as="label" size="2" color="gray">
+                    Password
+                  </Text>
+                  {/* Optional forgot link spot */}
+                  {/* <Text size="2" color="gray"><Link to="/forgot">Forgot?</Link></Text> */}
+                </Flex>
+                <TextField.Root
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  size="3"
+                  required
+                />
+              </Box>
+
+              {error && <Text color="red">{error}</Text>}
+
+              <Button type="submit" size="3" disabled={loading}>
+                {loading ? 'Signing in…' : 'Sign in'}
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="3"
+                onClick={() => navigate({ to: '/signup' })}
+                disabled={loading}
+              >
+                Create account
+              </Button>
             </Flex>
-          </Button>
+          </form>
         </Flex>
       </Card>
     </Flex>

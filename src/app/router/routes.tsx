@@ -15,6 +15,9 @@ import InventoryPage from '@features/inventory/pages/InventoryPage'
 import ItemPage from '@features/inventory/pages/ItemPage'
 import HomePage from '@features/home/pages/HomePage'
 import LoginPage from '@features/login/pages/LoginPage'
+import SignupPage from '@features/login/pages/SignupPage'
+import AuthCallback from '@features/login/pages/AuthCallback'
+import TermsPrivacyPage from '@features/legal/pages/TermsPrivacyPage'
 import { supabase } from '@shared/api/supabase'
 import AppShell from '../layout/AppShell'
 // import { Outlet } from '@tanstack/react-router'
@@ -34,6 +37,28 @@ const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'login',
   component: LoginPage,
+})
+
+const signupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/signup',
+  component: SignupPage,
+  beforeLoad: async () => {
+    const { data } = await supabase.auth.getSession()
+    if (data.session) throw redirect({ to: '/' })
+  },
+})
+
+const authCallbackRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/auth/callback',
+  component: AuthCallback,
+})
+
+const legalRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/legal',
+  component: TermsPrivacyPage,
 })
 
 // --- AUTH GUARD: Parent route that protects children -------------------------
@@ -106,7 +131,10 @@ const notFoundRoute = createRoute({
 })
 
 const routeTree = rootRoute.addChildren([
-  loginRoute, // public
+  loginRoute,
+  signupRoute,
+  authCallbackRoute,
+  legalRoute,
   authedRoute.addChildren([
     // protected
     homeRoute,

@@ -1,8 +1,8 @@
-// src/app/layout/Sidebar.tsx
 import * as React from 'react'
 import { Link } from '@tanstack/react-router'
 import iconSmall from '@shared/assets/subbLogo/svg/white/IconSmallWhite.svg'
 import logoWhite from '@shared/assets/subbLogo/svg/white/LogoWhite.svg'
+import { motion } from 'framer-motion'
 import {
   Box,
   Button,
@@ -269,7 +269,12 @@ function NavItem({
   }
 
   const content = (
-    <Button variant={active ? 'solid' : 'ghost'} size="3" highContrast asChild>
+    <Button
+      variant={active ? 'outline' : 'ghost'}
+      size="3"
+      highContrast
+      asChild
+    >
       <Link
         to={to}
         onClick={handleClick}

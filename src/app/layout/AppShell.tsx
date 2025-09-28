@@ -4,6 +4,7 @@ import { Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { Box, Button, Flex, IconButton, Text } from '@radix-ui/themes'
 import { Menu } from 'iconoir-react'
 import { supabase } from '@shared/api/supabase'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { Sidebar } from './Sidebar'
 
@@ -24,7 +25,10 @@ export default function AppShell() {
   }
 
   const title = getPageTitle(currentPath)
-  const isLogin = currentPath === '/login'
+  const isLogin =
+    currentPath === '/login' ||
+    currentPath === '/signup' ||
+    currentPath === '/legal'
 
   return (
     <Flex
@@ -60,14 +64,12 @@ export default function AppShell() {
                 {title}
               </Text>
             )}
-            {!isLogin ? (
+            {!isLogin && (
               <Box>
                 <Button variant="soft" onClick={handleLogout}>
                   Logout
                 </Button>
               </Box>
-            ) : (
-              <Box style={{ width: 32 }} />
             )}
           </Flex>
 
@@ -80,7 +82,18 @@ export default function AppShell() {
               overflow: 'auto', // <-- scroll here
             }}
           >
+            {/* <AnimatePresence mode="wait">
+              <motion.div
+                key={currentPath}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.18, ease: 'easeOut' }}
+                style={{ height: '100%' }}
+              > */}
             <Outlet />
+            {/* </motion.div>
+            </AnimatePresence> */}
           </Box>
         </Flex>
       </Box>
