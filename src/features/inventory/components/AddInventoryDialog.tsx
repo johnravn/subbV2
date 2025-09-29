@@ -5,7 +5,7 @@ import { Button, Dialog, Flex, Select, Text, TextField } from '@radix-ui/themes'
 import { supabase } from '@shared/api/supabase'
 
 type FormState = {
-  mode: 'item-bulk' | 'item-serialized' | 'bundle'
+  mode: 'item-bulk' | 'item-unique' | 'bundle'
   name: string
   unit?: string
   onHand?: number
@@ -38,7 +38,7 @@ export default function AddInventoryDialog({
         return
       }
 
-      const kind = f.mode === 'item-bulk' ? 'bulk' : 'serialized'
+      const kind = f.mode === 'item-bulk' ? 'bulk' : 'unique'
       const { data: item, error: itemErr } = await supabase
         .from('inventory_items')
         .insert({ company_id: companyId, name: f.name, kind, unit: f.unit }) // 👈 include company
@@ -71,7 +71,7 @@ export default function AddInventoryDialog({
       <Dialog.Content maxWidth="520px">
         <Dialog.Title>Add to inventory</Dialog.Title>
         <Dialog.Description size="2" color="gray">
-          Create an item (bulk or serialized) or a bundle.
+          Create an item (bulk or unique) or a bundle.
         </Dialog.Description>
 
         <Flex direction="column" gap="3" mt="3">
@@ -93,9 +93,7 @@ export default function AddInventoryDialog({
               <Select.Trigger />
               <Select.Content>
                 <Select.Item value="item-bulk">Item (bulk)</Select.Item>
-                <Select.Item value="item-serialized">
-                  Item (serialized)
-                </Select.Item>
+                <Select.Item value="item-unique">Item (unique)</Select.Item>
                 <Select.Item value="bundle">Bundle</Select.Item>
               </Select.Content>
             </Select.Root>

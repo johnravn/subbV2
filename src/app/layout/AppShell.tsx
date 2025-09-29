@@ -30,8 +30,8 @@ export default function AppShell() {
   React.useEffect(() => {
     async function fetchUser() {
       const { data } = await supabase.auth.getUser()
-      if (data?.user) {
-        setUserName(data.user.user_metadata?.uid || data.user.email) // FIX THIS LATER
+      if (data.user) {
+        setUserName(data.user.user_metadata.uid || data.user.email) // FIX THIS LATER
       }
     }
     fetchUser()
