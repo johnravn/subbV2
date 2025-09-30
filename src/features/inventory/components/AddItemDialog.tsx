@@ -11,9 +11,9 @@ import {
   TextArea,
   TextField,
 } from '@radix-ui/themes'
+import { useToast } from '@shared/ui/toast/ToastProvider'
 import { supabase } from '@shared/api/supabase'
 import { Plus } from 'iconoir-react'
-import { SuccessToast } from '@shared/ui/components/SuccessToast'
 
 type FormState = {
   name: string
@@ -38,8 +38,8 @@ export default function AddItemDialog({
   onOpenChange: (v: boolean) => void
   companyId: string
 }) {
+  const { success } = useToast()
   const qc = useQueryClient()
-  const [toastOpen, setToastOpen] = React.useState(false) // ✅ single toast state
 
   const [form, setForm] = React.useState<FormState>({
     name: '',
@@ -53,8 +53,10 @@ export default function AddItemDialog({
     price: undefined,
   })
 
-  const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
-    setForm((s) => ({ ...s, [key]: value }))
+  const set = <TKey extends keyof FormState>(
+    key: TKey,
+    value: FormState[TKey],
+  ) => setForm((s) => ({ ...s, [key]: value }))
 
   // ---- Load categories / brands for this company ----
   const {
@@ -71,7 +73,7 @@ export default function AddItemDialog({
         .eq('company_id', companyId)
         .order('name', { ascending: true })
       if (error) throw error
-      return (data ?? []) as Option[]
+      return data as Array<Option>
     },
     staleTime: 60_000,
   })
@@ -90,7 +92,7 @@ export default function AddItemDialog({
         .eq('company_id', companyId)
         .order('name', { ascending: true })
       if (error) throw error
-      return (data ?? []) as Option[]
+      return data as Array<Option>
     },
     staleTime: 60_000,
   })
@@ -125,7 +127,7 @@ export default function AddItemDialog({
         }),
       ])
       onOpenChange(false)
-      setToastOpen(true) // show toast
+      success('Success!', 'Item/group was added to inventory')
     },
   })
 
@@ -134,12 +136,6 @@ export default function AddItemDialog({
   return (
     <>
       {/* Toast (uses your shared component) */}
-      <SuccessToast
-        open={toastOpen}
-        onOpenChange={setToastOpen}
-        title="Item created"
-        description="Your item was added successfully."
-      />
 
       <Dialog.Root open={open} onOpenChange={onOpenChange}>
         <Dialog.Trigger>
@@ -174,7 +170,7 @@ export default function AddItemDialog({
                   />
                   <Select.Content>
                     <Select.Group>
-                      {(categories ?? []).map((c) => (
+                      {(categories ?? []).map((c: Option) => (
                         <Select.Item key={c.id} value={c.id}>
                           {c.name}
                         </Select.Item>
@@ -195,7 +191,7 @@ export default function AddItemDialog({
                   <Select.Content>
                     <Select.Group>
                       <Select.Item value="none">(None)</Select.Item>
-                      {(brands ?? []).map((b) => (
+                      {(brands ?? []).map((b: Option) => (
                         <Select.Item key={b.id} value={b.id}>
                           {b.name}
                         </Select.Item>

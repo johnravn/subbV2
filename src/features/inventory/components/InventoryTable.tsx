@@ -33,7 +33,7 @@ export default function InventoryTable({ selectedId, onSelect }: Props) {
   const { companyId } = useCompany()
   const [page, setPage] = React.useState(1)
   const [search, setSearch] = React.useState('')
-  const pageSize = 20
+  const pageSize = 13
 
   const { data, isLoading } = useQuery({
     ...inventoryIndexQuery({
@@ -109,7 +109,7 @@ export default function InventoryTable({ selectedId, onSelect }: Props) {
   )
 
   const table = useReactTable({
-    data: (data?.rows ?? []) as InventoryIndexRow[],
+    data: data?.rows as Array<InventoryIndexRow>,
     columns,
     getCoreRowModel: getCoreRowModel(),
   })

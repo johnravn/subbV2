@@ -46,7 +46,7 @@ export type GroupDetail = {
   type: 'group'
   on_hand: number | null
   current_price: number | null
-  parts: GroupPartRow[]
+  parts: Array<GroupPartRow>
 }
 
 export type InventoryDetail = ItemDetail | GroupDetail
@@ -91,7 +91,7 @@ export const inventoryIndexQuery = ({
       const { data, error, count } = await q.range(from, to)
       if (error) throw error
       return {
-        rows: (data ?? []) as Array<InventoryIndexRow>,
+        rows: data as Array<InventoryIndexRow>,
         count: count ?? 0,
       }
     },
@@ -180,7 +180,7 @@ export const inventoryDetailQuery = ({
           type: 'group',
           on_hand: group.on_hand ?? 0,
           current_price: group.current_price,
-          parts: (parts ?? []) as GroupPartRow[],
+          parts: parts as Array<GroupPartRow>,
         }
       }
     },

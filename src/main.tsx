@@ -10,6 +10,7 @@ import { router } from '@app/router/routes.tsx'
 import { QueryProvider } from '@app/providers/QueryProvider.tsx'
 import { AuthProvider } from '@app/providers/AuthProvider.tsx'
 import { CompanyProvider } from '@shared/companies/CompanyProvider.tsx'
+import { AppToastProvider } from '@shared/ui/toast/ToastProvider.tsx'
 import reportWebVitals from './reportWebVitals.ts'
 
 declare module '@tanstack/react-router' {
@@ -27,7 +28,9 @@ if (rootElement && !rootElement.innerHTML) {
         <QueryProvider>
           <AuthProvider>
             <CompanyProvider>
-              <RouterProvider router={router} />
+              <AppToastProvider>
+                <RouterProvider router={router} />
+              </AppToastProvider>
             </CompanyProvider>
           </AuthProvider>
         </QueryProvider>

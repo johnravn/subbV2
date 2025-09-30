@@ -38,8 +38,10 @@ export default function EditCategoriesDialog({
   const [editingId, setEditingId] = React.useState<string | null>(null)
   const [editingName, setEditingName] = React.useState<string>('')
 
-  const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
-    setForm((s) => ({ ...s, [key]: value }))
+  const set = <TKey extends keyof FormState>(
+    key: TKey,
+    value: FormState[TKey],
+  ) => setForm((s) => ({ ...s, [key]: value }))
 
   /* ---------- Load categories ---------- */
   const categoriesQueryKey = ['company', companyId, 'item-categories'] as const
@@ -52,14 +54,14 @@ export default function EditCategoriesDialog({
   } = useQuery({
     queryKey: categoriesQueryKey,
     enabled: !!companyId && open, // only fetch when dialog open
-    queryFn: async (): Promise<ItemCategory[]> => {
+    queryFn: async (): Promise<Array<ItemCategory>> => {
       const { data, error } = await supabase
         .from('item_categories')
         .select('id, company_id, name')
         .eq('company_id', companyId)
         .order('name', { ascending: true })
       if (error) throw error
-      return data ?? []
+      return data
     },
     staleTime: 5_000,
   })
