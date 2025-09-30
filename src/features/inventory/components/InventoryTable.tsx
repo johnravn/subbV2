@@ -6,34 +6,37 @@ import {
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table'
-import { Button, Flex, Table, Text, TextField } from '@radix-ui/themes'
+import { Button, Flex, Select, Table, Text, TextField } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
-import { inventoryIndexQuery } from '../api/queries'
+import { categoryNamesQuery, inventoryIndexQuery } from '../api/queries'
+import EditCategoriesDialog from './EditCategoriesDialog'
+import EditBrandsDialog from './EditBrandsDialog'
+import AddItemDialog from './AddItemDialog'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { InventoryIndexRow } from '../api/queries'
-
-// Make sure InventoryIndexRow matches the view:
-// {
-//   company_id: string
-//   id: string
-//   name: string
-//   category_name: string | null
-//   brand_name: string | null
-//   on_hand: number | null
-//   current_price: number | null
-//   currency: string // "NOK"
-// }
 
 type Props = {
   selectedId: string | null
   onSelect: (id: string) => void
+  activeOnly: boolean
 }
 
-export default function InventoryTable({ selectedId, onSelect }: Props) {
+export default function InventoryTable({
+  selectedId,
+  onSelect,
+  activeOnly,
+}: Props) {
   const { companyId } = useCompany()
   const [page, setPage] = React.useState(1)
   const [search, setSearch] = React.useState('')
+  const [categoryFilter, setCategoryFilter] = React.useState<string | null>(
+    null,
+  )
   const pageSize = 13
+
+  const [addItemOpen, setAddItemOpen] = React.useState(false)
+  const [editCategoriesOpen, setEditCategoriesOpen] = React.useState(false)
+  const [editBrandsOpen, setEditBrandsOpen] = React.useState(false)
 
   const { data, isLoading } = useQuery({
     ...inventoryIndexQuery({
@@ -41,7 +44,14 @@ export default function InventoryTable({ selectedId, onSelect }: Props) {
       page,
       pageSize,
       search,
+      activeOnly,
+      category: categoryFilter, // 👈 pass filter
     }),
+    enabled: !!companyId,
+  })
+
+  const { data: categories = [] } = useQuery({
+    ...categoryNamesQuery({ companyId: companyId ?? '__none__' }),
     enabled: !!companyId,
   })
 
@@ -128,6 +138,28 @@ export default function InventoryTable({ selectedId, onSelect }: Props) {
           size="3"
           style={{ flex: '1 1 260px' }}
         />
+
+        <Select.Root
+          value={categoryFilter ?? ''}
+          size="3"
+          onValueChange={(val) => {
+            setPage(1)
+            setCategoryFilter(val === '' ? null : val)
+          }}
+        >
+          <Select.Trigger
+            placeholder="Filter category…"
+            style={{ minHeight: 'var(--space-7)' }} // 👈 match TextField height
+          />
+          <Select.Content>
+            <Select.Item value="all">All</Select.Item>
+            {categories.map((name) => (
+              <Select.Item key={name} value={name}>
+                {name}
+              </Select.Item>
+            ))}
+          </Select.Content>
+        </Select.Root>
       </Flex>
 
       {/* Table */}
@@ -180,17 +212,35 @@ export default function InventoryTable({ selectedId, onSelect }: Props) {
         </Table.Body>
       </Table.Root>
 
-      {/* Pagination */}
-      <Flex gap="2" mt="3">
-        <Button disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
-          Prev
-        </Button>
-        <Button
-          disabled={!data || data.rows.length < pageSize}
-          onClick={() => setPage((p) => p + 1)}
-        >
-          Next
-        </Button>
+      <Flex align="center" justify="between" mb="3" mt="3">
+        <Flex gap="2">
+          <Button disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
+            Prev
+          </Button>
+          <Button
+            disabled={!data || data.rows.length < pageSize}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Next
+          </Button>
+        </Flex>
+        <Flex align="center" gap={'1'}>
+          <EditCategoriesDialog
+            open={editCategoriesOpen}
+            onOpenChange={setEditCategoriesOpen}
+            companyId={companyId ?? ''}
+          />
+          <EditBrandsDialog
+            open={editBrandsOpen}
+            onOpenChange={setEditBrandsOpen}
+            companyId={companyId ?? ''}
+          />
+          <AddItemDialog
+            open={addItemOpen}
+            onOpenChange={setAddItemOpen}
+            companyId={companyId ?? ''}
+          />
+        </Flex>
       </Flex>
     </>
   )

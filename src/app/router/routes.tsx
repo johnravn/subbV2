@@ -12,7 +12,6 @@ import VehiclesPage from '@features/vehicles/pages/VehiclesPage'
 import JobsPage from '@features/jobs/pages/JobsPage'
 import CrewPage from '@features/crew/pages/CrewPage'
 import InventoryPage from '@features/inventory/pages/InventoryPage'
-import ItemPage from '@features/inventory/pages/ItemPage'
 import HomePage from '@features/home/pages/HomePage'
 import LoginPage from '@features/login/pages/LoginPage'
 import SignupPage from '@features/login/pages/SignupPage'
@@ -93,12 +92,6 @@ const inventoryRoute = createRoute({
   component: InventoryPage,
 })
 
-const itemRoute = createRoute({
-  getParentRoute: () => inventoryRoute,
-  path: '$itemId',
-  component: ItemPage,
-})
-
 const calendarRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: 'calendar',
@@ -138,7 +131,7 @@ const routeTree = rootRoute.addChildren([
   authedRoute.addChildren([
     // protected
     homeRoute,
-    inventoryRoute.addChildren([itemRoute]),
+    inventoryRoute,
     calendarRoute,
     vehiclesRoute,
     jobsRoute,
