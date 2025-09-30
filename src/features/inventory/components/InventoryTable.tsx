@@ -10,20 +10,26 @@ import { Button, Flex, Table, Text, TextField } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { inventoryIndexQuery } from '../api/queries'
 import type { ColumnDef } from '@tanstack/react-table'
+import type { InventoryIndexRow } from '../api/queries'
+
+// Make sure InventoryIndexRow matches the view:
+// {
+//   company_id: string
+//   id: string
+//   name: string
+//   category_name: string | null
+//   brand_name: string | null
+//   on_hand: number | null
+//   current_price: number | null
+//   currency: string // "NOK"
+// }
 
 type Props = {
   selectedId: string | null
   onSelect: (id: string) => void
-  companyId: string
 }
 
-export default function InventoryTable({
-  selectedId,
-  onSelect,
-}: {
-  selectedId: string | null
-  onSelect: (id: string) => void
-}) {
+export default function InventoryTable({ selectedId, onSelect }: Props) {
   const { companyId } = useCompany()
   const [page, setPage] = React.useState(1)
   const [search, setSearch] = React.useState('')
@@ -31,51 +37,79 @@ export default function InventoryTable({
 
   const { data, isLoading } = useQuery({
     ...inventoryIndexQuery({
-      companyId: companyId ?? '__none__', // placeholder
+      companyId: companyId ?? '__none__',
       page,
       pageSize,
-      search: search, // avoid undefined in the key
+      search,
     }),
-    enabled: !!companyId, // only runs when a company is selected
+    enabled: !!companyId,
   })
 
-  const columns = React.useMemo<Array<ColumnDef<any>>>(
+  const fmt = React.useMemo(
+    () =>
+      new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: 'NOK',
+        minimumFractionDigits: 2,
+      }),
+    [],
+  )
+
+  const columns = React.useMemo<Array<ColumnDef<InventoryIndexRow>>>(
     () => [
+      // name
       {
-        accessorKey: 'type',
-        header: 'Type',
-        cell: (ctx) => <Text size="2">{ctx.getValue() as string}</Text>,
-      },
-      { accessorKey: 'name', header: 'Name' },
-      {
-        accessorKey: 'kind',
-        header: 'Kind',
+        accessorKey: 'name',
+        header: 'Name',
         cell: (ctx) => (
-          <Text size="2" color="gray">
-            {ctx.getValue() as string}
+          <Text size="2" weight="medium">
+            {String(ctx.getValue() ?? '')}
           </Text>
         ),
       },
+      // category_name
+      {
+        accessorKey: 'category_name',
+        header: 'Category',
+        cell: (ctx) => (
+          <Text size="2" color="gray">
+            {String(ctx.getValue() ?? '')}
+          </Text>
+        ),
+      },
+      // brand_name
+      {
+        accessorKey: 'brand_name',
+        header: 'Brand',
+        cell: (ctx) => (
+          <Text size="2" color="gray">
+            {String(ctx.getValue() ?? '')}
+          </Text>
+        ),
+      },
+      // on_hand
       {
         accessorKey: 'on_hand',
         header: 'On hand',
-        cell: (ctx) => ctx.getValue() ?? '',
+        cell: (ctx) => String(ctx.getValue() ?? ''),
       },
+      // current_price + currency from the row (still NOK today, but future-proof)
       {
-        accessorKey: 'current_price',
+        id: 'price',
         header: 'Price',
         cell: (ctx) => {
           const v = ctx.row.original
           if (v.current_price == null) return ''
-          return `${v.currency ?? 'NOK'} ${Number(v.current_price).toFixed(2)}`
+          // Use row.currency if you ever support multi-currency.
+          return fmt.format(Number(v.current_price))
         },
       },
     ],
-    [],
+    [fmt],
   )
 
   const table = useReactTable({
-    data: data?.rows ?? [],
+    data: (data?.rows ?? []) as InventoryIndexRow[],
     columns,
     getCoreRowModel: getCoreRowModel(),
   })
@@ -90,7 +124,7 @@ export default function InventoryTable({
             setPage(1)
             setSearch(e.target.value)
           }}
-          placeholder="Search items, bundles…"
+          placeholder="Search items, groups…"
           size="3"
           style={{ flex: '1 1 260px' }}
         />
