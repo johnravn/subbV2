@@ -67,9 +67,6 @@ export default function InventoryInspector({ id }: { id: string | null }) {
           <Button size="2" variant="soft">
             Edit
           </Button>
-          <Button size="2" variant="soft">
-            Reserve
-          </Button>
         </Flex>
       </Flex>
 

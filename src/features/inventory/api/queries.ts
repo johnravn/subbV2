@@ -175,7 +175,7 @@ export const inventoryIndexQuery = ({
 
       q = q.or('deleted.is.null,deleted.eq.false')
       if (activeOnly) q = q.eq('active', true)
-      if (category && category != 'all') q = q.eq('category_name', category) // 👈 filter by category
+      if (category && category != 'all') q = q.eq('category_name', category)
       if (search) {
         q = q.or(
           `name.ilike.%${search}%,category_name.ilike.%${search}%,brand_name.ilike.%${search}%`,

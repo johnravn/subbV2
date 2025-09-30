@@ -6,12 +6,21 @@ import {
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table'
-import { Button, Flex, Select, Table, Text, TextField } from '@radix-ui/themes'
+import {
+  Button,
+  Flex,
+  Select,
+  Spinner,
+  Table,
+  Text,
+  TextField,
+} from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { categoryNamesQuery, inventoryIndexQuery } from '../api/queries'
 import EditCategoriesDialog from './EditCategoriesDialog'
 import EditBrandsDialog from './EditBrandsDialog'
 import AddItemDialog from './AddItemDialog'
+import AddGroupDialog from './AddGroupDialog'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { InventoryIndexRow } from '../api/queries'
 
@@ -35,17 +44,18 @@ export default function InventoryTable({
   const pageSize = 13
 
   const [addItemOpen, setAddItemOpen] = React.useState(false)
+  const [addGroupDialog, setAddGroupDialog] = React.useState(false)
   const [editCategoriesOpen, setEditCategoriesOpen] = React.useState(false)
   const [editBrandsOpen, setEditBrandsOpen] = React.useState(false)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     ...inventoryIndexQuery({
       companyId: companyId ?? '__none__',
       page,
       pageSize,
       search,
       activeOnly,
-      category: categoryFilter, // 👈 pass filter
+      category: categoryFilter,
     }),
     enabled: !!companyId,
   })
@@ -123,7 +133,7 @@ export default function InventoryTable({
     columns,
     getCoreRowModel: getCoreRowModel(),
   })
-
+  console.log('data.rows.length: ' + data?.rows.length)
   return (
     <>
       {/* Search bar */}
@@ -137,7 +147,11 @@ export default function InventoryTable({
           placeholder="Search items, groups…"
           size="3"
           style={{ flex: '1 1 260px' }}
-        />
+        >
+          <TextField.Slot side="right">
+            {isFetching && <Spinner />}
+          </TextField.Slot>
+        </TextField.Root>
 
         <Select.Root
           value={categoryFilter ?? ''}
@@ -238,6 +252,11 @@ export default function InventoryTable({
           <AddItemDialog
             open={addItemOpen}
             onOpenChange={setAddItemOpen}
+            companyId={companyId ?? ''}
+          />
+          <AddGroupDialog
+            open={addGroupDialog}
+            onOpenChange={setAddGroupDialog}
             companyId={companyId ?? ''}
           />
         </Flex>
