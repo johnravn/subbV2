@@ -259,30 +259,39 @@ export default function InventoryInspector({ id }: { id: string | null }) {
                 No price records yet.
               </Text>
             ) : (
-              <Table.Root variant="surface">
-                <Table.Header>
-                  <Table.Row>
-                    <Table.ColumnHeaderCell>Amount</Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>Edited</Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>Set by</Table.ColumnHeaderCell>
-                  </Table.Row>
-                </Table.Header>
-                <Table.Body>
-                  {entry.price_history.map((p) => (
-                    <Table.Row key={p.id}>
-                      <Table.Cell>
-                        {fmtCurrency.format(Number(p.amount))}
-                      </Table.Cell>
-                      <Table.Cell>
-                        <Code>{fmtDate(p.effective_from)}</Code>
-                      </Table.Cell>
-                      <Table.Cell>
-                        {p.set_by_name || p.set_by || '—'}
-                      </Table.Cell>
+              <Box
+                style={{
+                  maxHeight: 196, // ~3 rows + header (tweak if you use a different table size)
+                  overflowY: 'auto',
+                  border: '1px solid var(--gray-a6)',
+                  borderRadius: 8,
+                }}
+              >
+                <Table.Root variant="surface">
+                  <Table.Header>
+                    <Table.Row>
+                      <Table.ColumnHeaderCell>Amount</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Edited</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Set by</Table.ColumnHeaderCell>
                     </Table.Row>
-                  ))}
-                </Table.Body>
-              </Table.Root>
+                  </Table.Header>
+                  <Table.Body>
+                    {entry.price_history.map((p) => (
+                      <Table.Row key={p.id}>
+                        <Table.Cell>
+                          {fmtCurrency.format(Number(p.amount))}
+                        </Table.Cell>
+                        <Table.Cell>
+                          <Code>{fmtDate(p.effective_from)}</Code>
+                        </Table.Cell>
+                        <Table.Cell>
+                          {p.set_by_name || p.set_by || '—'}
+                        </Table.Cell>
+                      </Table.Row>
+                    ))}
+                  </Table.Body>
+                </Table.Root>
+              </Box>
             )}
           </div>
         </Flex>
@@ -419,30 +428,39 @@ export default function InventoryInspector({ id }: { id: string | null }) {
             </Flex>
 
             {entry.price_history.length ? (
-              <Table.Root variant="surface">
-                <Table.Header>
-                  <Table.Row>
-                    <Table.ColumnHeaderCell>Amount</Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>Edited</Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>Set by</Table.ColumnHeaderCell>
-                  </Table.Row>
-                </Table.Header>
-                <Table.Body>
-                  {entry.price_history.map((p) => (
-                    <Table.Row key={p.id}>
-                      <Table.Cell>
-                        {fmtCurrency.format(Number(p.amount))}
-                      </Table.Cell>
-                      <Table.Cell>
-                        <Code>{fmtDate(p.effective_from)}</Code>
-                      </Table.Cell>
-                      <Table.Cell>
-                        {p.set_by_name || p.set_by || '—'}
-                      </Table.Cell>
+              <Box
+                style={{
+                  maxHeight: 196, // ~3 rows + header (tweak if you use a different table size)
+                  overflowY: 'auto',
+                  border: '1px solid var(--gray-a6)',
+                  borderRadius: 8,
+                }}
+              >
+                <Table.Root variant="surface">
+                  <Table.Header>
+                    <Table.Row>
+                      <Table.ColumnHeaderCell>Amount</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Edited</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Set by</Table.ColumnHeaderCell>
                     </Table.Row>
-                  ))}
-                </Table.Body>
-              </Table.Root>
+                  </Table.Header>
+                  <Table.Body>
+                    {entry.price_history.map((p) => (
+                      <Table.Row key={p.id}>
+                        <Table.Cell>
+                          {fmtCurrency.format(Number(p.amount))}
+                        </Table.Cell>
+                        <Table.Cell>
+                          <Code>{fmtDate(p.effective_from)}</Code>
+                        </Table.Cell>
+                        <Table.Cell>
+                          {p.set_by_name || p.set_by || '—'}
+                        </Table.Cell>
+                      </Table.Row>
+                    ))}
+                  </Table.Body>
+                </Table.Root>
+              </Box>
             ) : (
               <Text size="2" color="gray">
                 No price records yet.
