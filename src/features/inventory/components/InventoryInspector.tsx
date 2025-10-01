@@ -1,7 +1,8 @@
 // src/features/inventory/components/InventoryInspector.tsx
 import * as React from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  AlertDialog,
   Badge,
   Box,
   Button,
@@ -13,10 +14,22 @@ import {
   Text,
 } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
+import { useToast } from '@shared/ui/toast/ToastProvider'
+import { supabase } from '@shared/api/supabase'
 import { inventoryDetailQuery } from '../api/queries'
+
+// ⬇️ We'll pass edit props to these (next step we'll add mode/initialData in those files)
+import AddItemDialog from './AddItemDialog'
+import AddGroupDialog from './AddGroupDialog'
 
 export default function InventoryInspector({ id }: { id: string | null }) {
   const { companyId } = useCompany()
+  const { info, error: toastError } = useToast()
+  const [editOpen, setEditOpen] = React.useState(false)
+
+  const [deleteOpen, setDeleteOpen] = React.useState(false)
+  const qc = useQueryClient()
+
   const fmtCurrency = React.useMemo(
     () =>
       new Intl.NumberFormat(undefined, {
@@ -27,22 +40,105 @@ export default function InventoryInspector({ id }: { id: string | null }) {
     [],
   )
 
-  const { data, isLoading } = useQuery({
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      if (!companyId || !id) throw new Error('Missing company or id')
+      const table = entry.type === 'item' ? 'items' : 'item_groups'
+      const { error } = await supabase
+        .from(table)
+        .update({ deleted: true })
+        .eq('company_id', companyId)
+        .eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({
+          queryKey: ['company', companyId, 'inventory-index'],
+          exact: false,
+        }),
+        qc.invalidateQueries({
+          queryKey: ['company', companyId, 'inventory-detail'],
+          exact: false,
+        }),
+      ])
+      info('Deleted', 'The entry has been deleted.')
+      setDeleteOpen(false)
+    },
+    onError: (e: any) => {
+      toastError('Failed to delete', e?.message ?? 'Please try again.')
+    },
+  })
+
+  const enabled = Boolean(companyId && id)
+
+  const { data, isLoading, isError, error } = useQuery({
     ...inventoryDetailQuery({
-      companyId: companyId ?? '__none__',
-      id: id ?? '__none__',
+      companyId: companyId ?? '',
+      id: id ?? '',
     }),
-    enabled: !!companyId && !!id,
+    enabled,
   })
 
   if (!id)
     return <Text color="gray">Select an item/bundle to view details.</Text>
+
+  if (!enabled) return <Text color="gray">Preparing…</Text>
+
   if (isLoading) return <Text>Loading…</Text>
+
+  // We treat "not found" as a valid (null) result in the query; real errors render here.
+  if (isError) {
+    return (
+      <Text color="red">
+        Failed to load.{' '}
+        <Code>{(error as any)?.message || 'Unknown error'}</Code>
+      </Text>
+    )
+  }
+
   if (!data) return <Text color="red">Not found.</Text>
 
   const entry = data
   const fmtDate = (iso?: string | null) =>
     iso ? new Date(iso).toLocaleString() : '—'
+
+  // Build initialData we’ll feed into the dialogs in edit mode
+  const initialItemData =
+    entry.type === 'item'
+      ? {
+          id: entry.id,
+          name: entry.name,
+          categoryName: entry.category_name ?? null,
+          brandName: entry.brand_name ?? null,
+          model: entry.model ?? '',
+          allow_individual_booking: entry.allow_individual_booking,
+          active: entry.active,
+          notes: entry.notes ?? '',
+          price: entry.current_price,
+          total_quantity: entry.on_hand ?? 0,
+        }
+      : undefined
+
+  const initialGroupData =
+    entry.type === 'group'
+      ? {
+          id: entry.id,
+          name: entry.name,
+          categoryName: entry.category_name ?? null,
+          description: entry.description ?? '',
+          active: entry.active,
+          unique: entry.unique,
+          price: entry.current_price,
+          parts: entry.parts.map((p) => ({
+            item_id: p.item_id,
+            item_name: p.item_name,
+            quantity: p.quantity,
+            item_current_price: p.item_current_price,
+          })),
+          price_history: entry.price_history,
+        }
+      : undefined
 
   return (
     <Box>
@@ -54,7 +150,6 @@ export default function InventoryInspector({ id }: { id: string | null }) {
           </Text>
           <Text as="div" color="gray" size="2">
             {entry.type}
-            {/* decorate subtitle similarly for both kinds */}
             {entry.type === 'item' && entry.category_name
               ? ` · ${entry.category_name}`
               : ''}
@@ -67,15 +162,23 @@ export default function InventoryInspector({ id }: { id: string | null }) {
           </Text>
         </div>
         <Flex gap="2">
-          <Button size="2" variant="soft">
+          <Button size="2" variant="soft" onClick={() => setEditOpen(true)}>
             Edit
+          </Button>
+          <Button
+            size="2"
+            variant="surface"
+            color="red"
+            onClick={() => setDeleteOpen(true)}
+          >
+            Delete
           </Button>
         </Flex>
       </Flex>
 
       <Separator my="3" />
 
-      {/* ITEM DETAILS (unchanged look) */}
+      {/* ITEM DETAILS */}
       {entry.type === 'item' ? (
         <Flex direction="column" gap="3">
           {/* Quick stats */}
@@ -185,7 +288,7 @@ export default function InventoryInspector({ id }: { id: string | null }) {
         </Flex>
       ) : null}
 
-      {/* GROUP DETAILS (mirrors AddGroupDialog structure/style) */}
+      {/* GROUP DETAILS */}
       {entry.type === 'group' ? (
         <Flex direction="column" gap="3">
           {/* Quick stats */}
@@ -204,7 +307,7 @@ export default function InventoryInspector({ id }: { id: string | null }) {
             <div />
           </Grid>
 
-          {/* Meta (Category / Status / Description) */}
+          {/* Meta */}
           <Grid columns={{ initial: '1', sm: '2' }} gap="3">
             <Field label="Category" value={entry.category_name ?? '—'} />
             <Field
@@ -225,6 +328,7 @@ export default function InventoryInspector({ id }: { id: string | null }) {
             />
           </Grid>
 
+          {/* Description */}
           <div>
             <Text as="div" size="2" color="gray" style={{ marginBottom: 6 }}>
               Description
@@ -243,7 +347,7 @@ export default function InventoryInspector({ id }: { id: string | null }) {
             </Box>
           </div>
 
-          {/* Parts (table like the dialog’s right column) */}
+          {/* Parts */}
           <div>
             <Text as="div" size="2" color="gray" style={{ marginBottom: 6 }}>
               Bundle contents
@@ -302,6 +406,7 @@ export default function InventoryInspector({ id }: { id: string | null }) {
               </Text>
             )}
           </div>
+
           {/* Group price history */}
           <div>
             <Flex align="baseline" justify="between" mb="2">
@@ -346,6 +451,55 @@ export default function InventoryInspector({ id }: { id: string | null }) {
           </div>
         </Flex>
       ) : null}
+
+      {/* --- Edit dialogs (shown when clicking Edit) --- */}
+      {entry.type === 'item' && (
+        <AddItemDialog
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          companyId={companyId ?? ''}
+          mode="edit"
+          initialData={initialItemData}
+          onSaved={() => setEditOpen(false)}
+        />
+      )}
+
+      {entry.type === 'group' && (
+        <AddGroupDialog
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          companyId={companyId ?? ''}
+          mode="edit"
+          initialData={initialGroupData}
+          onSaved={() => setEditOpen(false)}
+        />
+      )}
+
+      <AlertDialog.Root open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialog.Content maxWidth="480px">
+          <AlertDialog.Title>Delete {entry.type}?</AlertDialog.Title>
+          <AlertDialog.Description size="2">
+            This will mark the {entry.type} <b>{entry.name}</b> as deleted. It
+            won’t be removed permanently, but it will no longer show in the
+            list.
+          </AlertDialog.Description>
+          <Flex gap="3" justify="end" mt="4">
+            <AlertDialog.Cancel>
+              <Button variant="soft">Cancel</Button>
+            </AlertDialog.Cancel>
+            <AlertDialog.Action>
+              <Button
+                variant="solid"
+                color="red"
+                onClick={() => deleteMutation.mutate()}
+                disabled={deleteMutation.isPending}
+              >
+                {deleteMutation.isPending ? 'Deleting…' : 'Yes, delete'}
+              </Button>
+            </AlertDialog.Action>
+          </Flex>
+        </AlertDialog.Content>
+      </AlertDialog.Root>
     </Box>
   )
 }

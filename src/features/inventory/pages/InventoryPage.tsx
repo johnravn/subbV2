@@ -26,7 +26,10 @@ export default function InventoryPage() {
     <section>
       <Flex gap="4" wrap="wrap">
         <Box style={{ flex: '1 1 700px', minWidth: 420 }}>
-          <Card size="3">
+          <Card
+            size="3"
+            style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
+          >
             <Flex align="center" justify="between" mb="3">
               <Heading size="5">Overview</Heading>
               <Flex align="center" gap={'3'}>
@@ -63,7 +66,10 @@ export default function InventoryPage() {
         </Box>
 
         <Box style={{ flex: '0 1 500px', minWidth: 320 }}>
-          <Card size="3">
+          <Card
+            size="3"
+            style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
+          >
             <Heading size="5" mb="3">
               Inspector
             </Heading>

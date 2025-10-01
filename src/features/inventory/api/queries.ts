@@ -29,6 +29,12 @@ export const inventoryIndexKey = (
 export const inventoryDetailKey = (companyId: string, id: string) =>
   ['company', companyId, 'inventory-detail', id] as const
 
+function escapeForPostgrestOr(value: string) {
+  // PostgREST uses commas and parentheses to separate conditions.
+  // Strip or space them out so user input can't break the expression.
+  return value.replace(/[(),]/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
 /* ------------ Types (aligned to the views) ------------ */
 
 export type InventoryIndexRow = {
@@ -43,6 +49,7 @@ export type InventoryIndexRow = {
   is_group: boolean
   unique: boolean | null
   allow_individual_booking: boolean | null
+  active: boolean // 👈 exists in the view (you filtered by it)
 }
 
 export type ItemPriceHistoryRow = {
@@ -87,12 +94,11 @@ export type GroupDetail = {
   active: boolean
   unique: boolean
   parts: Array<GroupPartRow>
-  price_history: Array<ItemPriceHistoryRow> // 👈 add this
+  price_history: Array<ItemPriceHistoryRow>
 }
 
 export type InventoryDetail = ItemDetail | GroupDetail
 
-// types you already have
 export type SortBy =
   | 'name'
   | 'category_name'
@@ -203,22 +209,35 @@ export const inventoryIndexQuery = ({
         .select('*', { count: 'exact' })
         .eq('company_id', companyId)
 
+      // exclude deleted rows
       q = q.or('deleted.is.null,deleted.eq.false')
+
       if (activeOnly) q = q.eq('active', true)
+
+      // Items must allow individual booking if the filter is on,
+      // but groups should still be included.
       if (allow_individual_booking) {
+        // "include if (is_group) OR (allow_individual_booking)"
         q = q.or('is_group.eq.true,allow_individual_booking.eq.true')
       }
+
       if (category && category !== 'all') q = q.eq('category_name', category)
+
       if (search) {
+        const s = escapeForPostgrestOr(search)
+        // IMPORTANT: no wrapping parentheses here
         q = q.or(
-          `name.ilike.%${search}%,category_name.ilike.%${search}%,brand_name.ilike.%${search}%`,
+          `name.ilike.*${s}*,category_name.ilike.*${s}*,brand_name.ilike.*${s}*`,
         )
       }
 
-      q = q.order(sortBy, {
-        ascending: sortDir === 'asc',
-        nullsFirst: false,
-      })
+      // Server-side sort + stable tiebreaker for pagination
+      q = q
+        .order(sortBy, {
+          ascending: sortDir === 'asc',
+          nullsFirst: false,
+        })
+        .order('id', { ascending: true }) // 👈 stable secondary sort
 
       const { data, error, count } = await q.range(from, to)
       if (error) throw error
@@ -230,7 +249,10 @@ export const inventoryIndexQuery = ({
     staleTime: 10_000,
   })
 
-/* ------------ Detail (try item, then group) ------------ */
+/* ------------ Detail (DRIVEN BY inventory_index) ------------ */
+/* If a row is visible in the index, detail will render. We enrich from
+   base tables/views (notes, model, parts, history). If those are not
+   visible due to RLS, we still return a complete shape using the index row. */
 
 export const inventoryDetailQuery = ({
   companyId,
@@ -240,143 +262,241 @@ export const inventoryDetailQuery = ({
   id: string
 }) =>
   queryOptions<
-    InventoryDetail,
+    InventoryDetail | null,
     Error,
-    InventoryDetail,
+    InventoryDetail | null,
     ReturnType<typeof inventoryDetailKey>
   >({
     queryKey: inventoryDetailKey(companyId, id),
+    // Keep retries low; data either exists (by index) or doesn't
+    retry: (failCount, _err: any) => failCount < 2,
     queryFn: async () => {
-      // Try ITEM first
-      {
-        const { data, error } = await supabase
-          .from('items')
-          .select(
-            `
-              id,
-              company_id,
-              name,
-              model,
-              allow_individual_booking,
-              active,
-              notes,
-              total_quantity,
-              category:item_categories(name),
-              brand:item_brands(name)
-            `,
-          )
+      const TAG = 'inventoryDetailQuery'
+      const RUN = `${TAG}#${performance.now().toFixed(3)}`
+      const t = (s: string) => `[${RUN}] ${s}`
+
+      console.groupCollapsed(t('start'), { companyId, id })
+      console.time(t('total'))
+      const safeEnd = () => {
+        try {
+          console.timeEnd(t('total'))
+        } catch {}
+        try {
+          console.groupEnd()
+        } catch {}
+      }
+      const logSb = <T>(label: string, res: { data: T | null; error: any }) => {
+        if (res.error) {
+          console.error(t(`${label} ERROR`), {
+            code: res.error?.code,
+            details: res.error?.details,
+            hint: res.error?.hint,
+            message: res.error?.message,
+          })
+        } else {
+          const d: any = res.data
+          Array.isArray(d)
+            ? console.log(t(`${label} OK`), { rows: d.length, sample: d[0] })
+            : console.log(t(`${label} OK`), { row: d })
+        }
+      }
+
+      try {
+        // 1) Always read the base row from the SAME view the list uses
+        console.time(t('INDEX base'))
+        const { data: base, error: baseErr } = await supabase
+          .from('inventory_index')
+          .select('*')
           .eq('company_id', companyId)
           .eq('id', id)
-          .maybeSingle<any>()
+          .maybeSingle<InventoryIndexRow>()
+        logSb('INDEX base', { data: base, error: baseErr })
+        console.timeEnd(t('INDEX base'))
 
-        if (error && error.code !== 'PGRST116') throw error
-        if (data) {
-          // current item price
-          const { data: cp, error: cpErr } = await supabase
-            .from('item_current_price')
-            .select('current_price')
-            .eq('item_id', data.id)
-            .maybeSingle<{ current_price: number }>()
-          if (cpErr && cpErr.code !== 'PGRST116') throw cpErr
+        if (baseErr) {
+          safeEnd()
+          throw baseErr
+        }
+        if (!base) {
+          // If it isn't even in the index, it's truly not visible to this user
+          safeEnd()
+          return null
+        }
 
-          // price history
+        // 2) Branch by type (using is_group from index)
+        if (!base.is_group) {
+          // ----- ITEM -----
+          // Optional enrich: notes, model, flags from base table (might be RLS'd)
+          console.time(t('ITEM enrich'))
+          const { data: itemMeta, error: itemErr } = await supabase
+            .from('items')
+            .select(
+              `
+              id,
+              model,
+              notes,
+              allow_individual_booking,
+              active
+            `,
+            )
+            .eq('id', id)
+            .eq('company_id', companyId)
+            .maybeSingle<{
+              id: string
+              model: string | null
+              notes: string | null
+              allow_individual_booking: boolean | null
+              active: boolean | null
+            }>()
+          logSb('ITEM enrich', { data: itemMeta, error: itemErr })
+          console.timeEnd(t('ITEM enrich'))
+          // Do NOT throw on itemErr — just fall back to index row
+
+          // Price history (view; usually RLS-safe)
+          console.time(t('ITEM history'))
           const { data: hist, error: hErr } = await supabase
             .from('item_price_history_with_profile')
             .select(
               'id, amount, effective_from, effective_to, set_by, set_by_name',
             )
             .eq('company_id', companyId)
-            .eq('item_id', data.id)
+            .eq('item_id', id)
             .order('effective_from', { ascending: false })
-          if (hErr) throw hErr
+          logSb('ITEM history', { data: hist, error: hErr })
+          console.timeEnd(t('ITEM history'))
+          if (hErr) {
+            safeEnd()
+            throw hErr
+          }
 
-          return {
-            id: data.id,
-            name: data.name,
+          const result: ItemDetail = {
+            id: base.id,
+            name: base.name,
             type: 'item',
-            category_name: data.category?.name ?? null,
-            brand_name: data.brand?.name ?? null,
-            model: data.model ?? null,
-            allow_individual_booking: Boolean(data.allow_individual_booking),
-            active: Boolean(data.active),
-            notes: data.notes ?? null,
-            current_price: cp?.current_price ?? null,
-            on_hand: data.total_quantity ?? 0,
-            price_history: hist.map((h: any) => ({
-              id: h.id,
-              amount: h.amount,
-              effective_from: h.effective_from,
-              effective_to: h.effective_to,
-              set_by: h.set_by,
-              set_by_name: h.set_by_name,
-            })),
-          } as ItemDetail
+            category_name: base.category_name ?? null,
+            brand_name: base.brand_name ?? null,
+            model: itemMeta?.model ?? null,
+            allow_individual_booking: Boolean(
+              itemMeta?.allow_individual_booking ??
+                base.allow_individual_booking,
+            ),
+            active: Boolean(itemMeta?.active ?? base.active),
+            notes: itemMeta?.notes ?? null,
+            current_price: base.current_price ?? null,
+            on_hand: base.on_hand ?? 0,
+            price_history: hist as Array<ItemPriceHistoryRow>,
+          }
+
+          console.log(t('RETURN item'), {
+            id: result.id,
+            name: result.name,
+            current_price: result.current_price,
+            on_hand: result.on_hand,
+            price_history_len: result.price_history.length,
+          })
+          safeEnd()
+          return result
+        } else {
+          // ----- GROUP -----
+          // Optional enrich: description/unique/active from base table (may be RLS'd)
+          console.time(t('GROUP enrich'))
+          const { data: gmeta, error: gErr } = await supabase
+            .from('item_groups')
+            .select('id, description, unique, active')
+            .eq('id', id)
+            .eq('company_id', companyId)
+            .maybeSingle<{
+              id: string
+              description: string | null
+              unique: boolean | null
+              active: boolean | null
+            }>()
+          logSb('GROUP enrich', { data: gmeta, error: gErr })
+          console.timeEnd(t('GROUP enrich'))
+          // No throw on gErr — we can fall back to index
+
+          // Rollups (or fall back to index)
+          console.time(t('GROUP rollups'))
+          const { data: roll, error: rErr } = await supabase
+            .from('groups_with_rollups')
+            .select('on_hand, current_price')
+            .eq('id', id)
+            .maybeSingle<{
+              on_hand: number | null
+              current_price: number | null
+            }>()
+          logSb('GROUP rollups', { data: roll, error: rErr })
+          console.timeEnd(t('GROUP rollups'))
+          if (rErr && rErr.code !== 'PGRST116') {
+            safeEnd()
+            throw rErr
+          }
+
+          // Parts (view; usually RLS-safe)
+          console.time(t('GROUP parts'))
+          const { data: parts, error: pErr } = await supabase
+            .from('group_parts')
+            .select('item_id, item_name, quantity, item_current_price')
+            .eq('group_id', id)
+          logSb('GROUP parts', { data: parts, error: pErr })
+          console.timeEnd(t('GROUP parts'))
+          if (pErr) {
+            safeEnd()
+            throw pErr
+          }
+
+          // History (view)
+          console.time(t('GROUP history'))
+          const { data: ghist, error: ghErr } = await supabase
+            .from('group_price_history_with_profile')
+            .select(
+              'id, amount, effective_from, effective_to, set_by, set_by_name',
+            )
+            .eq('company_id', companyId)
+            .eq('group_id', id)
+            .order('effective_from', { ascending: false })
+          logSb('GROUP history', { data: ghist, error: ghErr })
+          console.timeEnd(t('GROUP history'))
+          if (ghErr) {
+            safeEnd()
+            throw ghErr
+          }
+
+          const result: GroupDetail = {
+            id: base.id,
+            name: base.name,
+            type: 'group',
+            on_hand: roll?.on_hand ?? base.on_hand ?? 0,
+            current_price: roll?.current_price ?? base.current_price ?? null,
+            category_name: base.category_name ?? null,
+            description: gmeta?.description ?? null,
+            active: Boolean(gmeta?.active ?? base.active),
+            unique: Boolean(gmeta?.unique ?? base.unique ?? false),
+            parts: parts as Array<GroupPartRow>,
+            price_history: ghist as Array<ItemPriceHistoryRow>,
+          }
+
+          console.log(t('RETURN group'), {
+            id: result.id,
+            name: result.name,
+            current_price: result.current_price,
+            on_hand: result.on_hand,
+            parts_len: result.parts.length,
+            price_history_len: result.price_history.length,
+          })
+          safeEnd()
+          return result
         }
-      }
-      // Then GROUP
-      {
-        // base group meta (with category name)
-        const { data: gmeta, error: gErr } = await supabase
-          .from('item_groups')
-          .select(
-            `
-        id,
-        company_id,
-        name,
-        active,
-        description,
-        unique,
-        category:item_categories(name)
-      `,
-          )
-          .eq('company_id', companyId)
-          .eq('id', id)
-          .maybeSingle<any>()
-        if (gErr && gErr.code !== 'PGRST116') throw gErr
-        if (!gmeta) throw gErr ?? new Error('Not found')
-
-        // rollups (on_hand, current_price)
-        const { data: roll, error: rErr } = await supabase
-          .from('groups_with_rollups')
-          .select('on_hand, current_price')
-          .eq('id', gmeta.id)
-          .maybeSingle<{
-            on_hand: number | null
-            current_price: number | null
-          }>()
-        if (rErr && rErr.code !== 'PGRST116') throw rErr
-
-        // parts
-        const { data: parts, error: pErr } = await supabase
-          .from('group_parts')
-          .select('item_id, item_name, quantity, item_current_price')
-          .eq('group_id', gmeta.id)
-        if (pErr) throw pErr
-
-        // price history (for groups)
-        const { data: ghist, error: ghErr } = await supabase
-          .from('group_price_history_with_profile')
-          .select(
-            'id, amount, effective_from, effective_to, set_by, set_by_name',
-          )
-          .eq('company_id', companyId)
-          .eq('group_id', gmeta.id)
-          .order('effective_from', { ascending: false })
-        if (ghErr) throw ghErr
-
-        return {
-          id: gmeta.id,
-          name: gmeta.name,
-          type: 'group',
-          on_hand: roll?.on_hand ?? 0,
-          current_price: roll?.current_price ?? null,
-          category_name: gmeta.category?.name ?? null,
-          description: gmeta.description ?? null,
-          active: Boolean(gmeta.active),
-          unique: Boolean(gmeta.unique),
-          parts: parts as Array<GroupPartRow>,
-          price_history: ghist as Array<ItemPriceHistoryRow>, // 👈 include it
-        } as GroupDetail
+      } catch (e: any) {
+        console.error(t('THROW'), {
+          name: e?.name,
+          message: e?.message,
+          code: e?.code,
+          details: e?.details,
+          hint: e?.hint,
+        })
+        safeEnd()
+        throw e
       }
     },
   })

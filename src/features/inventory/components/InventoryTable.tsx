@@ -45,7 +45,7 @@ export default function InventoryTable({
   const [categoryFilter, setCategoryFilter] = React.useState<string | null>(
     null,
   )
-  const pageSize = 13
+  const pageSize = 12
 
   const [sorting, setSorting] = React.useState<SortingState>([
     { id: 'name', desc: false }, // 👈 default sort by name ascending
@@ -102,7 +102,7 @@ export default function InventoryTable({
                 {r.name}
               </Text>
               {r.is_group && (
-                <Badge size="1" variant="soft">
+                <Badge size="1" variant="soft" color="pink">
                   Group
                 </Badge>
               )}
@@ -165,7 +165,8 @@ export default function InventoryTable({
     getSortedRowModel: getSortedRowModel(),
     manualSorting: true,
   })
-  console.log('data.rows.length: ' + data?.rows.length)
+  console.log('data.rows.length:', data?.rows.length ?? 0)
+
   return (
     <>
       {/* Search bar */}
