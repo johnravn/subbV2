@@ -31,6 +31,7 @@ type Props = {
   onSelect: (id: string) => void
   activeOnly: boolean
   allow_individual_booking: boolean
+  pageSizeOverride?: number
 }
 
 export default function InventoryTable({
@@ -38,6 +39,7 @@ export default function InventoryTable({
   onSelect,
   activeOnly,
   allow_individual_booking,
+  pageSizeOverride,
 }: Props) {
   const { companyId } = useCompany()
   const [page, setPage] = React.useState(1)
@@ -45,7 +47,6 @@ export default function InventoryTable({
   const [categoryFilter, setCategoryFilter] = React.useState<string | null>(
     null,
   )
-  const pageSize = 12
 
   const [sorting, setSorting] = React.useState<SortingState>([
     { id: 'name', desc: false }, // 👈 default sort by name ascending
@@ -58,11 +59,54 @@ export default function InventoryTable({
   const [editCategoriesOpen, setEditCategoriesOpen] = React.useState(false)
   const [editBrandsOpen, setEditBrandsOpen] = React.useState(false)
 
+  // ⬇️ add these near your other state hooks
+  const containerRef = React.useRef<HTMLDivElement | null>(null)
+  const controlsRef = React.useRef<HTMLDivElement | null>(null)
+  const theadRef = React.useRef<HTMLTableSectionElement | null>(null)
+  const pagerRef = React.useRef<HTMLDivElement | null>(null)
+
+  // const pageSize = 12
+  // start with a sane default; it will be recalculated on mount/resize/data changes
+  const [pageSize, setPageSize] = React.useState(12)
+
+  const effectivePageSize = pageSizeOverride ?? pageSize
+
+  // ⬇️ place below the refs
+  const recomputePageSize = React.useCallback(() => {
+    // Use the viewport height as the baseline
+    // const screenH = window.innerHeight
+    const screenH =
+      containerRef.current?.getBoundingClientRect().height ?? window.innerHeight
+
+    // Measure actual occupied space inside this component
+    const controlsH = controlsRef.current?.offsetHeight ?? 0
+    const theadH = theadRef.current?.offsetHeight ?? 0
+    const pagerH = pagerRef.current?.offsetHeight ?? 0
+
+    // Some breathing room for margins/padding around blocks
+    const miscPadding = 32
+
+    // Available vertical space for table rows
+    const available = Math.max(
+      0,
+      screenH - controlsH - theadH - pagerH - miscPadding,
+    )
+
+    // Measure an actual row height if possible; fall back to 44px
+    const rowEl = containerRef.current?.querySelector<HTMLTableRowElement>(
+      'tbody tr[data-row-probe], tbody tr',
+    )
+    const rowH = rowEl?.getBoundingClientRect().height || 44
+
+    const rows = Math.max(5, Math.floor(available / rowH)) // never go below 5
+    setPageSize(rows)
+  }, [])
+
   const { data, isLoading, isFetching } = useQuery({
     ...inventoryIndexQuery({
       companyId: companyId ?? '__none__',
       page,
-      pageSize,
+      pageSize: effectivePageSize,
       search,
       activeOnly,
       allow_individual_booking,
@@ -72,6 +116,35 @@ export default function InventoryTable({
     }),
     enabled: !!companyId,
   })
+
+  // ⬇️ recompute when window resizes
+  React.useEffect(() => {
+    if (pageSizeOverride != null) return // ⬅️ bail out on phones
+    const onResize = () => recomputePageSize()
+    window.addEventListener('resize', onResize)
+    // initial compute on mount
+    recomputePageSize()
+    return () => window.removeEventListener('resize', onResize)
+  }, [recomputePageSize])
+
+  // ⬇️ recompute when data loads or sorting/filtering changes row heights
+  React.useEffect(() => {
+    // next tick so the DOM is painted before measuring
+    if (pageSizeOverride != null) return // ⬅️ bail out on phones
+    const id = requestAnimationFrame(recomputePageSize)
+    return () => cancelAnimationFrame(id)
+  }, [
+    pageSizeOverride,
+    data,
+    sorting,
+    search,
+    categoryFilter,
+    sortBy,
+    sortDir,
+    activeOnly,
+    allow_individual_booking,
+    recomputePageSize,
+  ])
 
   const { data: categories = [] } = useQuery({
     ...categoryNamesQuery({ companyId: companyId ?? '__none__' }),
@@ -109,6 +182,11 @@ export default function InventoryTable({
               {r.is_group && r.unique === true && (
                 <Badge size="1" variant="soft">
                   Unique
+                </Badge>
+              )}
+              {r.active === false && (
+                <Badge size="1" variant="soft" color="red">
+                  Inactive
                 </Badge>
               )}
             </Flex>
@@ -168,9 +246,9 @@ export default function InventoryTable({
   console.log('data.rows.length:', data?.rows.length ?? 0)
 
   return (
-    <>
+    <div ref={containerRef} style={{ height: '100%', minHeight: 0 }}>
       {/* Search bar */}
-      <Flex gap="2" align="center" wrap="wrap">
+      <Flex ref={controlsRef} gap="2" align="center" wrap="wrap">
         <TextField.Root
           value={search}
           onChange={(e) => {
@@ -211,7 +289,7 @@ export default function InventoryTable({
 
       {/* Table */}
       <Table.Root variant="surface" style={{ marginTop: 16 }}>
-        <Table.Header>
+        <Table.Header ref={theadRef}>
           {table.getHeaderGroups().map((hg) => (
             <Table.Row key={hg.id}>
               {hg.headers.map((h) => {
@@ -262,6 +340,11 @@ export default function InventoryTable({
         </Table.Header>
 
         <Table.Body>
+          {!isLoading && table.getRowModel().rows.length === 0 && (
+            <Table.Row data-row-probe style={{ visibility: 'hidden' }}>
+              <Table.Cell colSpan={columns.length}>probe</Table.Cell>
+            </Table.Row>
+          )}
           {isLoading ? (
             <Table.Row>
               <Table.Cell colSpan={columns.length}>Loading…</Table.Cell>
@@ -298,46 +381,48 @@ export default function InventoryTable({
         </Table.Body>
       </Table.Root>
 
-      <Flex align="center" justify="between" mb="3" mt="3">
-        <Flex gap="2">
-          <Button
-            disabled={page === 1}
-            onClick={() => setPage((p) => p - 1)}
-            variant="classic"
-          >
-            Prev
-          </Button>
-          <Button
-            disabled={!data || data.rows.length < pageSize}
-            onClick={() => setPage((p) => p + 1)}
-            variant="classic"
-          >
-            Next
-          </Button>
+      <div ref={pagerRef}>
+        <Flex align="center" justify="between" mb="3" mt="3">
+          <Flex gap="2">
+            <Button
+              disabled={page === 1}
+              onClick={() => setPage((p) => p - 1)}
+              variant="classic"
+            >
+              Prev
+            </Button>
+            <Button
+              disabled={!data || data.rows.length < pageSize}
+              onClick={() => setPage((p) => p + 1)}
+              variant="classic"
+            >
+              Next
+            </Button>
+          </Flex>
+          <Flex align="center" gap={'1'}>
+            <EditCategoriesDialog
+              open={editCategoriesOpen}
+              onOpenChange={setEditCategoriesOpen}
+              companyId={companyId ?? ''}
+            />
+            <EditBrandsDialog
+              open={editBrandsOpen}
+              onOpenChange={setEditBrandsOpen}
+              companyId={companyId ?? ''}
+            />
+            <AddItemDialog
+              open={addItemOpen}
+              onOpenChange={setAddItemOpen}
+              companyId={companyId ?? ''}
+            />
+            <AddGroupDialog
+              open={addGroupDialog}
+              onOpenChange={setAddGroupDialog}
+              companyId={companyId ?? ''}
+            />
+          </Flex>
         </Flex>
-        <Flex align="center" gap={'1'}>
-          <EditCategoriesDialog
-            open={editCategoriesOpen}
-            onOpenChange={setEditCategoriesOpen}
-            companyId={companyId ?? ''}
-          />
-          <EditBrandsDialog
-            open={editBrandsOpen}
-            onOpenChange={setEditBrandsOpen}
-            companyId={companyId ?? ''}
-          />
-          <AddItemDialog
-            open={addItemOpen}
-            onOpenChange={setAddItemOpen}
-            companyId={companyId ?? ''}
-          />
-          <AddGroupDialog
-            open={addGroupDialog}
-            onOpenChange={setAddGroupDialog}
-            companyId={companyId ?? ''}
-          />
-        </Flex>
-      </Flex>
-    </>
+      </div>
+    </div>
   )
 }
