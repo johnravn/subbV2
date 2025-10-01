@@ -139,7 +139,7 @@ export default function AddItemDialog({
 
       <Dialog.Root open={open} onOpenChange={onOpenChange}>
         <Dialog.Trigger>
-          <Button size="2">
+          <Button size="2" variant="classic">
             <Plus /> Add item
           </Button>
         </Dialog.Trigger>
@@ -289,6 +289,7 @@ export default function AddItemDialog({
             <Button
               onClick={() => createMutation.mutate(form)}
               disabled={!form.name || createMutation.isPending}
+              variant="classic"
             >
               {createMutation.isPending ? 'Saving…' : 'Create'}
             </Button>

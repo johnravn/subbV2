@@ -236,7 +236,12 @@ export default function SignupPage() {
               {error && <Text color="red">{error}</Text>}
               {info && <Text color="green">{info}</Text>}
 
-              <Button type="submit" size="3" disabled={loading}>
+              <Button
+                type="submit"
+                size="3"
+                disabled={loading}
+                variant="classic"
+              >
                 {loading ? 'Creating account…' : 'Create account'}
               </Button>
 

@@ -7,6 +7,7 @@ import {
   useReactTable,
 } from '@tanstack/react-table'
 import {
+  Badge,
   Button,
   Flex,
   Select,
@@ -81,11 +82,26 @@ export default function InventoryTable({
       {
         accessorKey: 'name',
         header: 'Name',
-        cell: (ctx) => (
-          <Text size="2" weight="medium">
-            {String(ctx.getValue() ?? '')}
-          </Text>
-        ),
+        cell: (ctx) => {
+          const r = ctx.row.original
+          return (
+            <Flex align="center" gap="2">
+              <Text size="2" weight="medium">
+                {r.name}
+              </Text>
+              {r.is_group && (
+                <Badge size="1" variant="soft">
+                  Group
+                </Badge>
+              )}
+              {r.is_group && r.unique === true && (
+                <Badge size="1" variant="soft">
+                  Unique
+                </Badge>
+              )}
+            </Flex>
+          )
+        },
       },
       // category_name
       {
@@ -228,12 +244,17 @@ export default function InventoryTable({
 
       <Flex align="center" justify="between" mb="3" mt="3">
         <Flex gap="2">
-          <Button disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
+          <Button
+            disabled={page === 1}
+            onClick={() => setPage((p) => p - 1)}
+            variant="classic"
+          >
             Prev
           </Button>
           <Button
             disabled={!data || data.rows.length < pageSize}
             onClick={() => setPage((p) => p + 1)}
+            variant="classic"
           >
             Next
           </Button>

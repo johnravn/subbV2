@@ -104,7 +104,12 @@ export default function LoginPage() {
 
               {error && <Text color="red">{error}</Text>}
 
-              <Button type="submit" size="3" disabled={loading}>
+              <Button
+                type="submit"
+                size="3"
+                disabled={loading}
+                variant="classic"
+              >
                 {loading ? 'Signing in…' : 'Sign in'}
               </Button>
 

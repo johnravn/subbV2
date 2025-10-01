@@ -57,7 +57,7 @@ export default function TermsPrivacyPage() {
           <Separator size="4" />
 
           <Flex justify="end" gap="2">
-            <Button highContrast asChild>
+            <Button highContrast asChild variant="classic">
               <Link to="/signup">{lang === 'en' ? 'Close' : 'Lukk'}</Link>
             </Button>
           </Flex>

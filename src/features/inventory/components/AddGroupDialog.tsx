@@ -13,7 +13,7 @@ import {
   TextArea,
   TextField,
 } from '@radix-ui/themes'
-import { Plus, Trash } from 'iconoir-react'
+import { NewTab, Plus, Trash } from 'iconoir-react'
 import { supabase } from '@shared/api/supabase'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 
@@ -36,6 +36,7 @@ type FormState = {
   active: boolean
   price: number | null
   parts: Array<Part>
+  unique: boolean
 }
 
 export default function AddGroupDialog({
@@ -57,6 +58,7 @@ export default function AddGroupDialog({
     active: true,
     price: null,
     parts: [],
+    unique: false,
   })
   const set = <TKey extends keyof FormState>(
     key: TKey,
@@ -98,7 +100,9 @@ export default function AddGroupDialog({
         .from('items')
         .select('id, name')
         .eq('company_id', companyId)
-        .limit(50)
+        .eq('active', true) // 👈 only active
+        .or('deleted.is.null,deleted.eq.false')
+        .limit(20)
 
       if (search) q = q.ilike('name', `%${search}%`)
 
@@ -134,7 +138,7 @@ export default function AddGroupDialog({
       {
         item_id: it.id,
         item_name: it.name,
-        quantity: 1,
+        quantity: form.unique ? 1 : 1,
         unit_price: it.current_price ?? null,
       },
     ])
@@ -182,6 +186,7 @@ export default function AddGroupDialog({
             item_id: p.item_id,
             quantity: p.quantity,
           })),
+          p_unique: f.unique,
         },
       )
       if (!rpcErr) return
@@ -195,6 +200,7 @@ export default function AddGroupDialog({
           category_id: f.categoryId,
           description: f.description || null,
           active: f.active,
+          unique: f.unique,
         })
         .select('id')
         .single()
@@ -214,17 +220,24 @@ export default function AddGroupDialog({
           throw giErr
         }
       }
+      const { data: userData } = await supabase.auth.getUser()
+      const userId = userData.user?.id ?? null
 
-      // Optional: group_price_history insert if you enabled it
-      // if (f.price != null && !Number.isNaN(Number(f.price))) {
-      //   const { error: gpErr } = await supabase
-      //     .from('group_price_history')
-      //     .insert({ company_id: companyId, group_id: groupId, amount: f.price })
-      //   if (gpErr) {
-      //     await supabase.from('item_groups').delete().eq('id', groupId)
-      //     throw gpErr
-      //   }
-      // }
+      //   Optional: group_price_history insert if you enabled it
+      if (f.price != null && !Number.isNaN(Number(f.price))) {
+        const { error: gpErr } = await supabase
+          .from('group_price_history')
+          .insert({
+            company_id: companyId,
+            group_id: groupId,
+            amount: f.price,
+            set_by: userId,
+          })
+        if (gpErr) {
+          await supabase.from('item_groups').delete().eq('id', groupId)
+          throw gpErr
+        }
+      }
     },
     onSuccess: async () => {
       await Promise.all([
@@ -263,8 +276,10 @@ export default function AddGroupDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Trigger>
-        <Button size="2">
-          <Plus /> Add group
+        {/* "classic" | "solid" | "soft" | "surface" | "outline" | "ghost" */}
+        {/* <Button size="2" highContrast variant="solid"> */}
+        <Button size="2" variant="classic">
+          <NewTab /> Add group
         </Button>
       </Dialog.Trigger>
 
@@ -343,6 +358,20 @@ export default function AddGroupDialog({
                 </Select.Root>
               </Field>
 
+              <Field label="Unique group">
+                <Select.Root
+                  value={form.unique ? 'true' : 'false'}
+                  size="3"
+                  onValueChange={(v) => set('unique', v === 'true')}
+                >
+                  <Select.Trigger style={{ minHeight: 'var(--space-7)' }} />
+                  <Select.Content>
+                    <Select.Item value="false">Bundle (generic)</Select.Item>
+                    <Select.Item value="true">Unique (fixed set)</Select.Item>
+                  </Select.Content>
+                </Select.Root>
+              </Field>
+
               <Field label="Price (optional)">
                 <TextField.Root
                   type="number"
@@ -401,7 +430,11 @@ export default function AddGroupDialog({
                         ? fmt.format(Number(it.current_price))
                         : '—'}
                     </Text>
-                    <Button size="1" onClick={() => addPart(it)}>
+                    <Button
+                      variant="classic"
+                      size="1"
+                      onClick={() => addPart(it)}
+                    >
                       Add
                     </Button>
                   </Flex>
@@ -457,6 +490,7 @@ export default function AddGroupDialog({
                             type="number"
                             inputMode="numeric"
                             min="1"
+                            // disabled={form.unique} // 👈 disable when unique
                             value={String(p.quantity)}
                             onChange={(e) =>
                               updatePartQty(

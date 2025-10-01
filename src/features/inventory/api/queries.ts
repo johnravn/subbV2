@@ -23,7 +23,7 @@ export const inventoryIndexKey = (
 export const inventoryDetailKey = (companyId: string, id: string) =>
   ['company', companyId, 'inventory-detail', id] as const
 
-/* ------------ Types (aligned to the new view) ------------ */
+/* ------------ Types (aligned to the views) ------------ */
 
 export type InventoryIndexRow = {
   company_id: string
@@ -33,10 +33,10 @@ export type InventoryIndexRow = {
   brand_name: string | null
   on_hand: number | null
   current_price: number | null
-  currency: string // "NOK" per your view
+  currency: string // "NOK"
+  is_group: boolean
+  unique: boolean | null
 }
-
-// Add/adjust these in queries.ts
 
 export type ItemPriceHistoryRow = {
   id: string
@@ -75,7 +75,12 @@ export type GroupDetail = {
   type: 'group'
   on_hand: number | null
   current_price: number | null
+  category_name: string | null
+  description: string | null
+  active: boolean
+  unique: boolean
   parts: Array<GroupPartRow>
+  price_history: Array<ItemPriceHistoryRow> // 👈 add this
 }
 
 export type InventoryDetail = ItemDetail | GroupDetail
@@ -103,7 +108,6 @@ export const categoryNamesQuery = ({ companyId }: { companyId: string }) =>
         .eq('company_id', companyId)
         .order('name', { ascending: true })
       if (error) throw error
-      // de-dup just in case + strip nulls
       const names = data.map((c: any) => c.name).filter(Boolean)
       return Array.from(new Set(names))
     },
@@ -147,7 +151,7 @@ export const inventoryIndexQuery = ({
   page: number
   pageSize: number
   search: string
-  activeOnly: boolean // 👈 add
+  activeOnly: boolean
   category: string | null
 }) =>
   queryOptions<
@@ -173,9 +177,10 @@ export const inventoryIndexQuery = ({
         .select('*', { count: 'exact' })
         .eq('company_id', companyId)
 
+      // filter out deleted rows from the view
       q = q.or('deleted.is.null,deleted.eq.false')
       if (activeOnly) q = q.eq('active', true)
-      if (category && category != 'all') q = q.eq('category_name', category)
+      if (category && category !== 'all') q = q.eq('category_name', category)
       if (search) {
         q = q.or(
           `name.ilike.%${search}%,category_name.ilike.%${search}%,brand_name.ilike.%${search}%`,
@@ -209,37 +214,23 @@ export const inventoryDetailQuery = ({
   >({
     queryKey: inventoryDetailKey(companyId, id),
     queryFn: async () => {
-      // inside inventoryDetailQuery's item branch
+      // Try ITEM first
       {
-        type Row = {
-          id: string
-          company_id: string
-          name: string
-          category_name: string | null
-          brand_name: string | null
-          model: string | null
-          allow_individual_booking: boolean
-          active: boolean
-          notes: string | null
-          total_quantity: number | null
-          current_price: number | null
-        }
-
         const { data, error } = await supabase
           .from('items')
           .select(
             `
-    id,
-    company_id,
-    name,
-    model,
-    allow_individual_booking,
-    active,
-    notes,
-    total_quantity,
-    category:item_categories(name),
-    brand:item_brands(name)
-  `,
+              id,
+              company_id,
+              name,
+              model,
+              allow_individual_booking,
+              active,
+              notes,
+              total_quantity,
+              category:item_categories(name),
+              brand:item_brands(name)
+            `,
           )
           .eq('company_id', companyId)
           .eq('id', id)
@@ -247,7 +238,7 @@ export const inventoryDetailQuery = ({
 
         if (error && error.code !== 'PGRST116') throw error
         if (data) {
-          // 🔹 fetch current price from the view explicitly
+          // current item price
           const { data: cp, error: cpErr } = await supabase
             .from('item_current_price')
             .select('current_price')
@@ -255,7 +246,7 @@ export const inventoryDetailQuery = ({
             .maybeSingle<{ current_price: number }>()
           if (cpErr && cpErr.code !== 'PGRST116') throw cpErr
 
-          // price history (unchanged)
+          // price history
           const { data: hist, error: hErr } = await supabase
             .from('item_price_history_with_profile')
             .select(
@@ -276,9 +267,9 @@ export const inventoryDetailQuery = ({
             allow_individual_booking: Boolean(data.allow_individual_booking),
             active: Boolean(data.active),
             notes: data.notes ?? null,
-            current_price: cp?.current_price ?? null, // 👈 now populated
+            current_price: cp?.current_price ?? null,
             on_hand: data.total_quantity ?? 0,
-            price_history: hist.map((h) => ({
+            price_history: hist.map((h: any) => ({
               id: h.id,
               amount: h.amount,
               effective_from: h.effective_from,
@@ -289,41 +280,70 @@ export const inventoryDetailQuery = ({
           } as ItemDetail
         }
       }
-
       // Then GROUP
       {
-        type GroupRow = {
-          id: string
-          company_id: string
-          name: string
-          on_hand: number | null
-          current_price: number | null
-        }
-        const { data: group, error: gErr } = await supabase
-          .from('groups_with_rollups')
-          .select('id, company_id, name, on_hand, current_price')
+        // base group meta (with category name)
+        const { data: gmeta, error: gErr } = await supabase
+          .from('item_groups')
+          .select(
+            `
+        id,
+        company_id,
+        name,
+        active,
+        description,
+        unique,
+        category:item_categories(name)
+      `,
+          )
           .eq('company_id', companyId)
           .eq('id', id)
-          .maybeSingle<GroupRow>()
-
+          .maybeSingle<any>()
         if (gErr && gErr.code !== 'PGRST116') throw gErr
-        if (!group) throw gErr ?? new Error('Not found')
+        if (!gmeta) throw gErr ?? new Error('Not found')
 
+        // rollups (on_hand, current_price)
+        const { data: roll, error: rErr } = await supabase
+          .from('groups_with_rollups')
+          .select('on_hand, current_price')
+          .eq('id', gmeta.id)
+          .maybeSingle<{
+            on_hand: number | null
+            current_price: number | null
+          }>()
+        if (rErr && rErr.code !== 'PGRST116') throw rErr
+
+        // parts
         const { data: parts, error: pErr } = await supabase
           .from('group_parts')
           .select('item_id, item_name, quantity, item_current_price')
-          .eq('group_id', group.id)
-
+          .eq('group_id', gmeta.id)
         if (pErr) throw pErr
 
+        // price history (for groups)
+        const { data: ghist, error: ghErr } = await supabase
+          .from('group_price_history_with_profile')
+          .select(
+            'id, amount, effective_from, effective_to, set_by, set_by_name',
+          )
+          .eq('company_id', companyId)
+          .eq('group_id', gmeta.id)
+          .order('effective_from', { ascending: false })
+        if (ghErr) throw ghErr
+
         return {
-          id: group.id,
-          name: group.name,
+          id: gmeta.id,
+          name: gmeta.name,
           type: 'group',
-          on_hand: group.on_hand ?? 0,
-          current_price: group.current_price,
+          on_hand: roll?.on_hand ?? 0,
+          current_price: roll?.current_price ?? null,
+          category_name: gmeta.category?.name ?? null,
+          description: gmeta.description ?? null,
+          active: Boolean(gmeta.active),
+          unique: Boolean(gmeta.unique),
           parts: parts as Array<GroupPartRow>,
-        }
+          price_history: ghist as Array<ItemPriceHistoryRow>, // 👈 include it
+        } as GroupDetail
       }
     },
   })
