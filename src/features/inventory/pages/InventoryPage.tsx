@@ -15,8 +15,9 @@ import InventoryInspector from '../components/InventoryInspector'
 
 export default function InventoryPage() {
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
-  const [activeOnly, setActiveOnly] = React.useState(true) // 👈 NEW
-  const [individualOnly, setIndividualOnly] = React.useState(false) // 👈 NEW
+  const [activeOnly, setActiveOnly] = React.useState(true)
+  const [allow_individual_booking, setAllow_individual_booking] =
+    React.useState(true)
   const { companyId } = useCompany()
 
   if (!companyId) return <div>No company selected.</div>
@@ -28,7 +29,7 @@ export default function InventoryPage() {
           <Card size="3">
             <Flex align="center" justify="between" mb="3">
               <Heading size="5">Overview</Heading>
-              <Flex align="center" gap={'2'}>
+              <Flex align="center" gap={'3'}>
                 <Flex align="center" gap={'1'}>
                   <Text size="2" color="gray">
                     Active only
@@ -40,11 +41,13 @@ export default function InventoryPage() {
                 </Flex>
                 <Flex align="center" gap={'1'}>
                   <Text size="2" color="gray">
-                    Individual only
+                    Hide group-only items
                   </Text>
                   <Switch
-                    checked={individualOnly}
-                    onCheckedChange={(v) => setIndividualOnly(Boolean(v))}
+                    checked={allow_individual_booking}
+                    onCheckedChange={(v) =>
+                      setAllow_individual_booking(Boolean(v))
+                    }
                   />
                 </Flex>
               </Flex>
@@ -54,7 +57,7 @@ export default function InventoryPage() {
               selectedId={selectedId}
               onSelect={setSelectedId}
               activeOnly={activeOnly}
-              // individualOnly={individualOnly} TODOTODOTODOTODO
+              allow_individual_booking={allow_individual_booking}
             />
           </Card>
         </Box>

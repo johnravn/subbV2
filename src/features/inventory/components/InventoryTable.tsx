@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import {
   flexRender,
   getCoreRowModel,
+  getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table'
 import {
@@ -22,19 +23,21 @@ import EditCategoriesDialog from './EditCategoriesDialog'
 import EditBrandsDialog from './EditBrandsDialog'
 import AddItemDialog from './AddItemDialog'
 import AddGroupDialog from './AddGroupDialog'
-import type { ColumnDef } from '@tanstack/react-table'
-import type { InventoryIndexRow } from '../api/queries'
+import type { ColumnDef, SortingState } from '@tanstack/react-table'
+import type { InventoryIndexRow, SortBy, SortDir } from '../api/queries'
 
 type Props = {
   selectedId: string | null
   onSelect: (id: string) => void
   activeOnly: boolean
+  allow_individual_booking: boolean
 }
 
 export default function InventoryTable({
   selectedId,
   onSelect,
   activeOnly,
+  allow_individual_booking,
 }: Props) {
   const { companyId } = useCompany()
   const [page, setPage] = React.useState(1)
@@ -43,6 +46,12 @@ export default function InventoryTable({
     null,
   )
   const pageSize = 13
+
+  const [sorting, setSorting] = React.useState<SortingState>([
+    { id: 'name', desc: false }, // 👈 default sort by name ascending
+  ])
+  const [sortBy, setSortBy] = React.useState<SortBy>('name')
+  const [sortDir, setSortDir] = React.useState<SortDir>('asc')
 
   const [addItemOpen, setAddItemOpen] = React.useState(false)
   const [addGroupDialog, setAddGroupDialog] = React.useState(false)
@@ -56,7 +65,10 @@ export default function InventoryTable({
       pageSize,
       search,
       activeOnly,
+      allow_individual_booking,
       category: categoryFilter,
+      sortBy,
+      sortDir,
     }),
     enabled: !!companyId,
   })
@@ -146,8 +158,12 @@ export default function InventoryTable({
 
   const table = useReactTable({
     data: data?.rows as Array<InventoryIndexRow>,
+    state: { sorting },
     columns,
+    onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    manualSorting: true,
   })
   console.log('data.rows.length: ' + data?.rows.length)
   return (
@@ -197,14 +213,53 @@ export default function InventoryTable({
         <Table.Header>
           {table.getHeaderGroups().map((hg) => (
             <Table.Row key={hg.id}>
-              {hg.headers.map((h) => (
-                <Table.ColumnHeaderCell key={h.id}>
-                  {flexRender(h.column.columnDef.header, h.getContext())}
-                </Table.ColumnHeaderCell>
-              ))}
+              {hg.headers.map((h) => {
+                // map column.id to our server columns (defaults to accessorKey or id)
+                const colId = h.column.id as SortBy
+
+                // only allow sorting on columns we support server-side
+                const sortableCols: Array<SortBy> = [
+                  'name',
+                  'category_name',
+                  'brand_name',
+                  'on_hand',
+                  'current_price',
+                ]
+                const canSort = sortableCols.includes(colId)
+
+                const isActive = sortBy === colId
+                const arrow = isActive ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''
+
+                const handleClick = () => {
+                  if (!canSort) return
+                  setPage(1) // reset pagination when changing sort
+                  if (isActive) {
+                    setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+                  } else {
+                    setSortBy(colId)
+                    setSortDir('asc')
+                  }
+                }
+
+                return (
+                  <Table.ColumnHeaderCell
+                    key={h.id}
+                    onClick={canSort ? handleClick : undefined}
+                    style={{
+                      cursor: canSort ? 'pointer' : undefined,
+                      userSelect: 'none',
+                    }}
+                    title={canSort ? 'Click to sort' : undefined}
+                  >
+                    {flexRender(h.column.columnDef.header, h.getContext())}
+                    {arrow}
+                  </Table.ColumnHeaderCell>
+                )
+              })}
             </Table.Row>
           ))}
         </Table.Header>
+
         <Table.Body>
           {isLoading ? (
             <Table.Row>

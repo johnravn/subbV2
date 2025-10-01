@@ -7,7 +7,10 @@ export const inventoryIndexKey = (
   pageSize: number,
   search: string,
   activeOnly: boolean,
+  allow_individual_booking: boolean,
   category: string | null,
+  sortBy: SortBy,
+  sortDir: SortDir,
 ) =>
   [
     'company',
@@ -17,7 +20,10 @@ export const inventoryIndexKey = (
     pageSize,
     search,
     activeOnly,
+    allow_individual_booking,
     category,
+    sortBy,
+    sortDir,
   ] as const
 
 export const inventoryDetailKey = (companyId: string, id: string) =>
@@ -36,6 +42,7 @@ export type InventoryIndexRow = {
   currency: string // "NOK"
   is_group: boolean
   unique: boolean | null
+  allow_individual_booking: boolean | null
 }
 
 export type ItemPriceHistoryRow = {
@@ -84,6 +91,16 @@ export type GroupDetail = {
 }
 
 export type InventoryDetail = ItemDetail | GroupDetail
+
+// types you already have
+export type SortBy =
+  | 'name'
+  | 'category_name'
+  | 'brand_name'
+  | 'on_hand'
+  | 'current_price'
+
+export type SortDir = 'asc' | 'desc'
 
 // --- Category query keys ---
 export const categoryNamesKey = (companyId: string) =>
@@ -145,14 +162,20 @@ export const inventoryIndexQuery = ({
   pageSize,
   search,
   activeOnly,
+  allow_individual_booking,
   category,
+  sortBy,
+  sortDir,
 }: {
   companyId: string
   page: number
   pageSize: number
   search: string
   activeOnly: boolean
+  allow_individual_booking: boolean
   category: string | null
+  sortBy: SortBy
+  sortDir: SortDir
 }) =>
   queryOptions<
     { rows: Array<InventoryIndexRow>; count: number },
@@ -166,7 +189,10 @@ export const inventoryIndexQuery = ({
       pageSize,
       search,
       activeOnly,
+      allow_individual_booking,
       category,
+      sortBy,
+      sortDir,
     ),
     queryFn: async () => {
       const from = (page - 1) * pageSize
@@ -177,15 +203,22 @@ export const inventoryIndexQuery = ({
         .select('*', { count: 'exact' })
         .eq('company_id', companyId)
 
-      // filter out deleted rows from the view
       q = q.or('deleted.is.null,deleted.eq.false')
       if (activeOnly) q = q.eq('active', true)
+      if (allow_individual_booking) {
+        q = q.or('is_group.eq.true,allow_individual_booking.eq.true')
+      }
       if (category && category !== 'all') q = q.eq('category_name', category)
       if (search) {
         q = q.or(
           `name.ilike.%${search}%,category_name.ilike.%${search}%,brand_name.ilike.%${search}%`,
         )
       }
+
+      q = q.order(sortBy, {
+        ascending: sortDir === 'asc',
+        nullsFirst: false,
+      })
 
       const { data, error, count } = await q.range(from, to)
       if (error) throw error
