@@ -23,6 +23,8 @@ import SuperPage from '@features/super/pages/SuperPage'
 import ProfilePage from '@features/profile/pages/ProfilePage'
 import MattersPage from '@features/matters/pages/MattersPage'
 import AppShell from '../layout/AppShell'
+import RequireCap from './guards/RequireCap'
+import type { Capability } from '@shared/auth/permissions'
 // import { Outlet } from '@tanstack/react-router'
 
 // Root keeps your shell & devtools as-is
@@ -34,6 +36,11 @@ const rootRoute = createRootRoute({
     </>
   ),
 })
+const guarded = (need: Capability, Page: React.ComponentType) => () => (
+  <RequireCap need={need}>
+    <Page />
+  </RequireCap>
+)
 
 // --- PUBLIC: Login route -----------------------------------------------------
 const loginRoute = createRoute({
@@ -87,61 +94,61 @@ const authedRoute = createRoute({
 const homeRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: '/',
-  component: HomePage,
+  component: guarded('visit:home', HomePage),
 })
 
 const inventoryRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: 'inventory',
-  component: InventoryPage,
+  component: guarded('visit:inventory', InventoryPage),
 })
 
 const calendarRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: 'calendar',
-  component: CalendarPage,
+  component: guarded('visit:calendar', CalendarPage),
 })
 
 const vehiclesRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: 'vehicles',
-  component: VehiclesPage,
+  component: guarded('visit:vehicles', VehiclesPage),
 })
 
 const jobsRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: 'jobs',
-  component: JobsPage,
+  component: guarded('visit:jobs', JobsPage),
 })
 
 const crewRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: 'crew',
-  component: CrewPage,
+  component: guarded('visit:crew', CrewPage),
 })
 
 const mattersRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: 'matters',
-  component: MattersPage,
+  component: guarded('visit:matters', MattersPage),
 })
 
 const companyRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: 'company',
-  component: CompanyPage,
+  component: guarded('visit:company', CompanyPage),
 })
 
 const profileRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: 'profile',
-  component: ProfilePage,
+  component: guarded('visit:profile', ProfilePage),
 })
 
 const superRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: 'super',
-  component: SuperPage,
+  component: guarded('visit:super', SuperPage),
 })
 
 // --- Not Found stays under root (public) -------------------------------------

@@ -27,6 +27,8 @@ import {
   Potion,
   User,
 } from 'iconoir-react'
+import { useAuthz } from '@shared/auth/useAuthz'
+import { canVisit } from '@shared/auth/permissions'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 
 const SIDEBAR_EXPANDED = 240
@@ -160,6 +162,34 @@ function SidebarContent({
   showCollapseButton?: boolean
 }) {
   const { companies, company, companyId, setCompanyId, loading } = useCompany()
+  const { caps, loading: authzLoading } = useAuthz()
+
+  const PUBLIC_LABELS = new Set(['Home', 'Calendar', 'Matters', 'Profile'])
+
+  function allowed(label: string) {
+    const labelToCap: Record<string, string> = {
+      Home: 'visit:home',
+      Inventory: 'visit:inventory',
+      Vehicles: 'visit:vehicles',
+      Crew: 'visit:crew',
+      Jobs: 'visit:jobs',
+      Calendar: 'visit:calendar',
+      Matters: 'visit:matters',
+      Company: 'visit:company',
+      Profile: 'visit:profile',
+      Super: 'visit:super',
+    }
+    const cap = labelToCap[label]
+
+    // 👇 Key change: while authz is loading, be conservative.
+    // Only show public-safe labels to avoid the "everything flashes" issue.
+    if (authzLoading) {
+      return cap ? PUBLIC_LABELS.has(label) : true
+    }
+
+    // Once loaded, use real capabilities
+    return cap ? canVisit(caps, cap as any) : true
+  }
 
   return (
     <aside
@@ -172,7 +202,7 @@ function SidebarContent({
       {/* Header / Company selector */}
       <Flex align="center" justify="between" px="3" py="3" gap="3">
         <Flex align="center" gap="2" style={{ minWidth: 0, flex: 1 }}>
-          {open ? (
+          {open && (
             <div style={{ width: '100%' }}>
               <Text as="div" size="1" color="gray" style={{ marginBottom: 4 }}>
                 Company
@@ -192,30 +222,6 @@ function SidebarContent({
                 </Select.Content>
               </Select.Root>
             </div>
-          ) : (
-            // Collapsed: initials pill with tooltip
-            <Tooltip content={company?.name ?? 'Company'} delayDuration={300}>
-              <Box
-                style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: 6,
-                  background: 'var(--accent-9)',
-                  display: 'grid',
-                  placeItems: 'center',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  letterSpacing: 0.3,
-                }}
-              >
-                {(company?.name ?? '—')
-                  .split(' ')
-                  .map((s) => s[0])
-                  .slice(0, 2)
-                  .join('')
-                  .toUpperCase()}
-              </Box>
-            </Tooltip>
           )}
         </Flex>
 
@@ -240,7 +246,7 @@ function SidebarContent({
         <ScrollArea.Root style={{ height: '100%' }}>
           <ScrollArea.Viewport style={{ padding: '8px 8px 16px' }}>
             <Flex direction="column" gap="4">
-              {NAV1.map((n) => (
+              {NAV1.filter((n) => allowed(n.label)).map((n) => (
                 <NavItem
                   key={n.to}
                   to={n.to}
@@ -252,32 +258,48 @@ function SidebarContent({
                   onCloseMobile={() => onToggle(false)}
                 />
               ))}
-              <Separator />
-              {NAV2.map((n) => (
-                <NavItem
-                  key={n.to}
-                  to={n.to}
-                  icon={n.icon}
-                  label={n.label}
-                  open={open}
-                  currentPath={currentPath}
-                  isMobile={isMobile}
-                  onCloseMobile={() => onToggle(false)}
-                />
-              ))}
-              <Separator />
-              {NAV3.map((n) => (
-                <NavItem
-                  key={n.to}
-                  to={n.to}
-                  icon={n.icon}
-                  label={n.label}
-                  open={open}
-                  currentPath={currentPath}
-                  isMobile={isMobile}
-                  onCloseMobile={() => onToggle(false)}
-                />
-              ))}
+              {(() => {
+                const items = NAV2.filter((n) => allowed(n.label))
+                if (items.length === 0) return null
+                return (
+                  <>
+                    <Separator />
+                    {items.map((n) => (
+                      <NavItem
+                        key={n.to}
+                        to={n.to}
+                        icon={n.icon}
+                        label={n.label}
+                        open={open}
+                        currentPath={currentPath}
+                        isMobile={isMobile}
+                        onCloseMobile={() => onToggle(false)}
+                      />
+                    ))}
+                  </>
+                )
+              })()}
+              {(() => {
+                const items = NAV3.filter((n) => allowed(n.label))
+                if (items.length === 0) return null
+                return (
+                  <>
+                    <Separator />
+                    {items.map((n) => (
+                      <NavItem
+                        key={n.to}
+                        to={n.to}
+                        icon={n.icon}
+                        label={n.label}
+                        open={open}
+                        currentPath={currentPath}
+                        isMobile={isMobile}
+                        onCloseMobile={() => onToggle(false)}
+                      />
+                    ))}
+                  </>
+                )
+              })()}
             </Flex>
           </ScrollArea.Viewport>
           <ScrollArea.Scrollbar orientation="vertical">
