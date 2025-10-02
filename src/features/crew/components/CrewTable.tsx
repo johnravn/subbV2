@@ -79,6 +79,7 @@ export default function CrewTable({
       title: string
       subtitle?: string
     }> = []
+
     if (showEmployees) {
       employees.forEach((u) =>
         L.push({
@@ -89,6 +90,7 @@ export default function CrewTable({
         }),
       )
     }
+
     if (showFreelancers) {
       freelancers.forEach((u) =>
         L.push({
@@ -99,6 +101,7 @@ export default function CrewTable({
         }),
       )
     }
+
     owners.forEach((u) =>
       L.push({
         kind: 'owner',
@@ -107,6 +110,7 @@ export default function CrewTable({
         subtitle: `${u.email} · owner`,
       }),
     )
+
     if (showMyPending) {
       myInvites.forEach((i) =>
         L.push({
@@ -117,14 +121,25 @@ export default function CrewTable({
         }),
       )
     }
+
     const term = search.trim().toLowerCase()
-    return term
+    const filtered = term
       ? L.filter(
           (r) =>
             r.title.toLowerCase().includes(term) ||
             (r.subtitle ?? '').toLowerCase().includes(term),
         )
       : L
+
+    // ⬇️ Put invites first; then owner, employee, freelancer. Tie-break by title.
+    const priority: Record<(typeof filtered)[number]['kind'], number> = {
+      invite: 0,
+      owner: 1,
+      employee: 2,
+      freelancer: 3,
+    }
+
+    return filtered.slice().sort((a, b) => priority[a.kind] - priority[b.kind])
   }, [
     employees,
     freelancers,
@@ -221,7 +236,7 @@ export default function CrewTable({
                       </Text>
                     )}
                   </Table.Cell>
-                  <Table.Cell>
+                  <Table.Cell style={{ verticalAlign: 'middle' }}>
                     {r.kind === 'invite' ? (
                       <Badge variant="soft" color="amber">
                         Pending invite

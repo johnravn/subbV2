@@ -2,6 +2,8 @@
 import * as React from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { supabase } from '@shared/api/supabase'
+import { isValidPhoneNumber } from 'react-phone-number-input' // ✅ add this
+import { PhoneInputField } from '@shared/phone/PhoneInputField' // ✅ add this
 import {
   Box,
   Button,
@@ -17,7 +19,7 @@ export default function SignupPage() {
   const navigate = useNavigate()
   const [firstName, setFirstName] = React.useState('')
   const [lastName, setLastName] = React.useState('')
-  const [phone, setPhone] = React.useState('')
+  const [phone, setPhone] = React.useState<string | undefined>(undefined) // ✅ allow undefined
   const [email, setEmail] = React.useState('')
   const [password, setPassword] = React.useState('')
   const [confirmPassword, setConfirmPassword] = React.useState('')
@@ -29,6 +31,11 @@ export default function SignupPage() {
     e.preventDefault()
     setError(null)
     setInfo(null)
+
+    if (!phone || !isValidPhoneNumber(phone)) {
+      setError('Please enter a valid phone number')
+      return
+    }
 
     if (password !== confirmPassword) {
       setError('Passwords do not match')
@@ -148,13 +155,13 @@ export default function SignupPage() {
                 >
                   Phone number
                 </Text>
-                <TextField.Root
-                  type="tel"
-                  placeholder="+47 12345678"
+                <PhoneInputField
+                  id="signup-phone"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  required
-                  size="3"
+                  onChange={setPhone}
+                  defaultCountry="NO"
+                  placeholder="Enter phone number"
+                  disabled={loading}
                 />
               </Box>
 

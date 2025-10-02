@@ -1,0 +1,66 @@
+/* Layout the PhoneInput parts like a single compound field */
+.radix-phone .PhoneInput {
+  display: flex;
+  align-items: stretch;
+}
+
+/* Left segment (country select) */
+.radix-phone__select-root {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: none;
+  display: flex;
+  align-items: center;
+}
+.radix-phone__select-trigger {
+  width: 120px; /* tweak to taste */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  background: transparent;
+  border: none; /* the root provides the chrome */
+  cursor: pointer;
+}
+
+/* Right segment (number input) */
+.radix-phone__input-root {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.radix-phone__input {
+  border: none; /* the root provides the chrome */
+  width: 100%;
+}
+
+/* Unified focus ring across both segments */
+.radix-phone--compound:focus-within {
+  box-shadow:
+    0 0 0 1px var(--accent-9) inset,
+    0 0 0 1px var(--accent-9);
+}
+
+/* Invalid state (driven by wrapper data attr so no remount) */
+.radix-phone[data-invalid='true'] {
+  box-shadow:
+    0 0 0 1px var(--red-9) inset,
+    0 0 0 1px var(--red-9);
+}
+.radix-phone[data-invalid='true'] .rt-TextFieldInput {
+  color: var(--red-11);
+}
+
+/* Error text */
+.radix-phone-error {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--red-11);
+}
+
+/* Disabled look passthrough (optional) */
+.radix-phone[aria-disabled='true'],
+.radix-phone [data-disabled='true'] {
+  opacity: 0.6;
+  pointer-events: none;
+}

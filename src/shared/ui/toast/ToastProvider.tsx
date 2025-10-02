@@ -66,10 +66,10 @@ export function AppToastProvider({ children }: { children: React.ReactNode }) {
             style={{
               background:
                 t.kind === 'success'
-                  ? 'var(--green-9)'
+                  ? 'var(--green-8)'
                   : t.kind === 'error'
-                    ? 'var(--red-9)'
-                    : 'var(--gray-9)',
+                    ? 'var(--red-8)'
+                    : 'var(--blue-8)',
               color: 'white',
               borderRadius: 8,
               padding: 12,

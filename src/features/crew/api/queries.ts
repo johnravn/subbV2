@@ -22,6 +22,15 @@ export type PendingInvite = {
   expires_at: string
 }
 
+export type CrewOptionalFields = {
+  address?: string | null
+  date_of_birth?: string | null
+  drivers_license?: string | null
+  licenses?: Array<string> | null
+  certificates?: Array<string> | null
+  notes?: string | null
+}
+
 // Keep your existing types (CrewPerson, CrewKind)
 
 export function crewIndexQuery({
@@ -70,6 +79,8 @@ export type CrewDetail = {
   phone: string | null
   avatar_url: string | null
   created_at: string | null
+  bio: string | null
+  preferences: CrewOptionalFields | null
 }
 
 export function crewDetailQuery({
@@ -82,7 +93,8 @@ export function crewDetailQuery({
   return {
     queryKey: ['company', companyId, 'crew-detail', userId] as const,
     queryFn: async (): Promise<CrewDetail | null> => {
-      const { data, error } = await supabase
+      // 1) Get normalized company/user fields from your view
+      const { data: base, error } = await supabase
         .from('company_user_profiles')
         .select(
           'user_id, role, email, display_name, first_name, last_name, phone, avatar_url, created_at',
@@ -92,10 +104,22 @@ export function crewDetailQuery({
         .maybeSingle()
 
       if (error) throw error
-      if (!data) return null
+      if (!base) return null
 
-      // `data` already has the normalized shape from the view
-      return data as CrewDetail
+      // 2) Pull the person’s profile-only fields (bio, preferences)
+      const { data: prof, error: pErr } = await supabase
+        .from('profiles')
+        .select('bio, preferences')
+        .eq('user_id', userId)
+        .maybeSingle()
+
+      if (pErr) throw pErr
+
+      return {
+        ...(base as Omit<CrewDetail, 'bio' | 'preferences'>),
+        bio: prof?.bio ?? null,
+        preferences: prof?.preferences ?? null,
+      }
     },
   }
 }

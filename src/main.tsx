@@ -13,6 +13,7 @@ import { CompanyProvider } from '@shared/companies/CompanyProvider.tsx'
 import { AppToastProvider } from '@shared/ui/toast/ToastProvider.tsx'
 import { IconContext } from 'react-icons/lib'
 import reportWebVitals from './reportWebVitals.ts'
+import 'react-phone-number-input/style.css'
 
 declare module '@tanstack/react-router' {
   interface Register {
