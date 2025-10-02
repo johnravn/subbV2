@@ -9,7 +9,7 @@ export type CrewPerson = {
   display_name: string | null
   first_name: string | null
   last_name: string | null
-  role: CrewKind | 'owner' | 'super_user'
+  role: CrewKind | 'super_user'
 }
 
 export type PendingInvite = {

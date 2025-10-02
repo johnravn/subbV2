@@ -61,6 +61,7 @@ export default function AddFreelancerDialog({
     },
     onError: (e: any) => {
       error('Failed', e?.message ?? 'Please try again.')
+      console.log(e?.message)
     },
   })
 
