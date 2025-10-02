@@ -51,7 +51,7 @@ const loginRoute = createRoute({
 
 const signupRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/signup',
+  path: 'signup',
   component: SignupPage,
   beforeLoad: async () => {
     const { data } = await supabase.auth.getSession()

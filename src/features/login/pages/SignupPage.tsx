@@ -36,50 +36,38 @@ export default function SignupPage() {
     }
 
     setLoading(true)
-
-    // 1) Create the auth user
-    const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-        data: {
-          full_name: `${firstName} ${lastName}`.trim(),
-          first_name: firstName,
-          last_name: lastName,
-          phone,
+    try {
+      const { data: signUpData, error: signUpErr } = await supabase.auth.signUp(
+        {
+          email,
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
+            data: {
+              full_name: `${firstName} ${lastName}`.trim(),
+              first_name: firstName,
+              last_name: lastName,
+              phone,
+            },
+          },
         },
-      },
-    })
-
-    if (signUpErr) {
+      )
+      if (signUpErr) throw signUpErr
+    } catch (e: any) {
+      console.error('signUp failed:', {
+        message: e?.message,
+        status: e?.status,
+        name: e?.name,
+      })
       setLoading(false)
-      setError(signUpErr.message)
+      setError(e?.message ?? 'Sign up failed')
       return
     }
 
     // 2) If a session exists immediately (email confirmation OFF),
     //    we can upsert into public.profiles right now.
     const { data: sessionData } = await supabase.auth.getSession()
-    const session = sessionData.session
-
-    if (session?.user) {
-      const userId = session.user.id
-      const { error: upsertErr } = await supabase.from('profiles').upsert(
-        {
-          user_id: userId,
-          display_name: `${firstName} ${lastName}`.trim(),
-          first_name: firstName,
-          last_name: lastName,
-          phone,
-          email, // convenience duplicate of auth.users.email
-        },
-        { onConflict: 'user_id' },
-      )
-      if (upsertErr) {
-        // Not fatal for sign-up; show a note for visibility.
-        console.warn('profiles upsert failed:', upsertErr.message)
-      }
+    if (sessionData.session?.user) {
       setLoading(false)
       navigate({ to: '/' })
       return

@@ -11,18 +11,30 @@ export default function AuthCallback() {
   React.useEffect(() => {
     let cancelled = false
 
-    async function run() {
+    const run = async () => {
+      const url = new URL(window.location.href)
+      const code =
+        url.searchParams.get('code') || url.hash.match(/code=([^&]+)/)?.[1]
+
       try {
-        // Handles OAuth PKCE and passwordless magic-link flows.
-        // Safe to call even if there is no code in the URL.
-        const { data, error } = await supabase.auth.exchangeCodeForSession(
+        // 1) Try PKCE/OAuth session exchange first (works for many providers and some email links)
+        const { error: excErr } = await supabase.auth.exchangeCodeForSession(
           window.location.href,
         )
 
-        if (error) {
-          // If there was no code or it was already exchanged, fall back to session check
-          const { data: s } = await supabase.auth.getSession()
-          if (!s.session) throw error
+        if (excErr) {
+          // 2) If that failed and we have a `code`, try email confirmation (signup) verify
+          if (code) {
+            const { error: verErr } = await supabase.auth.verifyOtp({
+              type: 'signup',
+              token_hash: code,
+            })
+            if (verErr) throw verErr
+          } else {
+            // 3) No code in URL; see if we already have a session
+            const { data: s } = await supabase.auth.getSession()
+            if (!s.session) throw excErr
+          }
         }
 
         if (!cancelled) navigate({ to: '/' })

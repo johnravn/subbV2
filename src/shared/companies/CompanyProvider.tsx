@@ -78,7 +78,7 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
         .select('companies ( id, name )')
         .eq('user_id', userId)
       if (error) throw error
-      return (data ?? []).map((r: any) => r.companies).filter(Boolean)
+      return data.map((r: any) => r.companies).filter(Boolean)
     },
     staleTime: 60_000,
   })
