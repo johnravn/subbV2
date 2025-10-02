@@ -18,6 +18,10 @@ import SignupPage from '@features/login/pages/SignupPage'
 import AuthCallback from '@features/login/pages/AuthCallback'
 import TermsPrivacyPage from '@features/legal/pages/TermsPrivacyPage'
 import { supabase } from '@shared/api/supabase'
+import CompanyPage from '@features/company/pages/CompanyPage'
+import SuperPage from '@features/super/pages/SuperPage'
+import ProfilePage from '@features/profile/pages/ProfilePage'
+import MattersPage from '@features/matters/pages/MattersPage'
 import AppShell from '../layout/AppShell'
 // import { Outlet } from '@tanstack/react-router'
 
@@ -116,6 +120,30 @@ const crewRoute = createRoute({
   component: CrewPage,
 })
 
+const mattersRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: 'matters',
+  component: MattersPage,
+})
+
+const companyRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: 'company',
+  component: CompanyPage,
+})
+
+const profileRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: 'profile',
+  component: ProfilePage,
+})
+
+const superRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: 'super',
+  component: SuperPage,
+})
+
 // --- Not Found stays under root (public) -------------------------------------
 const notFoundRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -136,6 +164,10 @@ const routeTree = rootRoute.addChildren([
     vehiclesRoute,
     jobsRoute,
     crewRoute,
+    mattersRoute,
+    companyRoute,
+    profileRoute,
+    superRoute,
   ]),
   notFoundRoute,
 ])

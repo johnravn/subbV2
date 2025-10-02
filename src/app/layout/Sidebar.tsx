@@ -16,12 +16,16 @@ import {
 import * as ScrollArea from '@radix-ui/react-scroll-area'
 import {
   BoxIso,
+  Building,
   Calendar,
   Car,
   GoogleDocs,
   Group,
   HomeAlt,
   Menu,
+  Message,
+  Potion,
+  User,
 } from 'iconoir-react'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 
@@ -30,13 +34,21 @@ const SIDEBAR_COLLAPSED = 64
 
 type NavItem = { to: string; label: string; icon: React.ReactNode }
 
-const NAV: Array<NavItem> = [
+const NAV1: Array<NavItem> = [
   { to: '/', label: 'Home', icon: <HomeAlt /> },
   { to: '/inventory', label: 'Inventory', icon: <BoxIso /> },
   { to: '/vehicles', label: 'Vehicles', icon: <Car /> },
   { to: '/crew', label: 'Crew', icon: <Group /> },
   { to: '/jobs', label: 'Jobs', icon: <GoogleDocs /> },
   { to: '/calendar', label: 'Calendar', icon: <Calendar /> },
+  { to: '/matters', label: 'Matters', icon: <Message /> },
+]
+const NAV2: Array<NavItem> = [
+  { to: '/company', label: 'Company', icon: <Building /> },
+  { to: '/profile', label: 'Profile', icon: <User /> },
+]
+const NAV3: Array<NavItem> = [
+  { to: '/super', label: 'Super', icon: <Potion /> },
 ]
 
 export function Sidebar({
@@ -228,7 +240,33 @@ function SidebarContent({
         <ScrollArea.Root style={{ height: '100%' }}>
           <ScrollArea.Viewport style={{ padding: '8px 8px 16px' }}>
             <Flex direction="column" gap="4">
-              {NAV.map((n) => (
+              {NAV1.map((n) => (
+                <NavItem
+                  key={n.to}
+                  to={n.to}
+                  icon={n.icon}
+                  label={n.label}
+                  open={open}
+                  currentPath={currentPath}
+                  isMobile={isMobile}
+                  onCloseMobile={() => onToggle(false)}
+                />
+              ))}
+              <Separator />
+              {NAV2.map((n) => (
+                <NavItem
+                  key={n.to}
+                  to={n.to}
+                  icon={n.icon}
+                  label={n.label}
+                  open={open}
+                  currentPath={currentPath}
+                  isMobile={isMobile}
+                  onCloseMobile={() => onToggle(false)}
+                />
+              ))}
+              <Separator />
+              {NAV3.map((n) => (
                 <NavItem
                   key={n.to}
                   to={n.to}

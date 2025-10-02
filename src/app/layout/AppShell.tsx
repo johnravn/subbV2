@@ -1,14 +1,7 @@
 // src/app/layout/AppShell.tsx
 import * as React from 'react'
 import { Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
-import {
-  Box,
-  Button,
-  Flex,
-  IconButton,
-  Text,
-  TextField,
-} from '@radix-ui/themes'
+import { Box, Button, Flex, IconButton, Text } from '@radix-ui/themes'
 import { Menu } from 'iconoir-react'
 import { supabase } from '@shared/api/supabase'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -130,6 +123,10 @@ function getPageTitle(path: string) {
   if (path.startsWith('/vehicles')) return 'Vehicles'
   if (path.startsWith('/jobs')) return 'Jobs'
   if (path.startsWith('/crew')) return 'Crew'
+  if (path.startsWith('/matters')) return 'Matters'
+  if (path.startsWith('/company')) return 'Company'
+  if (path.startsWith('/profile')) return 'Profile'
+  if (path.startsWith('/super')) return 'Super'
   if (path === '/login') return 'Login'
   return 'Page'
 }

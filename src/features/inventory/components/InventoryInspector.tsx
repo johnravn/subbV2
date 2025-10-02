@@ -17,12 +17,12 @@ import {
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { supabase } from '@shared/api/supabase'
+import { Edit, Trash } from 'iconoir-react'
 import { inventoryDetailQuery } from '../api/queries'
 
 // ⬇️ We'll pass edit props to these (next step we'll add mode/initialData in those files)
 import AddItemDialog from './AddItemDialog'
 import AddGroupDialog from './AddGroupDialog'
-import { Edit, Trash } from 'iconoir-react'
 
 export default function InventoryInspector({ id }: { id: string | null }) {
   const { companyId } = useCompany()
