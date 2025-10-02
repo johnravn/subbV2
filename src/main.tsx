@@ -11,6 +11,7 @@ import { QueryProvider } from '@app/providers/QueryProvider.tsx'
 import { AuthProvider } from '@app/providers/AuthProvider.tsx'
 import { CompanyProvider } from '@shared/companies/CompanyProvider.tsx'
 import { AppToastProvider } from '@shared/ui/toast/ToastProvider.tsx'
+import { IconContext } from 'react-icons/lib'
 import reportWebVitals from './reportWebVitals.ts'
 
 declare module '@tanstack/react-router' {
@@ -29,7 +30,9 @@ if (rootElement && !rootElement.innerHTML) {
           <AuthProvider>
             <CompanyProvider>
               <AppToastProvider>
-                <RouterProvider router={router} />
+                <IconContext.Provider value={{ size: '1.5em' }}>
+                  <RouterProvider router={router} />
+                </IconContext.Provider>
               </AppToastProvider>
             </CompanyProvider>
           </AuthProvider>

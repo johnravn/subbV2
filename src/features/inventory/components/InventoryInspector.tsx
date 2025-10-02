@@ -10,6 +10,7 @@ import {
   Flex,
   Grid,
   Separator,
+  Spinner,
   Table,
   Text,
 } from '@radix-ui/themes'
@@ -21,6 +22,7 @@ import { inventoryDetailQuery } from '../api/queries'
 // ⬇️ We'll pass edit props to these (next step we'll add mode/initialData in those files)
 import AddItemDialog from './AddItemDialog'
 import AddGroupDialog from './AddGroupDialog'
+import { Edit, Trash } from 'iconoir-react'
 
 export default function InventoryInspector({ id }: { id: string | null }) {
   const { companyId } = useCompany()
@@ -85,7 +87,13 @@ export default function InventoryInspector({ id }: { id: string | null }) {
 
   if (!enabled) return <Text color="gray">Preparing…</Text>
 
-  if (isLoading) return <Text>Loading…</Text>
+  if (isLoading)
+    return (
+      <Flex align={'center'} gap={'1'}>
+        <Text>Loading</Text>
+        <Spinner size={'2'} />
+      </Flex>
+    )
 
   // We treat "not found" as a valid (null) result in the query; real errors render here.
   if (isError) {
@@ -163,14 +171,17 @@ export default function InventoryInspector({ id }: { id: string | null }) {
         </div>
         <Flex gap="2">
           <Button size="2" variant="soft" onClick={() => setEditOpen(true)}>
+            <Edit style={{ marginRight: 6 }} />
             Edit
           </Button>
+
           <Button
             size="2"
             variant="surface"
             color="red"
             onClick={() => setDeleteOpen(true)}
           >
+            <Trash style={{ marginRight: 6 }} />
             Delete
           </Button>
         </Flex>

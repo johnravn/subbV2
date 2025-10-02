@@ -33,10 +33,10 @@ type NavItem = { to: string; label: string; icon: React.ReactNode }
 const NAV: Array<NavItem> = [
   { to: '/', label: 'Home', icon: <HomeAlt /> },
   { to: '/inventory', label: 'Inventory', icon: <BoxIso /> },
-  { to: '/calendar', label: 'Calendar', icon: <Calendar /> },
   { to: '/vehicles', label: 'Vehicles', icon: <Car /> },
-  { to: '/jobs', label: 'Jobs', icon: <GoogleDocs /> },
   { to: '/crew', label: 'Crew', icon: <Group /> },
+  { to: '/jobs', label: 'Jobs', icon: <GoogleDocs /> },
+  { to: '/calendar', label: 'Calendar', icon: <Calendar /> },
 ]
 
 export function Sidebar({
@@ -170,7 +170,7 @@ function SidebarContent({
                 onValueChange={setCompanyId}
                 disabled={loading || companies.length === 0}
               >
-                <Select.Trigger placeholder="Select company" />
+                <Select.Trigger placeholder="Select company" variant="ghost" />
                 <Select.Content>
                   {companies.map((c) => (
                     <Select.Item key={c.id} value={c.id}>
