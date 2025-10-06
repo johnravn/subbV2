@@ -10,14 +10,13 @@ import {
   TextField,
 } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
+import { useToast } from '@shared/ui/toast/ToastProvider'
 import {
-  addFreelancerOrInvite,
   crewIndexQuery,
   deleteInvite,
   myPendingInvitesQuery,
 } from '../api/queries'
 import AddFreelancerDialog from './dialogs/AddFreelancerDialog'
-import type { PendingInvite } from '../api/queries'
 
 type Props = {
   selectedUserId: string | null
@@ -25,6 +24,14 @@ type Props = {
   showEmployees: boolean
   showFreelancers: boolean
   showMyPending: boolean
+}
+
+type Row = {
+  kind: 'employee' | 'freelancer' | 'invite' | 'owner'
+  id: string
+  title: string
+  subtitle?: string
+  role?: 'owner' | 'employee' | 'freelancer' | 'super_user'
 }
 
 export default function CrewTable({
@@ -37,6 +44,7 @@ export default function CrewTable({
   const { companyId } = useCompany()
   const qc = useQueryClient()
   const [search, setSearch] = React.useState('')
+  const { success, error } = useToast()
 
   const { data: userRes } = (window as any).supabase
     ? { data: null }
@@ -73,12 +81,7 @@ export default function CrewTable({
   })
 
   const rows = React.useMemo(() => {
-    const L: Array<{
-      kind: 'employee' | 'freelancer' | 'invite' | 'owner'
-      id: string
-      title: string
-      subtitle?: string
-    }> = []
+    const L: Array<Row> = []
 
     if (showEmployees) {
       employees.forEach((u) =>
@@ -117,7 +120,8 @@ export default function CrewTable({
           kind: 'invite',
           id: `invite:${i.id}`,
           title: i.email,
-          subtitle: `pending invite · expires ${new Date(i.expires_at).toLocaleDateString()}`,
+          subtitle: `${i.role} · expires ${new Date(i.expires_at).toLocaleDateString()}`,
+          role: i.role as Row['role'],
         }),
       )
     }
@@ -156,10 +160,12 @@ export default function CrewTable({
   const delInvite = useMutation({
     mutationFn: (inviteId: string) => deleteInvite({ inviteId }),
     onSuccess: () => {
-      if (inviterId)
+      if (inviterId) {
         qc.invalidateQueries({
           queryKey: ['company', companyId, 'pending-invites', inviterId],
         })
+        success('Success', 'Invite successfully deleted')
+      }
     },
   })
 

@@ -1,9 +1,10 @@
+// src/features/crew/components/dialogs/AddEmployeeDialog.tsx
 import * as React from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Button, Dialog, Flex, Text, TextField } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { useToast } from '@shared/ui/toast/ToastProvider'
-import { addMemberOrInvite } from '../../api/queries'
+import { addMemberOrInvite } from '@features/crew/api/queries'
 
 type AddInviteResult =
   | { type: 'added' }
@@ -14,7 +15,7 @@ type AddInviteResult =
       role: 'owner' | 'employee' | 'freelancer' | 'super_user'
     }
 
-export default function AddFreelancerDialog({
+export default function AddEmployeeDialog({
   open,
   onOpenChange,
   onAdded,
@@ -37,13 +38,13 @@ export default function AddFreelancerDialog({
       return await addMemberOrInvite({
         companyId,
         email: normalized,
-        role: 'freelancer',
+        role: 'employee',
       })
     },
     onSuccess: (res) => {
       if (res.type === 'added') {
         info(
-          'Freelancer added',
+          'Employee added',
           'They already had an account and were added to your company.',
         )
       } else if (res.type === 'invited') {
@@ -54,10 +55,16 @@ export default function AddFreelancerDialog({
       } else if (res.type === 'already_invited') {
         info('Already invited', `An invite already exists by ${res.by}.`)
       } else {
-        info('Already a member', `This user is already in your crew.`)
+        // already_member
+        const nice =
+          res.role === 'super_user' ? 'super user' : res.role.replace('_', ' ')
+        info(
+          'Already a member',
+          `This user is already ${nice} in your company.`,
+        )
       }
       setEmail('')
-      onOpenChange(false) // only close on success
+      onOpenChange(false)
       onAdded?.()
     },
     onError: (e: any) => {
@@ -75,11 +82,11 @@ export default function AddFreelancerDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Content maxWidth="460px">
-        <Dialog.Title>Add freelancer</Dialog.Title>
+        <Dialog.Title>Add employee</Dialog.Title>
         <Dialog.Description size="2">
           Enter the person’s email. If they already have an account, they’ll be
-          added immediately. Otherwise, they’ll appear as a pending invite
-          (expires in 30 days).
+          added immediately as an <b>employee</b>. Otherwise, they’ll appear as
+          a pending invite (expires in 30 days).
         </Dialog.Description>
 
         <form onSubmit={onSubmit}>
@@ -89,7 +96,7 @@ export default function AddFreelancerDialog({
               <TextField.Root
                 type="email"
                 required
-                placeholder="freelancer@example.com"
+                placeholder="employee@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoFocus

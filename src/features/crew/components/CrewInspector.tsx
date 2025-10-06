@@ -16,6 +16,7 @@ import {
   formatPhoneNumberIntl,
   isValidPhoneNumber,
 } from 'react-phone-number-input'
+import { formatInternational, isPhoneValid } from '@shared/phone/phone'
 import { crewDetailQuery } from '../api/queries'
 import type { CrewDetail } from '../api/queries'
 
@@ -137,7 +138,7 @@ export default function CrewInspector({ userId }: { userId: string | null }) {
         <DD>{data.preferences?.address || '—'}</DD>
 
         <DT>Date of birth</DT>
-        <DD>{formatISODate(data.preferences?.date_of_birth)}</DD>
+        <DD>{formatMonthYear(data.preferences?.date_of_birth)}</DD>
 
         <DT>Driver’s license</DT>
         <DD>{data.preferences?.drivers_license || '—'}</DD>
@@ -212,7 +213,7 @@ function initials(displayOrEmail: string) {
   return base.slice(0, 2).toUpperCase()
 }
 
-function formatMonthYear(iso: string | null) {
+function formatMonthYear(iso: string | null | undefined) {
   if (!iso) return '—'
   const d = new Date(iso)
   // "5. sep 2024" vibe without spelling the day
@@ -223,17 +224,6 @@ function formatMonthYear(iso: string | null) {
   return `${day}. ${rest}`
 }
 
-function formatISODate(iso?: string | null) {
-  if (!iso) return '—'
-  // Let the native input store YYYY-MM-DD; show as locale-friendly
-  try {
-    const d = new Date(iso + 'T00:00:00')
-    return d.toLocaleDateString()
-  } catch {
-    return iso
-  }
-}
-
 function listOrDash(arr?: Array<string> | null) {
   if (!arr || arr.length === 0) return '—'
   return arr.join(', ')
@@ -241,9 +231,8 @@ function listOrDash(arr?: Array<string> | null) {
 function prettyPhone(e164?: string | null) {
   if (!e164) return '—'
   try {
-    return isValidPhoneNumber(e164) ? formatPhoneNumberIntl(e164) : e164
+    return isPhoneValid(e164) ? formatInternational(e164) : e164
   } catch {
-    // If it somehow isn't parseable, just show the raw string
     return e164
   }
 }

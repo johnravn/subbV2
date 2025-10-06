@@ -9,12 +9,35 @@ export function normalizeToE164(value: string, defaultCountry?: CountryCode) {
 
 export function formatInternational(e164: string) {
   const p = parsePhoneNumberFromString(e164)
-  return p?.formatInternational() ?? e164
+  if (!p) return e164
+
+  // Norwegian special-case: "+47 xxx xx xxx"
+  if (p.country === 'NO') {
+    const nn = p.nationalNumber || ''
+    if (nn.length === 8) {
+      return `+47 ${nn.slice(0, 3)} ${nn.slice(3, 5)} ${nn.slice(5)}`
+    }
+    // Fallback to library formatting for odd-length cases
+    return p.formatInternational()
+  }
+
+  return p.formatInternational()
 }
 
 export function formatNational(e164: string) {
   const p = parsePhoneNumberFromString(e164)
-  return p?.formatNational() ?? e164
+  if (!p) return e164
+
+  // Norwegian special-case: "xxx xx xxx"
+  if (p.country === 'NO') {
+    const nn = p.nationalNumber || ''
+    if (nn.length === 8) {
+      return `${nn.slice(0, 3)} ${nn.slice(3, 5)} ${nn.slice(5)}`
+    }
+    return p.formatNational()
+  }
+
+  return p.formatNational()
 }
 
 export function isPhoneValid(value: string, defaultCountry?: CountryCode) {

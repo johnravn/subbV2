@@ -175,31 +175,32 @@ export type AddInviteResult =
       role: 'owner' | 'employee' | 'freelancer' | 'super_user'
     }
 
-export async function addFreelancerOrInvite({
+export type CompanyRole = 'owner' | 'employee' | 'freelancer' | 'super_user'
+
+export async function addMemberOrInvite({
   companyId,
   email,
+  role,
 }: {
   companyId: string
   email: string
+  role: CompanyRole
 }): Promise<AddInviteResult> {
-  // normalize email once here
   const normalized = email.trim().toLowerCase()
 
-  // who is inviting?
   const { data: userRes, error: authErr } = await supabase.auth.getUser()
   if (authErr) throw authErr
   const inviterId = userRes.user.id
   if (!inviterId) throw new Error('Not authenticated')
 
-  // single round-trip: let the DB decide add vs invite
-  const { data, error } = await supabase.rpc('add_freelancer_or_invite', {
+  const { data, error } = await supabase.rpc('add_member_or_invite', {
     p_company_id: companyId,
     p_email: normalized,
     p_inviter_id: inviterId,
+    p_role: role,
   })
   if (error) throw error
 
-  // If the RPC returned "already_invited" with just a user id, resolve a friendly name
   if (data?.type === 'already_invited' && data.by_user_id) {
     const { data: inviterProf } = await supabase
       .from('profiles')
@@ -217,8 +218,18 @@ export async function addFreelancerOrInvite({
     return { type: 'already_invited', by }
   }
 
-  // passthrough other outcomes from RPC: added / invited / already_member
   return data as AddInviteResult
+}
+
+// Keep your existing API for freelancers to minimize refactors:
+export async function addFreelancerOrInvite({
+  companyId,
+  email,
+}: {
+  companyId: string
+  email: string
+}) {
+  return addMemberOrInvite({ companyId, email, role: 'freelancer' })
 }
 
 export async function deleteInvite({ inviteId }: { inviteId: string }) {
