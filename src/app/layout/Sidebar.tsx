@@ -26,6 +26,7 @@ import {
   Message,
   Potion,
   User,
+  UserLove,
 } from 'iconoir-react'
 import { useAuthz } from '@shared/auth/useAuthz'
 import { canVisit } from '@shared/auth/permissions'
@@ -43,6 +44,7 @@ const NAV1: Array<NavItem> = [
   { to: '/crew', label: 'Crew', icon: <Group /> },
   { to: '/jobs', label: 'Jobs', icon: <GoogleDocs /> },
   { to: '/calendar', label: 'Calendar', icon: <Calendar /> },
+  { to: '/customers', label: 'Customers', icon: <UserLove /> },
   { to: '/matters', label: 'Matters', icon: <Message /> },
 ]
 const NAV2: Array<NavItem> = [
@@ -174,6 +176,7 @@ function SidebarContent({
       Crew: 'visit:crew',
       Jobs: 'visit:jobs',
       Calendar: 'visit:calendar',
+      Customers: 'visit:customers',
       Matters: 'visit:matters',
       Company: 'visit:company',
       Profile: 'visit:profile',

@@ -16,7 +16,11 @@ import {
   formatPhoneNumberIntl,
   isValidPhoneNumber,
 } from 'react-phone-number-input'
-import { formatInternational, isPhoneValid } from '@shared/phone/phone'
+import {
+  formatInternational,
+  isPhoneValid,
+  prettyPhone,
+} from '@shared/phone/phone'
 import { crewDetailQuery } from '../api/queries'
 import type { CrewDetail } from '../api/queries'
 
@@ -227,12 +231,4 @@ function formatMonthYear(iso: string | null | undefined) {
 function listOrDash(arr?: Array<string> | null) {
   if (!arr || arr.length === 0) return '—'
   return arr.join(', ')
-}
-function prettyPhone(e164?: string | null) {
-  if (!e164) return '—'
-  try {
-    return isPhoneValid(e164) ? formatInternational(e164) : e164
-  } catch {
-    return e164
-  }
 }

@@ -44,3 +44,12 @@ export function isPhoneValid(value: string, defaultCountry?: CountryCode) {
   const p = parsePhoneNumberFromString(value, defaultCountry)
   return !!p?.isValid()
 }
+
+export function prettyPhone(e164?: string | null) {
+  if (!e164) return '—'
+  try {
+    return isPhoneValid(e164) ? formatInternational(e164) : e164
+  } catch {
+    return e164
+  }
+}

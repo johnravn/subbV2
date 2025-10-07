@@ -73,7 +73,7 @@ export function PhoneInputField({
     <div
       className="radix-phone"
       data-invalid={invalid ? 'true' : 'false'}
-      style={{ minWidth: 260 }}
+      style={{ minWidth: 220 }}
     >
       <PhoneInput
         id={id}

@@ -125,6 +125,7 @@ function getPageTitle(path: string) {
   if (path.startsWith('/crew')) return 'Crew'
   if (path.startsWith('/matters')) return 'Matters'
   if (path.startsWith('/company')) return 'Company'
+  if (path.startsWith('/customers')) return 'Customers'
   if (path.startsWith('/profile')) return 'Profile'
   if (path.startsWith('/super')) return 'Super'
   if (path === '/login') return 'Login'
