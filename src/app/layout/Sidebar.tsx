@@ -38,23 +38,23 @@ const SIDEBAR_COLLAPSED = 64
 
 type NavItem = { to: string; label: string; icon: React.ReactNode }
 
-const NAV1: Array<NavItem> = [
-  { to: '/', label: 'Home', icon: <HomeAlt /> },
-  { to: '/latest', label: 'Latest', icon: <RssFeed strokeWidth={2} /> },
-  { to: '/inventory', label: 'Inventory', icon: <BoxIso /> },
-  { to: '/vehicles', label: 'Vehicles', icon: <Car /> },
-  { to: '/crew', label: 'Crew', icon: <Group /> },
-  { to: '/jobs', label: 'Jobs', icon: <GoogleDocs /> },
-  { to: '/calendar', label: 'Calendar', icon: <Calendar /> },
-  { to: '/customers', label: 'Customers', icon: <UserLove /> },
-  { to: '/matters', label: 'Matters', icon: <Message /> },
-]
-const NAV2: Array<NavItem> = [
-  { to: '/company', label: 'Company', icon: <Building /> },
-  { to: '/profile', label: 'Profile', icon: <User /> },
-]
-const NAV3: Array<NavItem> = [
-  { to: '/super', label: 'Super', icon: <Potion /> },
+export const NAV: Array<Array<NavItem>> = [
+  [
+    { to: '/', label: 'Home', icon: <HomeAlt /> },
+    { to: '/latest', label: 'Latest', icon: <RssFeed strokeWidth={2} /> },
+    { to: '/inventory', label: 'Inventory', icon: <BoxIso /> },
+    { to: '/vehicles', label: 'Vehicles', icon: <Car /> },
+    { to: '/crew', label: 'Crew', icon: <Group /> },
+    { to: '/jobs', label: 'Jobs', icon: <GoogleDocs /> },
+    { to: '/calendar', label: 'Calendar', icon: <Calendar /> },
+    { to: '/customers', label: 'Customers', icon: <UserLove /> },
+    { to: '/matters', label: 'Matters', icon: <Message /> },
+  ],
+  [
+    { to: '/company', label: 'Company', icon: <Building /> },
+    { to: '/profile', label: 'Profile', icon: <User /> },
+  ],
+  [{ to: '/super', label: 'Super', icon: <Potion /> }],
 ]
 
 export function Sidebar({
@@ -252,20 +252,22 @@ function SidebarContent({
         <ScrollArea.Root style={{ height: '100%' }}>
           <ScrollArea.Viewport style={{ padding: '8px 8px 16px' }}>
             <Flex direction="column" gap="4">
-              {NAV1.filter((n) => allowed(n.label)).map((n) => (
-                <NavItem
-                  key={n.to}
-                  to={n.to}
-                  icon={n.icon}
-                  label={n.label}
-                  open={open}
-                  currentPath={currentPath}
-                  isMobile={isMobile}
-                  onCloseMobile={() => onToggle(false)}
-                />
-              ))}
+              {NAV[0]
+                .filter((n) => allowed(n.label))
+                .map((n) => (
+                  <NavItem
+                    key={n.to}
+                    to={n.to}
+                    icon={n.icon}
+                    label={n.label}
+                    open={open}
+                    currentPath={currentPath}
+                    isMobile={isMobile}
+                    onCloseMobile={() => onToggle(false)}
+                  />
+                ))}
               {(() => {
-                const items = NAV2.filter((n) => allowed(n.label))
+                const items = NAV[1].filter((n) => allowed(n.label))
                 if (items.length === 0) return null
                 return (
                   <>
@@ -286,7 +288,7 @@ function SidebarContent({
                 )
               })()}
               {(() => {
-                const items = NAV3.filter((n) => allowed(n.label))
+                const items = NAV[2].filter((n) => allowed(n.label))
                 if (items.length === 0) return null
                 return (
                   <>

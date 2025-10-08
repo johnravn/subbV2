@@ -6,7 +6,7 @@ import { Menu } from 'iconoir-react'
 import { supabase } from '@shared/api/supabase'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useMediaQuery } from '../hooks/useMediaQuery'
-import { Sidebar } from './Sidebar'
+import { NAV, Sidebar } from './Sidebar'
 
 export default function AppShell() {
   const [open, setOpen] = React.useState(true)
@@ -117,18 +117,11 @@ export default function AppShell() {
 
 /* ------- helpers ------- */
 function getPageTitle(path: string) {
-  if (path === '/') return 'Home'
-  if (path.startsWith('/inventory')) return 'Inventory'
-  if (path.startsWith('/calendar')) return 'Calendar'
-  if (path.startsWith('/vehicles')) return 'Vehicles'
-  if (path.startsWith('/jobs')) return 'Jobs'
-  if (path.startsWith('/crew')) return 'Crew'
-  if (path.startsWith('/matters')) return 'Matters'
-  if (path.startsWith('/company')) return 'Company'
-  if (path.startsWith('/customers')) return 'Customers'
-  if (path.startsWith('/latest')) return 'Latest'
-  if (path.startsWith('/profile')) return 'Profile'
-  if (path.startsWith('/super')) return 'Super'
-  if (path === '/login') return 'Login'
-  return 'Page'
+  const NAVinfo = NAV
+
+  for (const section of NAVinfo) {
+    for (const navItem of section) {
+      if (path === navItem.to) return navItem.label
+    }
+  }
 }
