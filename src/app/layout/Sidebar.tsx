@@ -25,6 +25,7 @@ import {
   Menu,
   Message,
   Potion,
+  RssFeed,
   User,
   UserLove,
 } from 'iconoir-react'
@@ -39,6 +40,7 @@ type NavItem = { to: string; label: string; icon: React.ReactNode }
 
 const NAV1: Array<NavItem> = [
   { to: '/', label: 'Home', icon: <HomeAlt /> },
+  { to: '/latest', label: 'Latest', icon: <RssFeed strokeWidth={2} /> },
   { to: '/inventory', label: 'Inventory', icon: <BoxIso /> },
   { to: '/vehicles', label: 'Vehicles', icon: <Car /> },
   { to: '/crew', label: 'Crew', icon: <Group /> },
@@ -177,6 +179,7 @@ function SidebarContent({
       Jobs: 'visit:jobs',
       Calendar: 'visit:calendar',
       Customers: 'visit:customers',
+      Latest: 'visit:latest',
       Matters: 'visit:matters',
       Company: 'visit:company',
       Profile: 'visit:profile',

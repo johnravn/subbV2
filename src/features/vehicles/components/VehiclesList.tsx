@@ -65,7 +65,9 @@ export default function VehiclesList({
                 </Table.Cell>
                 <Table.Cell>
                   {v.internally_owned ? (
-                    <Badge variant="soft">Internal</Badge>
+                    <Badge variant="soft" color="indigo">
+                      Internal
+                    </Badge>
                   ) : (
                     <Badge variant="soft" color="violet">
                       {v.external_owner_name ?? 'External'}

@@ -23,6 +23,7 @@ import SuperPage from '@features/super/pages/SuperPage'
 import ProfilePage from '@features/profile/pages/ProfilePage'
 import MattersPage from '@features/matters/pages/MattersPage'
 import CustomerPage from '@features/customers/pages/CostumerPage'
+import LatestPage from '@features/latest/pages/LatestPage'
 import AppShell from '../layout/AppShell'
 import RequireCap from './guards/RequireCap'
 import type { Capability } from '@shared/auth/permissions'
@@ -146,6 +147,12 @@ const customersRoute = createRoute({
   component: guarded('visit:customers', CustomerPage),
 })
 
+const latestRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: 'latest',
+  component: guarded('visit:latest', LatestPage),
+})
+
 const profileRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: 'profile',
@@ -181,6 +188,7 @@ const routeTree = rootRoute.addChildren([
     mattersRoute,
     companyRoute,
     customersRoute,
+    latestRoute,
     profileRoute,
     superRoute,
   ]),

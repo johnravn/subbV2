@@ -99,7 +99,9 @@ export default function VehicleInspector({ id }: { id: string | null }) {
             </Badge>
             {' · '}
             {v.internally_owned ? (
-              <Badge variant="soft">Internal</Badge>
+              <Badge variant="soft" color="indigo">
+                Internal
+              </Badge>
             ) : (
               <Badge variant="soft" color="violet">
                 {v.external_owner_name ?? 'External'}
@@ -133,13 +135,20 @@ export default function VehicleInspector({ id }: { id: string | null }) {
           borderRadius: 8,
           overflow: 'hidden',
           marginBottom: 12,
+          padding: 10,
+          maxWidth: 300,
         }}
       >
         {imageUrl ? (
           <img
             src={imageUrl}
             alt={v.name}
-            style={{ width: '100%', maxHeight: 280, objectFit: 'cover' }}
+            style={{
+              width: '100%',
+              // maxHeight: 280,
+              // maxWidth: 280,
+              objectFit: 'cover',
+            }}
           />
         ) : (
           <div

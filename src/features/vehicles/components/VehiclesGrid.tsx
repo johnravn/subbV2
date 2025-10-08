@@ -77,7 +77,6 @@ function VehicleCard({
     >
       <div
         style={{
-          height: 140,
           borderRadius: 8,
           overflow: 'hidden',
           background: 'var(--gray-3)',
@@ -110,7 +109,9 @@ function VehicleCard({
             {v.fuel ?? '—'}
           </Badge>
           {v.internally_owned ? (
-            <Badge variant="soft">Internal</Badge>
+            <Badge variant="soft" color="indigo">
+              Internal
+            </Badge>
           ) : (
             <Badge variant="soft" color="violet">
               {v.external_owner_name ?? 'External'}

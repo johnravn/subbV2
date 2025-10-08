@@ -8,6 +8,7 @@ export type Capability =
   | 'visit:jobs'
   | 'visit:calendar'
   | 'visit:customers'
+  | 'visit:latest'
   | 'visit:matters'
   | 'visit:company'
   | 'visit:profile'
@@ -40,6 +41,7 @@ export function capabilitiesFor({
         'visit:crew',
         'visit:jobs',
         'visit:customers',
+        'visit:latest',
       ] as Array<Capability>
     ).forEach((c) => caps.add(c))
     return caps
@@ -61,6 +63,7 @@ export function capabilitiesFor({
         'visit:crew',
         'visit:jobs',
         'visit:customers',
+        'visit:latest',
       ] as Array<Capability>
     ).forEach((c) => caps.add(c))
     return caps
@@ -75,6 +78,7 @@ export function capabilitiesFor({
         'visit:crew',
         'visit:jobs',
         'visit:customers',
+        'visit:latest',
       ] as Array<Capability>
     ).forEach((c) => caps.add(c))
     return caps
