@@ -1,10 +1,16 @@
 // src/app/layout/AppShell.tsx
 import * as React from 'react'
-import { Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
-import { Box, Button, Flex, IconButton, Text } from '@radix-ui/themes'
+import {
+  Link,
+  Outlet,
+  useNavigate,
+  useRouterState,
+} from '@tanstack/react-router'
+import { Avatar, Box, Button, Flex, IconButton, Text } from '@radix-ui/themes'
 import { Menu } from 'iconoir-react'
 import { supabase } from '@shared/api/supabase'
-import { AnimatePresence, motion } from 'framer-motion'
+// add
+import { useQuery } from '@tanstack/react-query'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { NAV, Sidebar } from './Sidebar'
 
@@ -15,6 +21,49 @@ export default function AppShell() {
   const currentPath = routerState.location.pathname
   const isMobile = useMediaQuery('(max-width: 768px)')
   const navigate = useNavigate()
+
+  // keep your existing `const [userName, setUserName] = React.useState<string | null>(null)` if you still need it for anything else,
+  // but we’ll rely on the profile data below.
+
+  const { data: authUser } = useQuery({
+    queryKey: ['auth', 'user'],
+    queryFn: async () => {
+      const { data, error } = await supabase.auth.getUser()
+      if (error) throw error
+      return data.user
+    },
+  })
+
+  // Load my profile row
+  const { data: myProfile } = useQuery({
+    queryKey: ['my-profile', authUser?.id],
+    enabled: !!authUser?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('user_id,email,display_name,avatar_url')
+        .eq('user_id', authUser!.id)
+        .maybeSingle()
+      if (error) throw error
+      return data as {
+        user_id: string
+        email: string
+        display_name: string | null
+        avatar_url: string | null
+      }
+    },
+  })
+
+  // Build a public avatar URL from storage path (if any)
+  const avatarUrl = React.useMemo(() => {
+    if (!myProfile?.avatar_url) return null
+    const { data } = supabase.storage
+      .from('avatars')
+      .getPublicUrl(myProfile.avatar_url)
+    return data.publicUrl
+  }, [myProfile?.avatar_url])
+
+  const displayName = myProfile?.display_name || myProfile?.email || ''
 
   React.useEffect(() => {
     if (isMobile) setOpen(false)
@@ -53,6 +102,11 @@ export default function AppShell() {
           open={open}
           onToggle={(next) => setOpen(next ?? !open)}
           currentPath={currentPath}
+          // NEW:
+          userDisplayName={displayName}
+          userEmail={myProfile?.email ?? ''}
+          userAvatarUrl={avatarUrl}
+          onLogout={handleLogout}
         />
       )}
 
@@ -75,11 +129,37 @@ export default function AppShell() {
                 {title}
               </Text>
             )}
-            {!isLogin && (
-              <Flex align="center" gap="2">
-                <Text size="2" style={{ minWidth: 180 }}>
-                  {userName || ''}
-                </Text>
+            {!isLogin && !isMobile && (
+              <Flex align="center" gap="3">
+                <Link to="/profile" style={{ textDecoration: 'none' }}>
+                  <Flex
+                    align="center"
+                    gap="2"
+                    // make it feel like a button without Radix Button hover styles
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Go to profile"
+                    style={{ cursor: 'pointer' }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.currentTarget.click()
+                        e.preventDefault()
+                      }
+                    }}
+                  >
+                    <Avatar
+                      size="2"
+                      radius="full"
+                      src={avatarUrl ?? undefined}
+                      fallback={(displayName || '?').slice(0, 2).toUpperCase()}
+                      style={{ border: '1px solid var(--gray-5)' }}
+                    />
+                    <Text size="2" style={{ maxWidth: 200 }} truncate>
+                      {displayName}
+                    </Text>
+                  </Flex>
+                </Link>
+
                 <Button variant="soft" onClick={handleLogout}>
                   Logout
                 </Button>

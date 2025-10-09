@@ -4,6 +4,7 @@ import { Link } from '@tanstack/react-router'
 import logoWhite from '@shared/assets/subbLogo/svg/white/LogoWhite.svg'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import {
+  Avatar,
   Box,
   Button,
   Flex,
@@ -61,10 +62,19 @@ export function Sidebar({
   open,
   onToggle,
   currentPath,
+  // NEW:
+  userDisplayName,
+  userEmail,
+  userAvatarUrl,
+  onLogout,
 }: {
   open: boolean
   onToggle: (next?: boolean) => void
   currentPath: string
+  userDisplayName?: string
+  userEmail?: string
+  userAvatarUrl?: string | null
+  onLogout?: () => void
 }) {
   const isMobile = useMediaQuery('(max-width: 768px)')
   const staticWidth = isMobile ? 0 : open ? SIDEBAR_EXPANDED : SIDEBAR_COLLAPSED
@@ -111,11 +121,16 @@ export function Sidebar({
               }}
             >
               <SidebarContent
-                open
+                open={open}
                 onToggle={onToggle}
                 currentPath={currentPath}
                 isMobile={isMobile}
                 showCollapseButton
+                // NEW:
+                userDisplayName={userDisplayName}
+                userEmail={userEmail}
+                userAvatarUrl={userAvatarUrl}
+                onLogout={onLogout}
               />
             </Box>
           </>
@@ -158,15 +173,28 @@ function SidebarContent({
   currentPath,
   isMobile,
   showCollapseButton,
+  // NEW:
+  userDisplayName,
+  userEmail,
+  userAvatarUrl,
+  onLogout,
 }: {
   open: boolean
   onToggle: (next?: boolean) => void
   currentPath: string
   isMobile: boolean
   showCollapseButton?: boolean
+  userDisplayName?: string
+  userEmail?: string
+  userAvatarUrl?: string | null
+  onLogout?: () => void
 }) {
   const { companies, company, companyId, setCompanyId, loading } = useCompany()
   const { caps, loading: authzLoading } = useAuthz()
+  const companiesSorted = React.useMemo(
+    () => [...companies].sort((a, b) => a.name.localeCompare(b.name)),
+    [companies],
+  )
 
   const PUBLIC_LABELS = new Set(['Home', 'Calendar', 'Matters', 'Profile'])
 
@@ -205,6 +233,56 @@ function SidebarContent({
         height: '100dvh',
       }}
     >
+      {/* Mobile user panel */}
+      {isMobile && (
+        <>
+          <Flex align="center" justify="between" px="3" py="3" gap="3">
+            <Flex align="center" gap="3" style={{ minWidth: 0, flex: 1 }}>
+              <Button
+                variant="ghost"
+                size="3"
+                asChild
+                style={{ padding: 0 }}
+                onClick={() => onToggle(false)}
+                aria-label="Go to profile"
+              >
+                <Link to="/profile">
+                  <Flex align="center" gap="2">
+                    <Avatar
+                      size="3"
+                      radius="full"
+                      src={userAvatarUrl ?? undefined}
+                      fallback={(userDisplayName || userEmail || '?')
+                        .slice(0, 2)
+                        .toUpperCase()}
+                      style={{ border: '1px solid var(--gray-5)' }}
+                    />
+                    <Flex direction="column" style={{ lineHeight: 1.1 }}>
+                      <Text size="3" weight="medium" truncate>
+                        {userDisplayName || userEmail || 'Profile'}
+                      </Text>
+                      {userEmail && (
+                        <Text size="1" color="gray" truncate>
+                          {userEmail}
+                        </Text>
+                      )}
+                    </Flex>
+                  </Flex>
+                </Link>
+              </Button>
+            </Flex>
+
+            {onLogout && (
+              <Button size="2" variant="soft" onClick={onLogout}>
+                Logout
+              </Button>
+            )}
+          </Flex>
+
+          <Separator size="4" />
+        </>
+      )}
+
       {/* Header / Company selector */}
       <Flex align="center" justify="between" px="3" py="3" gap="3">
         <Flex align="center" gap="2" style={{ minWidth: 0, flex: 1 }}>
@@ -213,20 +291,29 @@ function SidebarContent({
               <Text as="div" size="1" color="gray" style={{ marginBottom: 4 }}>
                 Company
               </Text>
-              <Select.Root
-                value={companyId ?? ''}
-                onValueChange={setCompanyId}
-                disabled={loading || companies.length === 0}
-              >
-                <Select.Trigger placeholder="Select company" variant="ghost" />
-                <Select.Content>
-                  {companies.map((c) => (
-                    <Select.Item key={c.id} value={c.id}>
-                      {c.name}
-                    </Select.Item>
-                  ))}
-                </Select.Content>
-              </Select.Root>
+              {!loading && (
+                <Select.Root
+                  // ✅ keep it undefined until you truly have an id
+                  value={companyId ?? undefined}
+                  // ✅ avoid redundant state writes (prevents loops)
+                  onValueChange={(next) => {
+                    if (next && next !== companyId) setCompanyId(next)
+                  }}
+                  disabled={companiesSorted.length === 0}
+                >
+                  <Select.Trigger
+                    placeholder="Select company"
+                    variant="ghost"
+                  />
+                  <Select.Content>
+                    {companiesSorted.map((c) => (
+                      <Select.Item key={c.id} value={c.id}>
+                        {c.name}
+                      </Select.Item>
+                    ))}
+                  </Select.Content>
+                </Select.Root>
+              )}
             </div>
           )}
         </Flex>
