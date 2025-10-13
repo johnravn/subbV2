@@ -149,7 +149,10 @@ export default function EditBrandsDialog({
         >
           {isLoading ? (
             <Flex align="center" justify="center" p="4">
-              <Spinner />
+              <Flex align="center" gap="1">
+                <Text>Thinking</Text>
+                <Spinner size="2" />
+              </Flex>
             </Flex>
           ) : isError ? (
             <Text color="red">

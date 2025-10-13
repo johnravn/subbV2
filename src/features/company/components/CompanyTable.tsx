@@ -218,7 +218,12 @@ export default function CompanyTable({
           style={{ flex: '1 1 260px' }}
         >
           <TextField.Slot side="right">
-            {(empLoading || invLoading || owLoading) && <Spinner />}
+            {(empLoading || invLoading || owLoading) && (
+              <Flex align="center" gap="1">
+                <Text>Thinking</Text>
+                <Spinner size="2" />
+              </Flex>
+            )}
           </TextField.Slot>
         </TextField.Root>
 

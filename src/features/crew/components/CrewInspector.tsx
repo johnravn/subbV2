@@ -49,9 +49,9 @@ export default function CrewInspector({ userId }: { userId: string | null }) {
     return <Text color="gray">Select a crew member to view details.</Text>
   if (isLoading)
     return (
-      <Flex align={'center'} gap={'1'}>
-        <Text>Loading</Text>
-        <Spinner size={'2'} />
+      <Flex align="center" gap="1">
+        <Text>Thinking</Text>
+        <Spinner size="2" />
       </Flex>
     )
   if (isError)

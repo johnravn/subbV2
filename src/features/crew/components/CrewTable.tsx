@@ -181,7 +181,10 @@ export default function CrewTable({
         >
           <TextField.Slot side="right">
             {(empLoading || frLoading || invLoading || owLoading) && (
-              <Spinner />
+              <Flex align="center" gap="1">
+                <Text>Thinking</Text>
+                <Spinner size="2" />
+              </Flex>
             )}
           </TextField.Slot>
         </TextField.Root>

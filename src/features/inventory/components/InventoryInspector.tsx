@@ -89,9 +89,9 @@ export default function InventoryInspector({ id }: { id: string | null }) {
 
   if (isLoading)
     return (
-      <Flex align={'center'} gap={'1'}>
-        <Text>Loading</Text>
-        <Spinner size={'2'} />
+      <Flex align="center" gap="1">
+        <Text>Thinking</Text>
+        <Spinner size="2" />
       </Flex>
     )
 

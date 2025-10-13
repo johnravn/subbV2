@@ -27,7 +27,10 @@ export default function RequireCap({
   if (loading) {
     return (
       <Flex align="center" justify="center" style={{ height: '50vh' }}>
-        <Spinner size={'3'} />
+        <Flex align="center" gap="1">
+          <Text>Thinking</Text>
+          <Spinner size="2" />
+        </Flex>
       </Flex>
     )
   }

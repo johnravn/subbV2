@@ -55,6 +55,7 @@ export type InventoryIndexRow = {
 export type ItemPriceHistoryRow = {
   id: string
   amount: number
+
   effective_from: string
   effective_to: string | null
   set_by: string | null

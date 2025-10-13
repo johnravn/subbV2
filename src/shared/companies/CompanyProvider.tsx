@@ -78,23 +78,31 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
         .select('companies ( id, name )')
         .eq('user_id', userId)
       if (error) throw error
-      return data.map((r: any) => r.companies).filter(Boolean)
+      return (data as Array<any>).map((r) => r.companies).filter(Boolean)
     },
     staleTime: 60_000,
   })
 
-  // 3) OPTIONAL: server preference (portable across devices)
+  // 3) Server preference (column first; fallback to legacy preferences JSON)
   const serverPrefQ = useQuery({
     queryKey: ['profile', userId, 'selected-company-id'],
     enabled: !!userId && !!companiesQ.data?.length,
     queryFn: async (): Promise<string | null> => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('preferences')
-        .eq('user_id', userId)
-        .maybeSingle<{ preferences: Record<string, any> | null }>()
+        .select('selected_company_id, preferences')
+        .eq('user_id', userId!)
+        .maybeSingle<{
+          selected_company_id: string | null
+          preferences: Record<string, any> | null
+        }>()
       if (error) throw error
-      return data?.preferences?.selected_company_id ?? null
+      // Prefer the dedicated column; fall back to legacy JSON key if present.
+      return (
+        data?.selected_company_id ??
+        data?.preferences?.selected_company_id ??
+        null
+      )
     },
     staleTime: 300_000,
   })
@@ -123,21 +131,18 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
     }
   }, [lsKey, resolvedCompanyId, companyId])
 
-  // 5) Mutator that updates LS immediately and (optionally) server pref
+  // 5) Persist to server whenever the selection changes
   const savePref = useMutation({
     mutationFn: async (id: string) => {
-      // Merge into profiles.preferences
-      const { data } = await supabase
-        .from('profiles')
-        .select('preferences')
-        .eq('user_id', userId)
-        .maybeSingle<{ preferences: Record<string, any> | null }>()
-      const next = { ...(data?.preferences ?? {}), selected_company_id: id }
+      // Write to the dedicated column.
       const { error } = await supabase
         .from('profiles')
-        .update({ preferences: next })
+        .update({ selected_company_id: id })
         .eq('user_id', userId)
       if (error) throw error
+
+      // (Optional) Clean up legacy preferences key if you want:
+      // await supabase.rpc('remove_legacy_selected_company_from_preferences')
     },
     onSuccess: () => {
       qc.invalidateQueries({
@@ -148,9 +153,11 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
 
   const setCompanyId = (id: string) => {
     if (!companies.some((c) => c.id === id)) return // ignore invalid
+    // update local fast path
     setCompanyIdState(id)
     if (lsKey) safeSetLS(lsKey, id)
-    if (userId) savePref.mutate(id) // optional: comment out if you don't want server sync
+    // persist to server
+    if (userId) savePref.mutate(id)
   }
 
   const company = companies.find((c) => c.id === resolvedCompanyId) ?? null

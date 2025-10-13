@@ -60,7 +60,7 @@ export default function VehicleInspector({ id }: { id: string | null }) {
   if (isLoading)
     return (
       <Flex align="center" gap="1">
-        <Text>Loading</Text>
+        <Text>Thinking</Text>
         <Spinner size="2" />
       </Flex>
     )

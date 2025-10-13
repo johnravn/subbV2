@@ -801,7 +801,10 @@ function BoxedList({
     >
       {loading ? (
         <Flex align="center" justify="center" p="4">
-          <Spinner />
+          <Flex align="center" gap="1">
+            <Text>Thinking</Text>
+            <Spinner size="2" />
+          </Flex>
         </Flex>
       ) : React.Children.count(children) === 0 ? (
         <Text color="gray">{emptyText}</Text>
