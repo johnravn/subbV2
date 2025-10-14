@@ -18,6 +18,7 @@ import {
 import { NewTab, Trash } from 'iconoir-react'
 import { supabase } from '@shared/api/supabase'
 import { useToast } from '@shared/ui/toast/ToastProvider'
+import { partnerCustomersQuery } from '../api/partners'
 
 type Option = { id: string; name: string }
 type PickerItem = {
@@ -39,6 +40,8 @@ type FormState = {
   price: number | null
   parts: Array<Part>
   unique: boolean
+  internally_owned: boolean
+  external_owner_id: string | null
 }
 
 type EditInitialData = {
@@ -55,6 +58,8 @@ type EditInitialData = {
     quantity: number
     item_current_price: number | null
   }>
+  internally_owned: boolean
+  external_owner_id: string | null
 }
 
 export default function AddGroupDialog({
@@ -83,6 +88,8 @@ export default function AddGroupDialog({
     price: null,
     parts: [],
     unique: false,
+    internally_owned: true,
+    external_owner_id: null,
   })
   const set = <TKey extends keyof FormState>(
     key: TKey,
@@ -159,6 +166,16 @@ export default function AddGroupDialog({
     staleTime: 15_000,
   })
 
+  const { data: partners = [] } = useQuery({
+    ...(companyId
+      ? partnerCustomersQuery({ companyId })
+      : {
+          queryKey: ['company', '__none__', 'partner-customers'],
+          queryFn: async () => [],
+        }),
+    enabled: !!companyId && open,
+  })
+
   /* -------- Prefill in EDIT mode (prevent infinite loop) -------- */
   React.useEffect(() => {
     if (!open || mode !== 'edit' || !initialData) return
@@ -182,7 +199,9 @@ export default function AddGroupDialog({
         prev.active === initialData.active &&
         prev.unique === initialData.unique &&
         prev.price === (initialData.price ?? null) &&
-        JSON.stringify(prev.parts) === JSON.stringify(newParts)
+        JSON.stringify(prev.parts) === JSON.stringify(newParts) &&
+        prev.internally_owned === initialData.internally_owned &&
+        prev.external_owner_id === (initialData.external_owner_id ?? null)
       ) {
         return prev
       }
@@ -194,6 +213,8 @@ export default function AddGroupDialog({
         unique: initialData.unique,
         price: initialData.price ?? null,
         parts: newParts,
+        internally_owned: initialData.internally_owned,
+        external_owner_id: initialData.external_owner_id,
       }
     })
   }, [open, mode, initialData, categories])
@@ -254,6 +275,8 @@ export default function AddGroupDialog({
             quantity: p.quantity,
           })),
           p_unique: f.unique,
+          p_internally_owned: f.internally_owned,
+          p_external_owner_id: f.internally_owned ? null : f.external_owner_id,
         },
       )
       if (!rpcErr) return
@@ -268,6 +291,8 @@ export default function AddGroupDialog({
           description: f.description || null,
           active: f.active,
           unique: f.unique,
+          internally_owned: f.internally_owned,
+          external_owner_id: f.internally_owned ? null : f.external_owner_id,
         })
         .select('id')
         .single()
@@ -341,6 +366,8 @@ export default function AddGroupDialog({
           description: f.description || null,
           active: f.active,
           unique: f.unique,
+          internally_owned: f.internally_owned,
+          external_owner_id: f.internally_owned ? null : f.external_owner_id,
         })
         .eq('company_id', companyId)
         .eq('id', initialData.id)
@@ -441,6 +468,12 @@ export default function AddGroupDialog({
     editMutation.mutate(form)
   }
 
+  const canSaveOwner =
+    form.internally_owned ||
+    (!!form.external_owner_id && form.external_owner_id !== '')
+
+  const disabled = saving || !form.name.trim() || !canSaveOwner
+
   return (
     <>
       <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -455,7 +488,7 @@ export default function AddGroupDialog({
 
         {/* Fixed height dialog + two columns */}
         <Dialog.Content
-          maxWidth="900px"
+          maxWidth="990px"
           style={{ height: '80vh', display: 'flex', flexDirection: 'column' }}
         >
           <Dialog.Title>{title}</Dialog.Title>
@@ -565,6 +598,7 @@ export default function AddGroupDialog({
                   />
                 </Field>
               </Flex>
+              {/* …existing Flex with Category / Active / Type / Price … */}
 
               <Field label="Description">
                 <TextArea
@@ -574,6 +608,53 @@ export default function AddGroupDialog({
                   placeholder="Short description…"
                 />
               </Field>
+
+              {/* NEW: wrap owner selectors in a Flex row */}
+              <Flex gap="3" wrap="wrap">
+                <Field label="Owner">
+                  <Select.Root
+                    value={form.internally_owned ? 'internal' : 'external'}
+                    onValueChange={(v: string) => {
+                      const internal = v === 'internal'
+                      set('internally_owned', internal)
+                      if (internal) set('external_owner_id', null)
+                    }}
+                    size="3"
+                  >
+                    <Select.Trigger style={{ minHeight: 'var(--space-7)' }} />
+                    <Select.Content>
+                      <Select.Item value="internal">Internal</Select.Item>
+                      <Select.Item value="external">External</Select.Item>
+                    </Select.Content>
+                  </Select.Root>
+                </Field>
+
+                {!form.internally_owned && (
+                  <Field label="External owner">
+                    <Select.Root
+                      value={form.external_owner_id ?? ''}
+                      onValueChange={(v: string) =>
+                        set('external_owner_id', v || null)
+                      }
+                      size="3"
+                    >
+                      <Select.Trigger
+                        placeholder="Select partner…"
+                        style={{ minHeight: 'var(--space-7)' }}
+                      />
+                      <Select.Content>
+                        <Select.Group>
+                          {partners.map((p) => (
+                            <Select.Item key={p.id} value={p.id}>
+                              {p.name}
+                            </Select.Item>
+                          ))}
+                        </Select.Group>
+                      </Select.Content>
+                    </Select.Root>
+                  </Field>
+                )}
+              </Flex>
 
               <Separator my="2" />
 
@@ -721,11 +802,7 @@ export default function AddGroupDialog({
             <Dialog.Close>
               <Button variant="soft">Cancel</Button>
             </Dialog.Close>
-            <Button
-              onClick={handleSave}
-              disabled={!form.name.trim() || saving}
-              variant="classic"
-            >
+            <Button onClick={handleSave} disabled={disabled} variant="classic">
               {actionLabel}
             </Button>
           </Flex>
@@ -797,6 +874,7 @@ function BoxedList({
         border: '1px solid var(--gray-a6)',
         borderRadius: 8,
         padding: 8,
+        minHeight: '190px',
       }}
     >
       {loading ? (

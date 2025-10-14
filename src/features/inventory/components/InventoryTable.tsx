@@ -31,6 +31,7 @@ type Props = {
   onSelect: (id: string) => void
   activeOnly: boolean
   allow_individual_booking: boolean
+  includeExternal: boolean // 👈 new
   pageSizeOverride?: number
 }
 
@@ -39,6 +40,7 @@ export default function InventoryTable({
   onSelect,
   activeOnly,
   allow_individual_booking,
+  includeExternal,
   pageSizeOverride,
 }: Props) {
   const { companyId } = useCompany()
@@ -113,6 +115,7 @@ export default function InventoryTable({
       category: categoryFilter,
       sortBy,
       sortDir,
+      includeExternal, // 👈 new
     }),
     enabled: !!companyId,
   })
@@ -228,6 +231,22 @@ export default function InventoryTable({
           if (v.current_price == null) return ''
           // Use row.currency if you ever support multi-currency.
           return fmt.format(Number(v.current_price))
+        },
+      },
+      {
+        id: 'owner',
+        header: 'Owner',
+        cell: (ctx) => {
+          const r = ctx.row.original
+          return r.internally_owned ? (
+            <Badge size="1" variant="soft" color="indigo">
+              Internal
+            </Badge>
+          ) : (
+            <Badge size="1" variant="soft" color="amber">
+              {r.external_owner_name ?? 'External'}
+            </Badge>
+          )
         },
       },
     ],

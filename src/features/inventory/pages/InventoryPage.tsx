@@ -17,6 +17,7 @@ import InventoryInspector from '../components/InventoryInspector'
 export default function InventoryPage() {
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
   const [activeOnly, setActiveOnly] = React.useState(true)
+  const [includeExternal, setIncludeExternal] = React.useState(true)
   const [allow_individual_booking, setAllow_individual_booking] =
     React.useState(true)
   const { companyId } = useCompany()
@@ -94,6 +95,15 @@ export default function InventoryPage() {
                   }
                 />
               </Flex>
+              <Flex align="center" gap="1">
+                <Text size="2" color="gray">
+                  Show external
+                </Text>
+                <Switch
+                  checked={includeExternal}
+                  onCheckedChange={(v) => setIncludeExternal(Boolean(v))}
+                />
+              </Flex>
             </Flex>
           </Flex>
 
@@ -112,7 +122,8 @@ export default function InventoryPage() {
               onSelect={setSelectedId}
               activeOnly={activeOnly}
               allow_individual_booking={allow_individual_booking}
-              pageSizeOverride={!isLarge ? 12 : undefined} // ⬅️ fixed on phones; dynamic on large
+              pageSizeOverride={!isLarge ? 12 : undefined}
+              includeExternal={includeExternal} // 👈 new
             />
           </Box>
         </Card>

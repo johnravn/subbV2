@@ -125,6 +125,8 @@ export default function InventoryInspector({ id }: { id: string | null }) {
           notes: entry.notes ?? '',
           price: entry.current_price,
           total_quantity: entry.on_hand ?? 0,
+          internally_owned: entry.internally_owned,
+          external_owner_id: entry.external_owner_id,
         }
       : undefined
 
@@ -145,6 +147,8 @@ export default function InventoryInspector({ id }: { id: string | null }) {
             item_current_price: p.item_current_price,
           })),
           price_history: entry.price_history,
+          internally_owned: entry.internally_owned,
+          external_owner_id: entry.external_owner_id,
         }
       : undefined
 
@@ -224,6 +228,20 @@ export default function InventoryInspector({ id }: { id: string | null }) {
           <Grid columns={{ initial: '1', sm: '2' }} gap="3">
             <Field label="Category" value={entry.category_name ?? '—'} />
             <Field label="Brand" value={entry.brand_name ?? '—'} />
+            <Field
+              label="Owner"
+              value={
+                entry.internally_owned ? (
+                  <Badge size="1" variant="soft" color="indigo">
+                    Internal
+                  </Badge>
+                ) : (
+                  <Badge size="1" variant="soft" color="amber">
+                    {entry.external_owner_name ?? 'External'}
+                  </Badge>
+                )
+              }
+            />
             <Field
               label="Status"
               value={
@@ -330,6 +348,20 @@ export default function InventoryInspector({ id }: { id: string | null }) {
           {/* Meta */}
           <Grid columns={{ initial: '1', sm: '2' }} gap="3">
             <Field label="Category" value={entry.category_name ?? '—'} />
+            <Field
+              label="Owner"
+              value={
+                entry.internally_owned ? (
+                  <Badge size="1" variant="soft" color="indigo">
+                    Internal
+                  </Badge>
+                ) : (
+                  <Badge size="1" variant="soft" color="amber">
+                    {entry.external_owner_name ?? 'External'}
+                  </Badge>
+                )
+              }
+            />
             <Field
               label="Status"
               value={

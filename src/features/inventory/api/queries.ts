@@ -11,6 +11,7 @@ export const inventoryIndexKey = (
   category: string | null,
   sortBy: SortBy,
   sortDir: SortDir,
+  includeExternal: boolean, // 👈 add
 ) =>
   [
     'company',
@@ -24,6 +25,7 @@ export const inventoryIndexKey = (
     category,
     sortBy,
     sortDir,
+    includeExternal,
   ] as const
 
 export const inventoryDetailKey = (companyId: string, id: string) =>
@@ -50,6 +52,10 @@ export type InventoryIndexRow = {
   unique: boolean | null
   allow_individual_booking: boolean | null
   active: boolean // 👈 exists in the view (you filtered by it)
+  // 👇 NEW
+  internally_owned: boolean
+  external_owner_id: string | null
+  external_owner_name: string | null
 }
 
 export type ItemPriceHistoryRow = {
@@ -75,6 +81,9 @@ export type ItemDetail = {
   current_price: number | null
   on_hand: number | null
   price_history: Array<ItemPriceHistoryRow>
+  internally_owned: boolean
+  external_owner_id: string | null
+  external_owner_name: string | null
 }
 
 export type GroupPartRow = {
@@ -96,6 +105,9 @@ export type GroupDetail = {
   unique: boolean
   parts: Array<GroupPartRow>
   price_history: Array<ItemPriceHistoryRow>
+  internally_owned: boolean
+  external_owner_id: string | null
+  external_owner_name: string | null
 }
 
 export type InventoryDetail = ItemDetail | GroupDetail
@@ -173,6 +185,7 @@ export const inventoryIndexQuery = ({
   category,
   sortBy,
   sortDir,
+  includeExternal,
 }: {
   companyId: string
   page: number
@@ -183,6 +196,7 @@ export const inventoryIndexQuery = ({
   category: string | null
   sortBy: SortBy
   sortDir: SortDir
+  includeExternal: boolean
 }) =>
   queryOptions<
     { rows: Array<InventoryIndexRow>; count: number },
@@ -200,6 +214,7 @@ export const inventoryIndexQuery = ({
       category,
       sortBy,
       sortDir,
+      includeExternal,
     ),
     queryFn: async () => {
       const from = (page - 1) * pageSize
@@ -221,6 +236,8 @@ export const inventoryIndexQuery = ({
         // "include if (is_group) OR (allow_individual_booking)"
         q = q.or('is_group.eq.true,allow_individual_booking.eq.true')
       }
+
+      if (!includeExternal) q = q.eq('internally_owned', true) // 👈 NEW
 
       if (category && category !== 'all') q = q.eq('category_name', category)
 
@@ -386,6 +403,9 @@ export const inventoryDetailQuery = ({
             current_price: base.current_price ?? null,
             on_hand: base.on_hand ?? 0,
             price_history: hist as Array<ItemPriceHistoryRow>,
+            internally_owned: base.internally_owned,
+            external_owner_id: base.external_owner_id,
+            external_owner_name: base.external_owner_name,
           }
 
           console.log(t('RETURN item'), {
@@ -475,6 +495,9 @@ export const inventoryDetailQuery = ({
             unique: Boolean(gmeta?.unique ?? base.unique ?? false),
             parts: parts as Array<GroupPartRow>,
             price_history: ghist as Array<ItemPriceHistoryRow>,
+            internally_owned: base.internally_owned,
+            external_owner_id: base.external_owner_id,
+            external_owner_name: base.external_owner_name,
           }
 
           console.log(t('RETURN group'), {

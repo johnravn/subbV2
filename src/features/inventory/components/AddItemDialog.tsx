@@ -15,6 +15,7 @@ import {
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { supabase } from '@shared/api/supabase'
 import { Plus } from 'iconoir-react'
+import { partnerCustomersQuery } from '../api/partners'
 
 type FormState = {
   name: string
@@ -26,6 +27,8 @@ type FormState = {
   active: boolean
   notes?: string
   price?: number | null
+  internally_owned: boolean
+  external_owner_id: string | null
 }
 
 type Option = { id: string; name: string }
@@ -41,6 +44,8 @@ type EditInitialData = {
   active: boolean
   notes?: string | null
   price: number | null
+  internally_owned: boolean
+  external_owner_id: string | null
 }
 
 export default function AddItemDialog({
@@ -71,6 +76,8 @@ export default function AddItemDialog({
     active: true,
     notes: '',
     price: undefined,
+    internally_owned: true,
+    external_owner_id: null,
   })
   // keep a stable ref of original price for change detection
   const originalPriceRef = React.useRef<number | null>(null)
@@ -119,6 +126,11 @@ export default function AddItemDialog({
     staleTime: 60_000,
   })
 
+  const { data: partners = [] } = useQuery({
+    ...partnerCustomersQuery({ companyId: companyId }),
+    enabled: !!companyId && open,
+  })
+
   // Prefill on EDIT (only once per dialog open)
   React.useEffect(() => {
     if (!open || mode !== 'edit' || !initialData) return
@@ -156,6 +168,8 @@ export default function AddItemDialog({
         active: initialData.active,
         notes: initialData.notes ?? '',
         price: initialData.price,
+        internally_owned: initialData.internally_owned,
+        external_owner_id: initialData.external_owner_id ?? null,
       }
     })
     // Only run this effect when dialog is opened in edit mode, or when categories/brands are loaded
@@ -177,6 +191,8 @@ export default function AddItemDialog({
         p_notes: f.notes || null,
         p_price: f.price ?? null,
         p_effective_from: null,
+        p_internally_owned: f.internally_owned,
+        p_external_owner_id: f.internally_owned ? null : f.external_owner_id,
       })
       if (error) throw error
     },
@@ -218,6 +234,8 @@ export default function AddItemDialog({
           total_quantity: f.total_quantity || 0,
           active: f.active,
           notes: f.notes || null,
+          internally_owned: f.internally_owned,
+          external_owner_id: f.internally_owned ? null : f.external_owner_id,
         })
         .eq('company_id', companyId)
         .eq('id', initialData.id)
@@ -368,6 +386,42 @@ export default function AddItemDialog({
                   onChange={(e) => set('model', e.target.value)}
                 />
               </Field>
+              <Field label="Owner">
+                <Select.Root
+                  value={form.internally_owned ? 'internal' : 'external'}
+                  onValueChange={(v: string) => {
+                    const internal = v === 'internal'
+                    set('internally_owned', internal)
+                    if (internal) set('external_owner_id', null)
+                  }}
+                >
+                  <Select.Trigger />
+                  <Select.Content>
+                    <Select.Item value="internal">Internal</Select.Item>
+                    <Select.Item value="external">External</Select.Item>
+                  </Select.Content>
+                </Select.Root>
+              </Field>
+
+              {!form.internally_owned && (
+                <Field label="External owner">
+                  <Select.Root
+                    value={form.external_owner_id ?? undefined}
+                    onValueChange={(v) => set('external_owner_id', v)}
+                  >
+                    <Select.Trigger placeholder="Select partner…" />
+                    <Select.Content>
+                      <Select.Group>
+                        {partners.map((p) => (
+                          <Select.Item key={p.id} value={p.id}>
+                            {p.name}
+                          </Select.Item>
+                        ))}
+                      </Select.Group>
+                    </Select.Content>
+                  </Select.Root>
+                </Field>
+              )}
             </Flex>
 
             <Flex gap="3" wrap="wrap">
