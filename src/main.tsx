@@ -3,6 +3,7 @@ import { StrictMode } from 'react'
 import ReactDOM from 'react-dom/client'
 import '@radix-ui/themes/styles.css'
 import { Theme } from '@radix-ui/themes'
+import { ThemeProvider as NextThemesProvider } from 'next-themes'
 import { RouterProvider } from '@tanstack/react-router'
 
 import './app/styles.css'
@@ -26,19 +27,21 @@ if (rootElement && !rootElement.innerHTML) {
   const root = ReactDOM.createRoot(rootElement)
   root.render(
     <StrictMode>
-      <Theme radius="small" appearance="dark">
-        <QueryProvider>
-          <AuthProvider>
-            <CompanyProvider>
-              <AppToastProvider>
-                <IconContext.Provider value={{ size: '1.5em' }}>
-                  <RouterProvider router={router} />
-                </IconContext.Provider>
-              </AppToastProvider>
-            </CompanyProvider>
-          </AuthProvider>
-        </QueryProvider>
-      </Theme>
+      <NextThemesProvider attribute="class" defaultTheme="system" enableSystem>
+        <Theme radius="small">
+          <QueryProvider>
+            <AuthProvider>
+              <CompanyProvider>
+                <AppToastProvider>
+                  <IconContext.Provider value={{ size: '1.5em' }}>
+                    <RouterProvider router={router} />
+                  </IconContext.Provider>
+                </AppToastProvider>
+              </CompanyProvider>
+            </AuthProvider>
+          </QueryProvider>
+        </Theme>
+      </NextThemesProvider>
     </StrictMode>,
   )
 }

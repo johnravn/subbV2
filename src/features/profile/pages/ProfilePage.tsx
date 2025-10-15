@@ -20,6 +20,7 @@ import { useToast } from '@shared/ui/toast/ToastProvider'
 import { Camera } from 'iconoir-react'
 import { PhoneInputField } from '@shared/phone/PhoneInputField'
 import MapEmbed from '@shared/maps/MapEmbed' // <- ensure this path fits your project
+import ThemeToggle from '@shared/theme/ThemeToggle'
 
 type ProfileRow = {
   user_id: string
@@ -324,59 +325,70 @@ export default function ProfilePage() {
     <Card size="4" style={{ minHeight: 0, overflow: 'auto' }}>
       {/* Header */}
       <Flex align="center" justify="between" wrap="wrap" gap="3">
-        <Flex align="center" gap="3">
-          <Avatar
-            src={avatarUrl ?? undefined}
-            initials={initials(form.display_name || data.email)}
-          />
-          <Box>
-            <Heading size="4">{form.display_name || data.email}</Heading>
-            <Text as="div" color="gray" size="2">
-              {data.email}
-            </Text>
-          </Box>
-        </Flex>
-
-        <Flex direction="column" align="end" gap="2" style={{ minWidth: 180 }}>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            style={{ display: 'none' }}
-            onChange={async (e) => {
-              const file = e.target.files?.[0]
-              if (!file) return
-              setUploading(true)
-              try {
-                const path = await uploadAvatar(file)
-                set('avatarPath', path)
-                info('Photo uploaded', 'Remember to hit Save to apply.')
-              } catch (e: any) {
-                toastError('Upload failed', e?.message ?? 'Try another image.')
-              } finally {
-                setUploading(false)
-                e.currentTarget.value = ''
-              }
-            }}
-          />
-          <Button
-            size="2"
-            variant="soft"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-          >
-            <Flex gap="2" align="center">
-              <Camera width={16} height={16} />
-              {uploading ? 'Uploading…' : 'Change photo'}
-            </Flex>
-          </Button>
-
-          {uploading && (
-            <Box style={{ width: 200 }}>
-              <Progress />
+        <Flex align="center" wrap="wrap" gap="3">
+          <Flex align="center" gap="3">
+            <Avatar
+              src={avatarUrl ?? undefined}
+              initials={initials(form.display_name || data.email)}
+            />
+            <Box>
+              <Heading size="4">{form.display_name || data.email}</Heading>
+              <Text as="div" color="gray" size="2">
+                {data.email}
+              </Text>
             </Box>
-          )}
+          </Flex>
+
+          <Flex
+            direction="column"
+            align="end"
+            gap="2"
+            style={{ minWidth: 180 }}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={async (e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                setUploading(true)
+                try {
+                  const path = await uploadAvatar(file)
+                  set('avatarPath', path)
+                  info('Photo uploaded', 'Remember to hit Save to apply.')
+                } catch (e: any) {
+                  toastError(
+                    'Upload failed',
+                    e?.message ?? 'Try another image.',
+                  )
+                } finally {
+                  setUploading(false)
+                  e.currentTarget.value = ''
+                }
+              }}
+            />
+            <Button
+              size="2"
+              variant="soft"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+            >
+              <Flex gap="2" align="center">
+                <Camera width={16} height={16} />
+                {uploading ? 'Uploading…' : 'Change photo'}
+              </Flex>
+            </Button>
+
+            {uploading && (
+              <Box style={{ width: 200 }}>
+                <Progress />
+              </Box>
+            )}
+          </Flex>
         </Flex>
+        <ThemeToggle />
       </Flex>
 
       <Separator />
