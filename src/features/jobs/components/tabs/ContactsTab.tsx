@@ -3,6 +3,9 @@ import { useQuery } from '@tanstack/react-query'
 import { Box, Button, Heading, Table, Text } from '@radix-ui/themes'
 import { supabase } from '@shared/api/supabase'
 import { Edit, Plus } from 'iconoir-react'
+import AddContactDialog, {
+  EditContactDialog,
+} from '../dialogs/AddContactDialog'
 
 export default function ContactsTab({
   jobId,
@@ -11,6 +14,11 @@ export default function ContactsTab({
   jobId: string
   companyId: string
 }) {
+  const [addOpen, setAddOpen] = React.useState(false)
+  const [editOpen, setEditOpen] = React.useState<{
+    link: any
+    contact: any
+  } | null>(null)
   const { data } = useQuery({
     queryKey: ['jobs.contacts', jobId],
     queryFn: async () => {
@@ -57,12 +65,45 @@ export default function ContactsTab({
       >
         <Heading size="3">Contacts</Heading>
         <div style={{ display: 'flex', gap: 8 }}>
-          <Button size="2">
-            <Plus width={16} height={16} /> Add contact
+          <Button size="2" onClick={() => setAddOpen(true)}>
+            <Plus /> Add contact
           </Button>
-          <Button size="2" variant="soft">
-            <Edit width={16} height={16} /> Edit contact
+          <Button
+            size="2"
+            variant="soft"
+            disabled={!data?.jobContacts.length}
+            onClick={() => {
+              // example: edit first row (you’ll likely add an action cell to pick row)
+              const r = data!.jobContacts[0]
+              setEditOpen({
+                link: {
+                  contact_id: r.contact_id,
+                  role: r.role,
+                  notes: r.notes,
+                },
+                contact: r.contact,
+              })
+            }}
+          >
+            <Edit /> Edit contact
           </Button>
+
+          <AddContactDialog
+            open={addOpen}
+            onOpenChange={setAddOpen}
+            jobId={jobId}
+            companyId={companyId}
+          />
+
+          {editOpen && (
+            <EditContactDialog
+              open={!!editOpen}
+              onOpenChange={(v) => !v && setEditOpen(null)}
+              jobId={jobId}
+              link={editOpen.link}
+              contact={editOpen.contact}
+            />
+          )}
         </div>
       </div>
 

@@ -13,6 +13,7 @@ import {
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { Plus } from 'iconoir-react'
 import { jobsIndexQuery } from '../api/queries'
+import JobDialog from './dialogs/JobDialog'
 import type { JobListRow, JobStatus } from '../types'
 
 export default function JobsTable({
@@ -27,6 +28,8 @@ export default function JobsTable({
   const [statusFilter, setStatusFilter] = React.useState<JobStatus | 'all'>(
     'all',
   )
+
+  const [createOpen, setCreateOpen] = React.useState(false)
 
   const { data, isFetching } = useQuery({
     ...jobsIndexQuery({
@@ -66,9 +69,15 @@ export default function JobsTable({
           </SegmentedControl.Item>
         </SegmentedControl.Root>
 
-        <Button size="2" variant="classic">
+        <Button size="2" variant="classic" onClick={() => setCreateOpen(true)}>
           <Plus width={16} height={16} /> New job
         </Button>
+        <JobDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          companyId={companyId!}
+          mode="create"
+        />
       </Flex>
 
       <Table.Root variant="surface">

@@ -9,9 +9,13 @@ import {
 } from '@radix-ui/themes'
 import { supabase } from '@shared/api/supabase'
 import { Edit, Mail, Plus } from 'iconoir-react'
+import AddCrewDialog, { EditCrewDialog } from '../dialogs/AddCrewDialog'
 import type { CrewReqStatus, ReservedCrewRow } from '../../types'
 
 export default function CrewTab({ jobId }: { jobId: string }) {
+  const [addCrewOpen, setAddCrewOpen] = React.useState(false)
+  const [editCrew, setEditCrew] = React.useState<ReservedCrewRow | null>(null)
+
   const qc = useQueryClient()
   const { data } = useQuery({
     queryKey: ['jobs.crew', jobId],
@@ -65,9 +69,14 @@ export default function CrewTab({ jobId }: { jobId: string }) {
       >
         <Heading size="3">Crew</Heading>
         <div style={{ display: 'flex', gap: 8 }}>
-          <Button size="2">
-            <Plus width={16} height={16} /> Add crew booking
+          <Button size="2" onClick={() => setAddCrewOpen(true)}>
+            <Plus /> Add crew booking
           </Button>
+          <AddCrewDialog
+            open={addCrewOpen}
+            onOpenChange={setAddCrewOpen}
+            jobId={jobId}
+          />
           <Button size="2" variant="soft">
             <Mail width={16} height={16} /> Send requests
           </Button>
@@ -120,9 +129,17 @@ export default function CrewTab({ jobId }: { jobId: string }) {
                 </SegmentedControl.Root>
               </Table.Cell>
               <Table.Cell>
-                <Button size="1" variant="soft">
-                  <Edit width={14} height={14} /> Edit booking
+                <Button size="1" variant="soft" onClick={() => setEditCrew(r)}>
+                  …Edit booking
                 </Button>
+                {editCrew && (
+                  <EditCrewDialog
+                    open={!!editCrew}
+                    onOpenChange={(v) => !v && setEditCrew(null)}
+                    row={editCrew}
+                    jobId={jobId}
+                  />
+                )}
               </Table.Cell>
             </Table.Row>
           ))}

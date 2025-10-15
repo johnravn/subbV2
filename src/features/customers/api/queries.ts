@@ -89,7 +89,7 @@ export function customerDetailQuery({
       if (!c) throw new Error('Not found')
 
       const { data: contacts, error: cErr } = await supabase
-        .from('customer_contacts')
+        .from('contacts')
         .select('id, customer_id, name, email, phone, title, notes, created_at')
         .eq('customer_id', id)
         .order('name', { ascending: true })
@@ -144,7 +144,7 @@ export async function addContact(payload: {
   title?: string | null
   notes?: string | null
 }) {
-  const { error } = await supabase.from('customer_contacts').insert({
+  const { error } = await supabase.from('contacts').insert({
     customer_id: payload.customer_id,
     name: payload.name.trim(),
     email: payload.email ?? null,
@@ -164,16 +164,13 @@ export async function updateContact(payload: {
   notes?: string | null
 }) {
   const { id, ...rest } = payload
-  const { error } = await supabase
-    .from('customer_contacts')
-    .update(rest)
-    .eq('id', id)
+  const { error } = await supabase.from('contacts').update(rest).eq('id', id)
   if (error) throw error
 }
 
 export async function deleteContact(payload: { id: string }) {
   const { error } = await supabase
-    .from('customer_contacts')
+    .from('contacts')
     .delete()
     .eq('id', payload.id)
   if (error) throw error

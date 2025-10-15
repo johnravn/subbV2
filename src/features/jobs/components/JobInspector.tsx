@@ -17,6 +17,7 @@ import CrewTab from './tabs/CrewTab'
 import TransportTab from './tabs/TransportTab'
 import TimelineTab from './tabs/TimelineTab'
 import ContactsTab from './tabs/ContactsTab'
+import JobDialog from './dialogs/JobDialog'
 import type { JobDetail } from '../types'
 
 export default function JobInspector({ id }: { id: string | null }) {
@@ -28,7 +29,9 @@ export default function JobInspector({ id }: { id: string | null }) {
   if (!id) return <Text color="gray">Select a job to see details.</Text>
   if (isLoading || !data) return <Text>Loading…</Text>
 
-  const job = data as JobDetail
+  const [editOpen, setEditOpen] = React.useState(false)
+
+  const job = data
 
   return (
     <Box>
@@ -45,9 +48,16 @@ export default function JobInspector({ id }: { id: string | null }) {
           <Badge color="blue" radius="full" highContrast>
             {job.status}
           </Badge>
-          <Button size="2" variant="soft">
+          <Button size="2" variant="soft" onClick={() => setEditOpen(true)}>
             <Edit width={16} height={16} /> Edit job
           </Button>
+          <JobDialog
+            open={editOpen}
+            onOpenChange={setEditOpen}
+            companyId={job.company_id}
+            mode="edit"
+            initialData={job}
+          />
         </div>
       </Box>
 

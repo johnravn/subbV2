@@ -35,7 +35,7 @@ export default function OverviewTab({ job }: { job: JobDetail }) {
           <KV label="Project lead">
             {job.project_lead?.display_name ?? '—'}
             <span style={{ color: 'var(--gray-11)' }}>
-              {job.project_lead?.email ? ` (${job.project_lead?.email})` : ''}
+              {job.project_lead?.email ? ` (${job.project_lead.email})` : ''}
             </span>
           </KV>
           <KV label="Customer">{job.customer?.name ?? '—'}</KV>

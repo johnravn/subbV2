@@ -10,9 +10,18 @@ import {
 } from '@radix-ui/themes'
 import { supabase } from '@shared/api/supabase'
 import { Edit, Truck } from 'iconoir-react'
+import { useCompany } from '@shared/companies/CompanyProvider'
+import BookVehicleDialog, {
+  EditVehicleBookingDialog,
+} from '../dialogs/BookVehicleDialog'
 import type { ExternalReqStatus, ReservedVehicleRow } from '../../types'
 
 export default function TransportTab({ jobId }: { jobId: string }) {
+  const [bookVehOpen, setBookVehOpen] = React.useState(false)
+  const [editVeh, setEditVeh] = React.useState<ReservedVehicleRow | null>(null)
+  const { companyId } = useCompany()
+  const canBook = !!companyId
+
   const qc = useQueryClient()
   const { data } = useQuery({
     queryKey: ['jobs.transport', jobId],
@@ -65,9 +74,21 @@ export default function TransportTab({ jobId }: { jobId: string }) {
         }}
       >
         <Heading size="3">Transportation</Heading>
-        <Button size="2">
-          <Truck width={16} height={16} /> Book vehicle
+        <Button
+          size="2"
+          disabled={!canBook}
+          onClick={() => setBookVehOpen(true)}
+        >
+          <Truck /> Book vehicle
         </Button>
+        {canBook && (
+          <BookVehicleDialog
+            open={bookVehOpen}
+            onOpenChange={setBookVehOpen}
+            jobId={jobId}
+            companyId={companyId}
+          />
+        )}
       </div>
 
       <Table.Root variant="surface">
@@ -133,9 +154,17 @@ export default function TransportTab({ jobId }: { jobId: string }) {
                   )}
                 </Table.Cell>
                 <Table.Cell>
-                  <Button size="1" variant="soft">
-                    <Edit width={14} height={14} /> Edit booking
+                  <Button size="1" variant="soft" onClick={() => setEditVeh(r)}>
+                    Edit booking
                   </Button>
+                  {editVeh && (
+                    <EditVehicleBookingDialog
+                      open={!!editVeh}
+                      onOpenChange={(v) => !v && setEditVeh(null)}
+                      row={editVeh}
+                      jobId={jobId}
+                    />
+                  )}
                 </Table.Cell>
               </Table.Row>
             )
