@@ -18,18 +18,19 @@ import TransportTab from './tabs/TransportTab'
 import TimelineTab from './tabs/TimelineTab'
 import ContactsTab from './tabs/ContactsTab'
 import JobDialog from './dialogs/JobDialog'
-import type { JobDetail } from '../types'
 
 export default function JobInspector({ id }: { id: string | null }) {
+  // ✅ hooks first
+  const [editOpen, setEditOpen] = React.useState(false)
+
   const { data, isLoading } = useQuery({
     ...jobDetailQuery({ jobId: id ?? '__none__' }),
-    enabled: !!id,
+    enabled: !!id, // won't run until we have an id, but the hook is still called every render
   })
 
+  // now you can early return safely since hooks above already ran
   if (!id) return <Text color="gray">Select a job to see details.</Text>
   if (isLoading || !data) return <Text>Loading…</Text>
-
-  const [editOpen, setEditOpen] = React.useState(false)
 
   const job = data
 
@@ -57,6 +58,8 @@ export default function JobInspector({ id }: { id: string | null }) {
             companyId={job.company_id}
             mode="edit"
             initialData={job}
+            // optional: refresh detail after save (on top of your invalidations)
+            // onSaved={() => queryClient.invalidateQueries({ queryKey: ['jobs-detail', job.id] })}
           />
         </div>
       </Box>

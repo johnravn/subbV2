@@ -11,6 +11,7 @@ import {
 } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { useToast } from '@shared/ui/toast/ToastProvider'
+import { Search } from 'iconoir-react'
 import {
   crewIndexQuery,
   deleteInvite,
@@ -179,6 +180,9 @@ export default function CrewTable({
           size="3"
           style={{ flex: '1 1 260px' }}
         >
+          <TextField.Slot side="left">
+            <Search />
+          </TextField.Slot>
           <TextField.Slot side="right">
             {(empLoading || frLoading || invLoading || owLoading) && (
               <Flex align="center" gap="1">

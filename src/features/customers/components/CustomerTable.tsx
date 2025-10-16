@@ -11,7 +11,7 @@ import {
   Tooltip,
 } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
-import { InfoCircle } from 'iconoir-react'
+import { InfoCircle, Search } from 'iconoir-react'
 import { customersIndexQuery } from '../api/queries'
 import AddCustomerDialog from './dialogs/AddCustomerDialog'
 
@@ -56,6 +56,9 @@ export default function CustomerTable({
           size="3"
           style={{ flex: '1 1 260px' }}
         >
+          <TextField.Slot side="left">
+            <Search />
+          </TextField.Slot>
           <TextField.Slot side="right">
             {(isFetching || isLoading) && (
               <Flex align="center" gap="1">

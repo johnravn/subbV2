@@ -15,7 +15,7 @@ import {
   TextArea,
   TextField,
 } from '@radix-ui/themes'
-import { NewTab, Trash } from 'iconoir-react'
+import { NewTab, Search, Trash } from 'iconoir-react'
 import { supabase } from '@shared/api/supabase'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { partnerCustomersQuery } from '../api/partners'
@@ -669,7 +669,12 @@ export default function AddGroupDialog({
                   size="3"
                   style={{ flex: '1 1 260px' }}
                 />
-                {itemsFetching && <Spinner />}
+                <TextField.Slot side="left">
+                  <Search />
+                </TextField.Slot>
+                <TextField.Slot side="right">
+                  {itemsFetching && <Spinner />}
+                </TextField.Slot>
               </Flex>
 
               <BoxedList

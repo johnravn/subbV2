@@ -18,6 +18,7 @@ import {
   TextField,
 } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
+import { Search } from 'iconoir-react'
 import { categoryNamesQuery, inventoryIndexQuery } from '../api/queries'
 import EditCategoriesDialog from './EditCategoriesDialog'
 import EditBrandsDialog from './EditBrandsDialog'
@@ -278,6 +279,9 @@ export default function InventoryTable({
           size="3"
           style={{ flex: '1 1 260px' }}
         >
+          <TextField.Slot side="left">
+            <Search />
+          </TextField.Slot>
           <TextField.Slot side="right">
             {isFetching && <Spinner />}
           </TextField.Slot>

@@ -12,6 +12,8 @@ import {
   TextField,
 } from '@radix-ui/themes'
 import { supabase } from '@shared/api/supabase'
+import { makeWordPresentable } from '@shared/lib/generalFunctions'
+import { useToast } from '@shared/ui/toast/ToastProvider'
 import type { JobDetail, JobStatus, UUID } from '../../types'
 
 type Props = {
@@ -33,6 +35,8 @@ export default function JobDialog({
 }: Props) {
   const qc = useQueryClient()
 
+  const { success, info, error } = useToast()
+
   const [title, setTitle] = React.useState(initialData?.title ?? '')
   const [description, setDescription] = React.useState(
     initialData?.description ?? '',
@@ -42,10 +46,6 @@ export default function JobDialog({
   )
   const [startAt, setStartAt] = React.useState(initialData?.start_at ?? '')
   const [endAt, setEndAt] = React.useState(initialData?.end_at ?? '')
-  const [loadInAt, setLoadInAt] = React.useState(initialData?.load_in_at ?? '')
-  const [loadOutAt, setLoadOutAt] = React.useState(
-    initialData?.load_out_at ?? '',
-  )
   const [projectLead, setProjectLead] = React.useState<UUID | ''>(
     initialData?.project_lead_user_id ?? '',
   )
@@ -63,8 +63,6 @@ export default function JobDialog({
     setStatus(initialData.status)
     setStartAt(initialData.start_at ?? '')
     setEndAt(initialData.end_at ?? '')
-    setLoadInAt(initialData.load_in_at ?? '')
-    setLoadOutAt(initialData.load_out_at ?? '')
     setProjectLead(initialData.project_lead_user_id ?? '')
     setCustomerId(initialData.customer_id ?? '')
     setAddressId(initialData.job_address_id ?? '')
@@ -121,6 +119,9 @@ export default function JobDialog({
     },
   })
 
+  // ...unchanged imports
+  // const { success, info, error } = useToast()  // you already have this
+
   const upsert = useMutation({
     mutationFn: async () => {
       if (mode === 'create') {
@@ -133,8 +134,6 @@ export default function JobDialog({
             status,
             start_at: startAt || null,
             end_at: endAt || null,
-            load_in_at: loadInAt || null,
-            load_out_at: loadOutAt || null,
             project_lead_user_id: projectLead || null,
             customer_id: customerId || null,
             job_address_id: addressId || null,
@@ -153,8 +152,6 @@ export default function JobDialog({
             status,
             start_at: startAt || null,
             end_at: endAt || null,
-            load_in_at: loadInAt || null,
-            load_out_at: loadOutAt || null,
             project_lead_user_id: projectLead || null,
             customer_id: customerId || null,
             job_address_id: addressId || null,
@@ -165,12 +162,22 @@ export default function JobDialog({
       }
     },
     onSuccess: async (id) => {
+      const action = mode === 'create' ? 'created' : 'updated'
+      // fire toast first so the user sees it even if the dialog closes quickly
+      success(`Job ${action}`, `“${title.trim()}” was ${action} successfully.`)
+
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['jobs-index'], exact: false }),
         qc.invalidateQueries({ queryKey: ['jobs-detail', id], exact: false }),
       ])
+
       onOpenChange(false)
       onSaved?.(id)
+    },
+    onError: (e: any) => {
+      error('Failed to save job', e?.message ?? 'Please try again.')
+      // (Optional) keep the dialog open so they can fix inputs
+      // You already keep it open by default on error since onOpenChange(false) is only in onSuccess
     },
   })
 
@@ -183,7 +190,7 @@ export default function JobDialog({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Content
         maxWidth="820px"
-        style={{ height: '80vh', display: 'flex', flexDirection: 'column' }}
+        style={{ display: 'flex', flexDirection: 'column' }}
       >
         <Dialog.Title>{mode === 'edit' ? 'Edit job' : 'New job'}</Dialog.Title>
         <Separator my="2" />
@@ -206,79 +213,85 @@ export default function JobDialog({
               />
             </Field>
 
-            <Field label="Status">
-              <Select.Root
-                value={status}
-                onValueChange={(v) => setStatus(v as JobStatus)}
-              >
-                <Select.Trigger />
-                <Select.Content>
-                  {(
-                    [
-                      'draft',
-                      'planned',
-                      'requested',
-                      'confirmed',
-                      'in_progress',
-                      'completed',
-                      'canceled',
-                    ] as Array<JobStatus>
-                  ).map((s) => (
-                    <Select.Item key={s} value={s}>
-                      {s}
-                    </Select.Item>
-                  ))}
-                </Select.Content>
-              </Select.Root>
-            </Field>
+            <Flex wrap={'wrap'}>
+              <Field label="Status">
+                <Select.Root
+                  value={status}
+                  onValueChange={(v) => setStatus(v as JobStatus)}
+                >
+                  <Select.Trigger />
+                  <Select.Content>
+                    {(
+                      [
+                        'draft',
+                        'planned',
+                        'requested',
+                        'confirmed',
+                        'in_progress',
+                        'completed',
+                        'canceled',
+                        'invoiced',
+                        'paid',
+                      ] as Array<JobStatus>
+                    ).map((s) => (
+                      <Select.Item key={s} value={s}>
+                        {makeWordPresentable(s)}
+                      </Select.Item>
+                    ))}
+                  </Select.Content>
+                </Select.Root>
+              </Field>
 
-            <Field label="Project lead">
-              <Select.Root
-                value={projectLead}
-                onValueChange={(v) => setProjectLead(v)}
-              >
-                <Select.Trigger placeholder="None" />
-                <Select.Content>
-                  {leads.map((u) => (
-                    <Select.Item key={u.user_id} value={u.user_id}>
-                      {u.display_name ?? u.email}
-                    </Select.Item>
-                  ))}
-                </Select.Content>
-              </Select.Root>
-            </Field>
+              <Field label="Project lead">
+                <Select.Root
+                  value={projectLead}
+                  onValueChange={(v) => setProjectLead(v)}
+                >
+                  <Select.Trigger placeholder="None" />
+                  <Select.Content>
+                    {leads.map((u) => (
+                      <Select.Item key={u.user_id} value={u.user_id}>
+                        {u.display_name ?? u.email}
+                      </Select.Item>
+                    ))}
+                  </Select.Content>
+                </Select.Root>
+              </Field>
+            </Flex>
 
-            <Field label="Customer">
-              <Select.Root
-                value={customerId}
-                onValueChange={(v) => setCustomerId(v)}
-              >
-                <Select.Trigger placeholder="None" />
-                <Select.Content>
-                  {customers.map((c) => (
-                    <Select.Item key={c.id} value={c.id}>
-                      {c.name}
-                    </Select.Item>
-                  ))}
-                </Select.Content>
-              </Select.Root>
-            </Field>
+            <Flex wrap={'wrap'}>
+              <Field label="Customer">
+                <Select.Root
+                  value={customerId}
+                  onValueChange={(v) => setCustomerId(v)}
+                >
+                  <Select.Trigger placeholder="None" />
+                  <Select.Content>
+                    {customers.map((c) => (
+                      <Select.Item key={c.id} value={c.id}>
+                        {c.name}
+                      </Select.Item>
+                    ))}
+                  </Select.Content>
+                </Select.Root>
+              </Field>
 
-            <Field label="Address">
-              <Select.Root
-                value={addressId}
-                onValueChange={(v) => setAddressId(v)}
-              >
-                <Select.Trigger placeholder="None" />
-                <Select.Content>
-                  {addresses.map((a) => (
-                    <Select.Item key={a.id} value={a.id}>
-                      {addrLabel(a)}
-                    </Select.Item>
-                  ))}
-                </Select.Content>
-              </Select.Root>
-            </Field>
+              <Field label="Main Contact">
+                <Select.Root
+                  value={addressId}
+                  onValueChange={(v) => setAddressId(v)}
+                >
+                  <Select.Trigger placeholder="None" />
+                  <Select.Content>
+                    {addresses.map((a) => (
+                      <Select.Item key={a.id} value={a.id}>
+                        {addrLabel(a)}
+                      </Select.Item>
+                    ))}
+                  </Select.Content>
+                </Select.Root>
+              </Field>
+            </Flex>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -294,20 +307,6 @@ export default function JobDialog({
                 type="datetime-local"
                 value={toLocalInput(endAt)}
                 onChange={(e) => setEndAt(fromLocalInput(e.target.value))}
-              />
-            </Field>
-            <Field label="Load-in">
-              <TextField.Root
-                type="datetime-local"
-                value={toLocalInput(loadInAt)}
-                onChange={(e) => setLoadInAt(fromLocalInput(e.target.value))}
-              />
-            </Field>
-            <Field label="Load-out">
-              <TextField.Root
-                type="datetime-local"
-                value={toLocalInput(loadOutAt)}
-                onChange={(e) => setLoadOutAt(fromLocalInput(e.target.value))}
               />
             </Field>
             <Field label="Notes">
@@ -326,7 +325,12 @@ export default function JobDialog({
           </Dialog.Close>
           <Button
             variant="classic"
-            onClick={() => upsert.mutate()}
+            onClick={() => {
+              if (!title.trim()) {
+                return error('Missing title', 'Please enter a job title.')
+              }
+              upsert.mutate()
+            }}
             disabled={disabled}
           >
             {upsert.isPending ? 'Saving…' : mode === 'edit' ? 'Save' : 'Create'}

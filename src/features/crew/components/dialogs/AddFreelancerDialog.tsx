@@ -24,7 +24,7 @@ export default function AddFreelancerDialog({
   onAdded?: () => void
 }) {
   const { companyId } = useCompany()
-  const { info, error } = useToast()
+  const { success, info, error } = useToast()
   const [email, setEmail] = React.useState('')
 
   const normalized = email.trim().toLowerCase()

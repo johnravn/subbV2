@@ -43,8 +43,6 @@ export default function OverviewTab({ job }: { job: JobDetail }) {
           <KV label="Customer phone">{(job as any).customer?.phone ?? '—'}</KV>
           <KV label="Start">{fmt(job.start_at)}</KV>
           <KV label="End">{fmt(job.end_at)}</KV>
-          <KV label="Load-in">{fmt(job.load_in_at)}</KV>
-          <KV label="Load-out">{fmt(job.load_out_at)}</KV>
         </Box>
         <Box>
           <Heading size="3" mb="2">

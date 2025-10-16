@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { Search } from 'iconoir-react'
 import { Button, Flex, Spinner, TextField } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { vehiclesIndexQuery } from '../api/queries'
@@ -50,6 +51,9 @@ export default function VehiclesView({
           size="3"
           style={{ flex: '1 1 260px' }}
         >
+          <TextField.Slot side="left">
+            <Search />
+          </TextField.Slot>
           <TextField.Slot side="right">
             {(isLoading || isFetching) && <Spinner />}
           </TextField.Slot>

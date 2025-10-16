@@ -37,7 +37,7 @@ export default function JobsPage() {
     >
       {/* 1/3 table (left), 2/3 inspector (right) from 1024px and up */}
       <Grid
-        columns={{ initial: '1fr', lg: '1fr 2fr' }}
+        columns={{ initial: '1fr', lg: '2fr 3fr' }}
         gap="4"
         align="stretch"
         style={{

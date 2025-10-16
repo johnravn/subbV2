@@ -10,6 +10,7 @@ import {
   Text,
   TextField,
 } from '@radix-ui/themes'
+import { Search } from 'iconoir-react'
 import { supabase } from '@shared/api/supabase'
 import type { UUID } from '../../types'
 
@@ -133,6 +134,9 @@ export default function BookItemsDialog({
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by name…"
             />
+            <TextField.Slot side="left">
+              <Search />
+            </TextField.Slot>
             {isFetching ? (
               <Flex align="center" gap="1">
                 <Text>Thinking</Text>

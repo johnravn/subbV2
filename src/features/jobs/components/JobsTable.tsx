@@ -11,7 +11,8 @@ import {
   TextField,
 } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
-import { Plus } from 'iconoir-react'
+import { Plus, Search } from 'iconoir-react'
+import { makeWordPresentable } from '@shared/lib/generalFunctions'
 import { jobsIndexQuery } from '../api/queries'
 import JobDialog from './dialogs/JobDialog'
 import type { JobListRow, JobStatus } from '../types'
@@ -31,7 +32,7 @@ export default function JobsTable({
 
   const [createOpen, setCreateOpen] = React.useState(false)
 
-  const { data, isFetching } = useQuery({
+  const { data, isFetching, refetch } = useQuery({
     ...jobsIndexQuery({
       companyId: companyId ?? '__none__',
       search,
@@ -50,6 +51,9 @@ export default function JobsTable({
           size="3"
           style={{ flex: '1 1 240px' }}
         >
+          <TextField.Slot side="left">
+            <Search />
+          </TextField.Slot>
           <TextField.Slot side="right">
             {isFetching && <Spinner />}
           </TextField.Slot>
@@ -77,6 +81,12 @@ export default function JobsTable({
           onOpenChange={setCreateOpen}
           companyId={companyId!}
           mode="create"
+          onSaved={(id) => {
+            // optional: highlight the newly created job
+            onSelect(id)
+            // refresh the table so it shows up
+            refetch()
+          }}
         />
       </Flex>
 
@@ -109,7 +119,7 @@ export default function JobsTable({
                 </Table.Cell>
                 <Table.Cell>
                   <Badge radius="full" highContrast>
-                    {j.status}
+                    {makeWordPresentable(j.status)}
                   </Badge>
                 </Table.Cell>
               </Table.Row>

@@ -41,7 +41,7 @@ export function jobDetailQuery({ jobId }: { jobId: string }) {
         .from('jobs')
         .select(
           `
-          id, company_id, title, description, status, start_at, end_at, load_in_at, load_out_at,
+          id, company_id, title, description, status, start_at, end_at,
           project_lead_user_id, customer_id, customer_contact_id, job_address_id,
           customer:customer_id ( id, name, email, phone ),
           project_lead:project_lead_user_id ( user_id, display_name, email ),
