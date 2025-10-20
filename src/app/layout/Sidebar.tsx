@@ -34,7 +34,7 @@ import { useAuthz } from '@shared/auth/useAuthz'
 import { canVisit } from '@shared/auth/permissions'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 
-const SIDEBAR_EXPANDED = 240
+const SIDEBAR_EXPANDED = 200
 const SIDEBAR_COLLAPSED = 64
 
 type NavItem = { to: string; label: string; icon: React.ReactNode }
@@ -451,7 +451,7 @@ function NavItem({
   const content = (
     <Button
       variant={active ? 'outline' : 'ghost'}
-      size="3"
+      size="2"
       highContrast
       asChild
     >

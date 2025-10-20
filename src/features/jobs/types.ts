@@ -12,6 +12,8 @@ export type JobStatus =
   | 'in_progress'
   | 'completed'
   | 'canceled'
+  | 'invoiced'
+  | 'paid'
 
 export type JobListRow = {
   id: UUID
@@ -23,6 +25,16 @@ export type JobListRow = {
     id: UUID
     name: string | null
   } | null
+}
+
+export type AddressListRow = {
+  id: UUID
+  company_id: UUID
+  name: string | null
+  address_line: string
+  zip_code: string
+  city: string
+  country: string
 }
 
 export type JobDetail = {
@@ -46,6 +58,7 @@ export type JobDetail = {
     name: string | null
     email: string | null
     phone: string | null
+    vat_number: string | null
   } | null
 
   project_lead?: {
@@ -54,9 +67,17 @@ export type JobDetail = {
     email: string
   } | null
 
+  customer_contact?: {
+    user_id: UUID
+    name: string | null
+    email: string | null
+    phone: string | null
+    title: string | null
+  } | null
+
   address?: {
     id: UUID
-    name: string | null
+    name: string
     address_line: string
     zip_code: string
     city: string

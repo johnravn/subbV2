@@ -52,8 +52,8 @@ export default function JobDialog({
   const [customerId, setCustomerId] = React.useState<UUID | ''>(
     initialData?.customer_id ?? '',
   )
-  const [addressId, setAddressId] = React.useState<UUID | ''>(
-    initialData?.job_address_id ?? '',
+  const [contactId, setContactId] = React.useState<UUID | ''>(
+    initialData?.customer_contact_id ?? '',
   )
 
   React.useEffect(() => {
@@ -65,8 +65,12 @@ export default function JobDialog({
     setEndAt(initialData.end_at ?? '')
     setProjectLead(initialData.project_lead_user_id ?? '')
     setCustomerId(initialData.customer_id ?? '')
-    setAddressId(initialData.job_address_id ?? '')
+    setContactId(initialData.customer_contact_id ?? '')
   }, [open, mode, initialData])
+
+  React.useEffect(() => {
+    setContactId('') // clear previous selection if customer changes
+  }, [customerId])
 
   const { data: leads = [] } = useQuery({
     queryKey: ['company', companyId, 'project-leads'],
@@ -98,26 +102,31 @@ export default function JobDialog({
     },
   })
 
-  const { data: addresses = [] } = useQuery({
-    queryKey: ['company', companyId, 'addresses'],
-    enabled: open,
+  const { data: contacts = [], isFetching: contactsLoading } = useQuery({
+    queryKey: ['company', companyId, 'customer', customerId, 'contacts'],
+    enabled: open && !!customerId,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('addresses')
-        .select('id, name, address_line, zip_code, city, country')
+        .from('contacts')
+        .select('id, name, email, phone')
         .eq('company_id', companyId)
-        .order('created_at', { ascending: false })
+        .eq('customer_id', customerId)
+        .order('name', { ascending: true })
       if (error) throw error
       return data as Array<{
         id: UUID
-        name: string | null
-        address_line: string
-        zip_code: string
-        city: string
-        country: string
+        name: string
+        email: string | null
+        phone: string | null
       }>
     },
   })
+
+  const contactLabel = (c: {
+    name: string
+    email: string | null
+    phone: string | null
+  }) => [c.name, c.email, c.phone].filter(Boolean).join(' · ')
 
   // ...unchanged imports
   // const { success, info, error } = useToast()  // you already have this
@@ -136,7 +145,7 @@ export default function JobDialog({
             end_at: endAt || null,
             project_lead_user_id: projectLead || null,
             customer_id: customerId || null,
-            job_address_id: addressId || null,
+            customer_contact_id: contactId || null,
           })
           .select('id')
           .single()
@@ -154,7 +163,7 @@ export default function JobDialog({
             end_at: endAt || null,
             project_lead_user_id: projectLead || null,
             customer_id: customerId || null,
-            job_address_id: addressId || null,
+            customer_contact_id: contactId || null,
           })
           .eq('id', initialData.id)
         if (error) throw error
@@ -276,16 +285,29 @@ export default function JobDialog({
                 </Select.Root>
               </Field>
 
-              <Field label="Main Contact">
+              <Field label="Main contact">
                 <Select.Root
-                  value={addressId}
-                  onValueChange={(v) => setAddressId(v)}
+                  value={contactId}
+                  onValueChange={(v) => setContactId(v)}
+                  disabled={
+                    !customerId || contactsLoading || contacts.length === 0
+                  }
                 >
-                  <Select.Trigger placeholder="None" />
+                  <Select.Trigger
+                    placeholder={
+                      !customerId
+                        ? 'Select a customer first'
+                        : contactsLoading
+                          ? 'Loading…'
+                          : contacts.length === 0
+                            ? 'No contacts found'
+                            : 'None'
+                    }
+                  />
                   <Select.Content>
-                    {addresses.map((a) => (
-                      <Select.Item key={a.id} value={a.id}>
-                        {addrLabel(a)}
+                    {contacts.map((c) => (
+                      <Select.Item key={c.id} value={c.id}>
+                        {contactLabel(c)}
                       </Select.Item>
                     ))}
                   </Select.Content>

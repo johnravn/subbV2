@@ -111,14 +111,17 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
   const companies = companiesQ.data ?? []
   const resolvedCompanyId = React.useMemo(() => {
     if (!companies.length) return null
-    const ls =
-      companyId && companies.some((c) => c.id === companyId) ? companyId : null
-    if (ls) return ls
+
     const server =
       serverPrefQ.data && companies.some((c) => c.id === serverPrefQ.data)
         ? serverPrefQ.data
         : null
     if (server) return server
+
+    const ls =
+      companyId && companies.some((c) => c.id === companyId) ? companyId : null
+    if (ls) return ls
+
     return companies[0]?.id ?? null
   }, [companies, companyId, serverPrefQ.data])
 
@@ -161,7 +164,8 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
   }
 
   const company = companies.find((c) => c.id === resolvedCompanyId) ?? null
-  const loading = userQ.isLoading || companiesQ.isLoading
+  const loading =
+    userQ.isLoading || companiesQ.isLoading || serverPrefQ.isLoading
 
   const value = React.useMemo<Ctx>(
     () => ({

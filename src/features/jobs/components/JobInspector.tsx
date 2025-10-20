@@ -1,14 +1,7 @@
 import * as React from 'react'
-import {
-  Badge,
-  Box,
-  Button,
-  Heading,
-  Separator,
-  Tabs,
-  Text,
-} from '@radix-ui/themes'
+import { Badge, Box, Button, Flex, Heading, Tabs, Text } from '@radix-ui/themes'
 import { Edit } from 'iconoir-react'
+import { makeWordPresentable } from '@shared/lib/generalFunctions'
 import { useQuery } from '@tanstack/react-query'
 import { jobDetailQuery } from '../api/queries'
 import OverviewTab from './tabs/OverviewTab'
@@ -18,10 +11,24 @@ import TransportTab from './tabs/TransportTab'
 import TimelineTab from './tabs/TimelineTab'
 import ContactsTab from './tabs/ContactsTab'
 import JobDialog from './dialogs/JobDialog'
+import type { JobDetail } from '../types'
+
+const ORDER: Array<JobDetail['status']> = [
+  'draft',
+  'planned',
+  'requested',
+  'confirmed',
+  'in_progress',
+  'completed',
+  'canceled',
+  'invoiced',
+  'paid',
+]
 
 export default function JobInspector({ id }: { id: string | null }) {
   // ✅ hooks first
   const [editOpen, setEditOpen] = React.useState(false)
+  const [statusTimelineOpen, setStatusTimelineOpen] = React.useState(false)
 
   const { data, isLoading } = useQuery({
     ...jobDetailQuery({ jobId: id ?? '__none__' }),
@@ -74,31 +81,61 @@ export default function JobInspector({ id }: { id: string | null }) {
           <Tabs.Trigger value="contacts">Contacts</Tabs.Trigger>
         </Tabs.List>
 
-        <Tabs.Content value="overview">
-          <Separator my="3" />
+        <Tabs.Content value="overview" mt={'10px'}>
           <OverviewTab job={job} />
         </Tabs.Content>
-        <Tabs.Content value="equipment">
-          <Separator my="3" />
+        <Tabs.Content value="equipment" mt={'10px'}>
           <EquipmentTab jobId={job.id} />
         </Tabs.Content>
-        <Tabs.Content value="crew">
-          <Separator my="3" />
+        <Tabs.Content value="crew" mt={'10px'}>
           <CrewTab jobId={job.id} />
         </Tabs.Content>
-        <Tabs.Content value="transport">
-          <Separator my="3" />
+        <Tabs.Content value="transport" mt={'10px'}>
           <TransportTab jobId={job.id} />
         </Tabs.Content>
-        <Tabs.Content value="timeline">
-          <Separator my="3" />
+        <Tabs.Content value="timeline" mt={'10px'}>
           <TimelineTab jobId={job.id} />
         </Tabs.Content>
-        <Tabs.Content value="contacts">
-          <Separator my="3" />
+        <Tabs.Content value="contacts" mt={'10px'}>
           <ContactsTab jobId={job.id} companyId={job.company_id} />
         </Tabs.Content>
       </Tabs.Root>
+    </Box>
+  )
+}
+
+function StatusTimeline(job: JobDetail, open: boolean) {
+  return (
+    <Box mt="4">
+      <Heading size="3" mb="2">
+        Status timeline
+      </Heading>
+      <Flex gap="2" wrap="wrap" align="center">
+        {ORDER.map((s, i) => {
+          const active = s === job.status
+          const past = ORDER.indexOf(s) <= ORDER.indexOf(job.status)
+          return (
+            <Flex key={s} align="center" gap="2">
+              <Badge
+                color={active ? 'blue' : 'gray'}
+                variant={active ? 'solid' : 'soft'}
+                highContrast
+              >
+                {makeWordPresentable(s)}
+              </Badge>
+              {i < ORDER.length - 1 && (
+                <div
+                  style={{
+                    width: 24,
+                    height: 1,
+                    background: 'var(--gray-6)',
+                  }}
+                />
+              )}
+            </Flex>
+          )
+        })}
+      </Flex>
     </Box>
   )
 }
