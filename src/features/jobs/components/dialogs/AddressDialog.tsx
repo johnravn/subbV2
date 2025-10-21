@@ -2,6 +2,7 @@
 import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  Badge,
   Box,
   Button,
   Dialog,
@@ -36,6 +37,8 @@ type AddressRow = {
   zip_code: string | null
   city: string | null
   country: string | null
+  deleted?: boolean | null
+  is_personal?: boolean | null
 }
 
 type AddressForm = {
@@ -71,6 +74,11 @@ export default function AddressDialog({
   // ── Selection + panel mode
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
   const [panelMode, setPanelMode] = React.useState<PanelMode>('view')
+
+  const selectedRow = React.useMemo(
+    () => rows.find((x) => x.id === selectedId) ?? null,
+    [rows, selectedId],
+  )
 
   // ── Working form (used for view/edit/create + live map)
   const emptyForm = React.useMemo<AddressForm>(
@@ -193,6 +201,9 @@ export default function AddressDialog({
       }
 
       if (panelMode === 'edit' && form.id) {
+        if (selectedRow?.is_personal) {
+          throw new Error('Personal addresses cannot be edited')
+        }
         const { error } = await supabase
           .from('addresses')
           .update(payload)
@@ -204,7 +215,7 @@ export default function AddressDialog({
       // create
       const { data, error } = await supabase
         .from('addresses')
-        .insert([payload])
+        .insert([payload]) // created addresses default to is_personal=false unless you set it
         .select('id')
         .single()
       if (error) throw error
@@ -226,10 +237,14 @@ export default function AddressDialog({
   const deleteMutation = useMutation({
     mutationFn: async () => {
       if (!form.id) throw new Error('Nothing selected to delete')
+      if (selectedRow?.is_personal)
+        throw new Error('Personal addresses cannot be deleted')
+
       const { error } = await supabase
         .from('addresses')
-        .delete()
+        .update({ deleted: true }) // ⬅️ soft delete
         .eq('id', form.id)
+
       if (error) throw error
     },
     onSuccess: async () => {
@@ -257,12 +272,12 @@ export default function AddressDialog({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Content
         maxWidth="1200px"
-        style={{ display: 'flex', flexDirection: 'column', height: '60vh' }}
+        style={{ display: 'flex', flexDirection: 'column', height: 'auto' }}
       >
         <Dialog.Title>Manage address</Dialog.Title>
 
         <Grid
-          columns={{ initial: '1', sm: '3' }}
+          columns={{ initial: '1', sm: '2', md: '3' }}
           gap="4"
           style={{ minHeight: 0, flex: 1 }}
         >
@@ -285,9 +300,9 @@ export default function AddressDialog({
             <ScrollArea
               type="auto"
               scrollbars="vertical"
-              style={{ height: 'calc(100% - 140px)' }}
+              style={{ height: 'calc(100% - 50px)' }}
             >
-              <Flex direction="column" gap="1" mt="2">
+              <Flex direction="column" gap="1" mt="2" p="1">
                 {rows.map((r) => (
                   <ListRow
                     key={r.id}
@@ -295,6 +310,7 @@ export default function AddressDialog({
                     name={r.name}
                     city={r.city}
                     onClick={() => setSelectedId(r.id)}
+                    isPersonal={!!r.is_personal}
                   />
                 ))}
                 {rows.length === 0 && (
@@ -340,16 +356,25 @@ export default function AddressDialog({
                 <>
                   <Button
                     variant="ghost"
-                    disabled={!selectedId}
-                    onClick={() => setPanelMode('edit')}
+                    disabled={!selectedId || selectedRow?.is_personal}
+                    onClick={() => {
+                      if (!selectedRow?.is_personal) setPanelMode('edit')
+                    }}
                   >
                     <EditPencil /> Edit
                   </Button>
+
                   <Button
                     variant="ghost"
                     color="red"
-                    disabled={!selectedId || deleteMutation.isPending}
-                    onClick={() => deleteMutation.mutate()}
+                    disabled={
+                      !selectedId ||
+                      selectedRow?.is_personal ||
+                      deleteMutation.isPending
+                    }
+                    onClick={() => {
+                      if (!selectedRow?.is_personal) deleteMutation.mutate()
+                    }}
                   >
                     <Trash /> Delete
                   </Button>
@@ -399,6 +424,7 @@ export default function AddressDialog({
             style={{
               maxWidth: '100%',
               height: '100%',
+              minHeight: '170px',
               overflow: 'hidden',
               borderRadius: 8,
             }}
@@ -426,17 +452,18 @@ export default function AddressDialog({
 }
 
 // ───────────────────────────────── helpers/components
-
 function ListRow({
   selected,
   name,
   city,
   onClick,
+  isPersonal,
 }: {
   selected: boolean
   name: string | null
   city: string | null
   onClick: () => void
+  isPersonal?: boolean
 }) {
   return (
     <Box
@@ -448,10 +475,14 @@ function ListRow({
         outline: selected
           ? '2px solid var(--accent-9)'
           : '1px solid var(--gray-5)',
+        opacity: isPersonal ? 0.9 : 1,
       }}
       onClick={onClick}
+      title={isPersonal ? 'Personal address (view only)' : undefined}
     >
-      <Text weight="medium">{name || '—'}</Text>
+      <Text weight="medium">
+        {name || '—'} {isPersonal ? <Badge>personal</Badge> : null}
+      </Text>
       <Text size="2" color="gray" as="div">
         {city || '—'}
       </Text>

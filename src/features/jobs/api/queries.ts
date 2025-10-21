@@ -54,12 +54,14 @@ export function addressIndexQuery({
         .select(
           `
             id, company_id, name, address_line, zip_code, city, country,
-            created_at, updated_at
+            created_at, updated_at, deleted, is_personal
           `,
         )
         .eq('company_id', companyId)
         .order('updated_at', { ascending: false })
         .limit(100)
+
+      q = q.or('deleted.is.null,deleted.eq.false')
 
       if (search.trim()) {
         // 1) Escape LIKE wildcards that users may type

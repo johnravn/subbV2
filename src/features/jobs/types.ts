@@ -35,6 +35,8 @@ export type AddressListRow = {
   zip_code: string
   city: string
   country: string
+  deleted: boolean
+  is_personal: boolean
 }
 
 export type JobDetail = {

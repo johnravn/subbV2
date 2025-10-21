@@ -217,6 +217,7 @@ export default function ProfilePage() {
         zip_code: addr.zip_code,
         city: addr.city,
         country: addr.country,
+        is_personal: true,
       }
 
       if (addressId) {
