@@ -13,11 +13,13 @@
     "check": "prettier --write . && eslint --fix"
   },
   "dependencies": {
+    "@fullcalendar/core": "^6.1.19",
+    "@fullcalendar/daygrid": "^6.1.19",
+    "@fullcalendar/interaction": "^6.1.19",
+    "@fullcalendar/list": "^6.1.19",
+    "@fullcalendar/react": "^6.1.19",
+    "@fullcalendar/timegrid": "^6.1.19",
     "@radix-ui/themes": "^3.2.1",
-    "@schedule-x/calendar": "^3.3.0",
-    "@schedule-x/events-service": "^3.3.0",
-    "@schedule-x/react": "^3.3.0",
-    "@schedule-x/theme-default": "^3.3.0",
     "@supabase/supabase-js": "^2.58.0",
     "@tailwindcss/vite": "^4.0.6",
     "@tanstack/react-devtools": "^0.2.2",
