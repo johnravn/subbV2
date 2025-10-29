@@ -1,5 +1,12 @@
 import { supabase } from '@shared/api/supabase'
-import type { AddressListRow, JobDetail, JobListRow, JobStatus } from '../types'
+import type {
+  AddressListRow,
+  JobDetail,
+  JobListRow,
+  JobStatus,
+  TimePeriodLite,
+  TimePeriodStatus,
+} from '../types'
 
 function escapeForPostgrestOr(value: string) {
   // PostgREST uses commas and parentheses to separate conditions.
@@ -115,5 +122,61 @@ export function jobDetailQuery({ jobId }: { jobId: string }) {
       if (error) throw error
       return data as JobDetail | null
     },
+  }
+}
+
+// Time Periods for a job
+export function jobTimePeriodsQuery({ jobId }: { jobId: string }) {
+  return {
+    queryKey: ['jobs', jobId, 'time_periods'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('time_periods')
+        .select('id, company_id, job_id, title, status, start_at, end_at')
+        .eq('job_id', jobId)
+        .order('start_at', { ascending: true })
+      if (error) throw error
+      return data as Array<TimePeriodLite>
+    },
+  }
+}
+
+// Create/update time period
+export async function upsertTimePeriod(payload: {
+  id?: string
+  job_id: string
+  company_id: string
+  title: string
+  status: TimePeriodStatus
+  start_at: string // ISO
+  end_at: string // ISO
+}) {
+  if (payload.id) {
+    const { error } = await supabase
+      .from('time_periods')
+      .update({
+        title: payload.title,
+        status: payload.status,
+        start_at: payload.start_at,
+        end_at: payload.end_at,
+      })
+      .eq('id', payload.id)
+    if (error) throw error
+    return payload.id
+  } else {
+    const { data, error } = await supabase
+      .from('time_periods')
+      .insert({
+        job_id: payload.job_id,
+        company_id: payload.company_id,
+        title: payload.title,
+        status: payload.status,
+        start_at: payload.start_at,
+        end_at: payload.end_at,
+      })
+      .select('id')
+      .single()
+    if (error) throw error
+    return data.id as string
   }
 }

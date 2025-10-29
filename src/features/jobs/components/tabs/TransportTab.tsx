@@ -26,22 +26,22 @@ export default function TransportTab({ jobId }: { jobId: string }) {
   const { data } = useQuery({
     queryKey: ['jobs.transport', jobId],
     queryFn: async () => {
-      const { data: reservations, error: rErr } = await supabase
-        .from('reservations')
+      const { data: timePeriods, error: rErr } = await supabase
+        .from('time_periods')
         .select('id')
         .eq('job_id', jobId)
       if (rErr) throw rErr
-      const resIds = reservations.map((r) => r.id)
+      const resIds = timePeriods.map((r) => r.id)
       if (!resIds.length) return [] as Array<ReservedVehicleRow>
       const { data: rows, error } = await supabase
         .from('reserved_vehicles')
         .select(
           `
-          id, reservation_id, vehicle_id, external_status, external_note,
+          id, time_period_id, vehicle_id, external_status, external_note,
           vehicle:vehicle_id ( id, name, external_owner_id )
         `,
         )
-        .in('reservation_id', resIds)
+        .in('time_period_id', resIds)
       if (error) throw error
       // CHECK THIS
       return rows as unknown as Array<ReservedVehicleRow>

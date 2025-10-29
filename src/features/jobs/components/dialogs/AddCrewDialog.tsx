@@ -60,13 +60,13 @@ export default function AddCrewDialog({
     mutationFn: async () => {
       if (!userId) throw new Error('Choose a person')
       const { data: resIdRow, error: resErr } = await supabase.rpc(
-        'ensure_default_reservation',
+        'ensure_default_time_period',
         { p_job_id: jobId },
       )
       if (resErr) throw resErr
-      const reservation_id = resIdRow?.id ?? resIdRow
+      const time_period_id = resIdRow?.id ?? resIdRow
       const { error } = await supabase.from('reserved_crew').insert({
-        reservation_id,
+        time_period_id,
         user_id: userId,
         assignment: assignment || null,
         status,

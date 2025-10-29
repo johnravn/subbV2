@@ -33,7 +33,7 @@ export default function ContactsTab({
           `,
             )
             .eq('job_id', jobId),
-          supabase.from('reservations').select('id').eq('job_id', jobId),
+          supabase.from('time_periods').select('id').eq('job_id', jobId),
         ])
       if (e1) throw e1
       if (e2) throw e2
@@ -43,7 +43,7 @@ export default function ContactsTab({
         const { data: rows, error } = await supabase
           .from('reserved_crew')
           .select('user:user_id ( display_name, email )')
-          .in('reservation_id', resIds)
+          .in('time_period_id', resIds)
         if (error) throw error
         crew = rows.map((r: any) => ({
           name: r.user?.display_name ?? '—',

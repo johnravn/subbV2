@@ -15,8 +15,11 @@ import { Edit, Trash } from 'iconoir-react'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { supabase } from '@shared/api/supabase'
+import { toEventInputs } from '@features/calendar/components/domain'
+import InspectorCalendar from '@features/calendar/components/InspectorCalendar'
 import { markVehicleDeleted, vehicleDetailQuery } from '../api/queries'
 import AddEditVehicleDialog from './dialogs/AddEditVehicleDialog'
+import type { CalendarRecord } from '@features/calendar/components/domain'
 
 export default function VehicleInspector({ id }: { id: string | null }) {
   const { companyId } = useCompany()
@@ -30,6 +33,30 @@ export default function VehicleInspector({ id }: { id: string | null }) {
     ...vehicleDetailQuery({ companyId: companyId ?? '', id: id ?? '' }),
     enabled,
   })
+
+  const jobId = 'kasdk'
+
+  const rows: Array<CalendarRecord> = [
+    {
+      id: 'j1',
+      title: 'Job: Concert build',
+      start: '2025-10-27T08:30:00',
+      end: '2025-10-27T12:00:00',
+      kind: 'job',
+      ref: { jobId },
+    },
+    {
+      id: 'i1',
+      title: 'Item: Mixer',
+      start: '2025-10-27T07:00:00',
+      end: '2025-10-28T10:00:00',
+      kind: 'item',
+      ref: { jobId, itemId: 'item_42' },
+    },
+    // ...
+  ]
+
+  const events = React.useMemo(() => toEventInputs(rows), [rows])
 
   const del = useMutation({
     mutationFn: async () => {
@@ -181,6 +208,14 @@ export default function VehicleInspector({ id }: { id: string | null }) {
         />
         <Field label="Notes" value={v.notes || '—'} />
       </Flex>
+
+      <InspectorCalendar
+        events={events}
+        calendarHref={`/calendar?jobId=${jobId}`}
+        onCreate={(e) => console.log('create in inspector', e)}
+        onUpdate={(id, patch) => console.log('update', id, patch)}
+        onDelete={(id) => console.log('delete', id)}
+      />
 
       {/* Edit dialog */}
       <AddEditVehicleDialog

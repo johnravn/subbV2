@@ -62,13 +62,13 @@ export default function BookVehicleDialog({
     mutationFn: async () => {
       if (!vehicleId) throw new Error('Choose a vehicle')
       const { data: resIdRow, error: resErr } = await supabase.rpc(
-        'ensure_default_reservation',
+        'ensure_default_time_period',
         { p_job_id: jobId },
       )
       if (resErr) throw resErr
-      const reservation_id = resIdRow?.id ?? resIdRow
+      const time_period_id = resIdRow?.id ?? resIdRow
       const v = vehicles.find((x) => x.id === vehicleId)
-      const payload: any = { reservation_id, vehicle_id: vehicleId }
+      const payload: any = { time_period_id, vehicle_id: vehicleId }
       if (v?.external_owner_id) {
         payload.external_status = status
         payload.external_note = note || null

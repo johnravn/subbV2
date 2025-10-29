@@ -1,3 +1,4 @@
+// src/features/jobs/components/tabs/EquipmentTab.tsx
 import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -13,6 +14,7 @@ import {
 import { supabase } from '@shared/api/supabase'
 import { Edit, Plus } from 'iconoir-react'
 import { useCompany } from '@shared/companies/CompanyProvider'
+import TimePeriodPicker from '@features/calendar/components/reservations/TimePeriodPicker'
 import BookItemsDialog from '../dialogs/BookItemsDialog'
 import EditItemBookingDialog from '../dialogs/EditItemBookingDialog'
 import type { ExternalReqStatus, ItemLite, ReservedItemRow } from '../../types'
@@ -25,27 +27,29 @@ export default function EquipmentTab({ jobId }: { jobId: string }) {
   const { companyId } = useCompany()
   const canBook = !!companyId
 
+  const [timePeriodId, setTimePeriodId] = React.useState<string | null>(null)
+
   const { data } = useQuery({
     queryKey: ['jobs.equipment', jobId],
     queryFn: async () => {
-      const { data: reservations, error: rErr } = await supabase
-        .from('reservations')
+      const { data: timePeriods, error: rErr } = await supabase
+        .from('time_periods')
         .select('id')
         .eq('job_id', jobId)
       if (rErr) throw rErr
-      const resIds = reservations.map((r) => r.id)
+      const resIds = timePeriods.map((r) => r.id)
       if (!resIds.length) return { internal: [], external: [] }
 
       const { data: items, error } = await supabase
         .from('reserved_items')
         .select(
           `
-          id, reservation_id, item_id, quantity, source_group_id, source_kind,
+          id, time_periods_id, item_id, quantity, source_group_id, source_kind,
           external_status, external_note, forced,
           item:item_id ( id, name, external_owner_id )
         `,
         )
-        .in('reservation_id', resIds)
+        .in('time_period_id', resIds)
       if (error) throw error
 
       const rows = items as Array<ReservedItemRow>
@@ -74,6 +78,11 @@ export default function EquipmentTab({ jobId }: { jobId: string }) {
 
   return (
     <div>
+      <TimePeriodPicker
+        jobId={jobId}
+        value={timePeriodId}
+        onChange={setTimePeriodId}
+      />
       <Heading size="3" mb="2">
         Internal equipment
       </Heading>
@@ -134,6 +143,7 @@ export default function EquipmentTab({ jobId }: { jobId: string }) {
               onOpenChange={setBookItemsOpen}
               jobId={jobId}
               companyId={companyId} // now definitely string
+              timePeriodId={timePeriodId} // NEW
             />
           )}
         </Box>
@@ -232,6 +242,7 @@ function StatusBadge({
 
 // supabase sometimes returns nested relation as array; normalize
 function firstItem(it: ReservedItemRow['item']): ItemLite | null {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   if (!it) return null
   return Array.isArray(it) ? (it[0] ?? null) : it
 }

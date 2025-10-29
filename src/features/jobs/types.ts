@@ -103,15 +103,37 @@ export type ItemLite = {
  */
 export type ReservedItemRow = {
   id: UUID
-  reservation_id: UUID
+  time_period_id: UUID
   item_id: UUID
   quantity: number
   source_group_id: UUID | null
   source_kind: 'direct' | 'group'
   external_status: ExternalReqStatus | null
   external_note: string | null
-  forced: boolean | null
-  item?: ItemLite | Array<ItemLite> | null
+  forced: boolean
+  start_at: string | null // line override (ISO) - nullable => inherits header
+  end_at: string | null // line override (ISO)
+  item:
+    | { id: UUID; name: string; external_owner_id: UUID | null }
+    | Array<{ id: UUID; name: string; external_owner_id: UUID | null }>
+}
+
+export type TimePeriodStatus =
+  | 'tentative'
+  | 'requested'
+  | 'confirmed'
+  | 'in_progress'
+  | 'completed'
+  | 'canceled'
+
+export type TimePeriodLite = {
+  id: UUID
+  job_id: UUID | null
+  company_id: UUID
+  title: string | null
+  status: TimePeriodStatus
+  start_at: string // ISO
+  end_at: string // ISO
 }
 
 /* ---------- Crew tab ---------- */
@@ -120,7 +142,7 @@ export type CrewReqStatus = 'planned' | 'requested' | 'declined' | 'accepted'
 
 export type ReservedCrewRow = {
   id: UUID
-  reservation_id: UUID
+  time_period_id: UUID
   user_id: UUID
   assignment: string | null
   notes: string | null
@@ -138,7 +160,7 @@ export type ReservedCrewRow = {
 
 export type ReservedVehicleRow = {
   id: UUID
-  reservation_id: UUID
+  time_period_id: UUID
   vehicle_id: UUID
   external_status: ExternalReqStatus | null
   external_note: string | null

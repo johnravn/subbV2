@@ -23,19 +23,45 @@ export default function EditItemBookingDialog({
   )
   const [note, setNote] = React.useState(row.external_note ?? '')
 
+  const [useTimePeriodWindow, setUseTimePeriodWindow] = React.useState<boolean>(
+    !row.start_at && !row.end_at,
+  )
+  const [lineStart, setLineStart] = React.useState<string>(
+    row.start_at ? toLocal(row.start_at) : '',
+  )
+  const [lineEnd, setLineEnd] = React.useState<string>(
+    row.end_at ? toLocal(row.end_at) : '',
+  )
+
   React.useEffect(() => {
     if (!open) return
     setQuantity(row.quantity)
     setStatus(row.external_status as ExternalReqStatus)
     setNote(row.external_note ?? '')
+    setUseTimePeriodWindow(!row.start_at && !row.end_at)
+    setLineStart(row.start_at ? toLocal(row.start_at) : '')
+    setLineEnd(row.end_at ? toLocal(row.end_at) : '')
   }, [open, row])
 
   const save = useMutation({
     mutationFn: async () => {
+      const payload: any = {
+        quantity,
+        external_status: status,
+        external_note: note,
+      }
+      if (useTimePeriodWindow) {
+        payload.start_at = null
+        payload.end_at = null
+      } else {
+        payload.start_at = lineStart ? new Date(lineStart).toISOString() : null
+        payload.end_at = lineEnd ? new Date(lineEnd).toISOString() : null
+      }
       const { error } = await supabase
         .from('reserved_items')
-        .update({ quantity, external_status: status, external_note: note })
+        .update(payload)
         .eq('id', row.id)
+
       if (error) throw error
     },
     onSuccess: async () => {
@@ -78,6 +104,30 @@ export default function EditItemBookingDialog({
             placeholder="Optional"
           />
         </Field>
+        <Field label="Timing">
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={useTimePeriodWindow}
+              onChange={(e) => setUseTimePeriodWindow(e.target.checked)}
+            />
+            <span>Use time period window</span>
+          </label>
+          {!useTimePeriodWindow && (
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <TextField.Root
+                type="datetime-local"
+                value={lineStart}
+                onChange={(e) => setLineStart(e.target.value)}
+              />
+              <TextField.Root
+                type="datetime-local"
+                value={lineEnd}
+                onChange={(e) => setLineEnd(e.target.value)}
+              />
+            </div>
+          )}
+        </Field>
 
         <Flex justify="end" gap="2" mt="3">
           <Dialog.Close>
@@ -111,4 +161,15 @@ function Field({
       {children}
     </div>
   )
+}
+
+function toLocal(iso: string) {
+  const d = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const y = d.getFullYear()
+  const m = pad(d.getMonth() + 1)
+  const da = pad(d.getDate())
+  const h = pad(d.getHours())
+  const mi = pad(d.getMinutes())
+  return `${y}-${m}-${da}T${h}:${mi}`
 }

@@ -12,6 +12,7 @@ import {
   TextField,
 } from '@radix-ui/themes'
 import { supabase } from '@shared/api/supabase'
+import { upsertTimePeriod } from '@features/jobs/api/queries'
 import { makeWordPresentable } from '@shared/lib/generalFunctions'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import type { JobDetail, JobStatus, UUID } from '../../types'
@@ -150,6 +151,24 @@ export default function JobDialog({
           .select('id')
           .single()
         if (error) throw error
+
+        if (startAt && endAt) {
+          try {
+            await upsertTimePeriod({
+              job_id: data.id,
+              company_id: companyId,
+              title: 'Job duration',
+              status: jobStatusToTimePeriodStatus(status),
+              start_at: startAt,
+              end_at: endAt,
+            })
+          } catch (e: any) {
+            // Don’t fail the whole job create if time period fails — just inform the user.
+            // You already have `useToast()` in this component.
+            console.warn('Failed to create Job duration time period', e)
+          }
+        }
+
         return data.id as UUID
       } else {
         if (!initialData) throw new Error('Missing initial data')
@@ -167,6 +186,38 @@ export default function JobDialog({
           })
           .eq('id', initialData.id)
         if (error) throw error
+        // Keep the "Job duration" reservation in sync with the job when editing
+        if (startAt && endAt) {
+          // Find existing "Job duration" reservation for this job (if any)
+          const { data: existing, error: exErr } = await supabase
+            .from('time_periods')
+            .select('id')
+            .eq('job_id', initialData.id)
+            .eq('title', 'Job duration')
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .maybeSingle()
+          if (exErr) throw exErr
+
+          // Upsert with new window + mapped status
+          await upsertTimePeriod({
+            id: existing?.id, // update if found, else create
+            job_id: initialData.id,
+            company_id: companyId,
+            title: 'Job duration',
+            status: jobStatusToTimePeriodStatus(status),
+            start_at: startAt,
+            end_at: endAt,
+          })
+        } else {
+          // If job no longer has a time window, softly hide any existing "Job duration"
+          await supabase
+            .from('time_periods')
+            .update({ deleted: true })
+            .eq('job_id', initialData.id)
+            .eq('title', 'Job duration')
+        }
+
         return initialData.id
       }
     },
@@ -178,6 +229,10 @@ export default function JobDialog({
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['jobs-index'], exact: false }),
         qc.invalidateQueries({ queryKey: ['jobs-detail', id], exact: false }),
+        qc.invalidateQueries({
+          queryKey: ['jobs', id, 'time_periods'],
+          exact: false,
+        }),
       ])
 
       onOpenChange(false)
@@ -391,4 +446,29 @@ function fromLocalInput(local: string) {
   // treat as local and convert to ISO
   const d = new Date(local)
   return d.toISOString()
+}
+
+function jobStatusToTimePeriodStatus(
+  s: string,
+):
+  | 'tentative'
+  | 'requested'
+  | 'confirmed'
+  | 'in_progress'
+  | 'completed'
+  | 'canceled' {
+  switch (s) {
+    case 'requested':
+      return 'requested'
+    case 'confirmed':
+      return 'confirmed'
+    case 'in_progress':
+      return 'in_progress'
+    case 'completed':
+      return 'completed'
+    case 'canceled':
+      return 'canceled'
+    default:
+      return 'tentative' // draft/planned/invoiced/paid → tentative
+  }
 }

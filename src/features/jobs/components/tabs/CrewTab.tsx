@@ -20,22 +20,22 @@ export default function CrewTab({ jobId }: { jobId: string }) {
   const { data } = useQuery({
     queryKey: ['jobs.crew', jobId],
     queryFn: async () => {
-      const { data: reservations, error: rErr } = await supabase
-        .from('reservations')
+      const { data: timePeriods, error: rErr } = await supabase
+        .from('time_periods')
         .select('id')
         .eq('job_id', jobId)
       if (rErr) throw rErr
-      const resIds = reservations.map((r) => r.id)
+      const resIds = timePeriods.map((r) => r.id)
       if (!resIds.length) return [] as Array<ReservedCrewRow>
       const { data: rows, error } = await supabase
         .from('reserved_crew')
         .select(
           `
-          id, reservation_id, user_id, assignment, notes, status, start_at, end_at,
+          id, time_period_id, user_id, assignment, notes, status, start_at, end_at,
           user:user_id ( user_id, display_name, email )
         `,
         )
-        .in('reservation_id', resIds)
+        .in('time_period_id', resIds)
       if (error) throw error
       return rows as unknown as Array<ReservedCrewRow>
     },
