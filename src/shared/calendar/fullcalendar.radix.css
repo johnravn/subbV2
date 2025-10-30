@@ -1,0 +1,103 @@
+/* Radix-themed FullCalendar styling */
+
+:root {
+  --fc-page-bg-color: transparent;
+  --fc-neutral-bg-color: var(--gray-a2);
+  --fc-neutral-text-color: var(--gray-11);
+  --fc-border-color: var(--gray-a6);
+  --fc-button-text-color: var(--gray-12);
+  --fc-button-bg-color: var(--gray-a3);
+  --fc-button-border-color: var(--gray-a6);
+  --fc-button-hover-bg-color: var(--gray-a4);
+  --fc-button-hover-border-color: var(--gray-a7);
+  --fc-button-active-bg-color: var(--gray-a5);
+  --fc-button-active-border-color: var(--gray-a8);
+  --fc-today-bg-color: var(--blue-a3);
+  --fc-now-indicator-color: var(--red-10);
+}
+
+/* Container */
+.companyCalendar .fc, .jobCalendar .fc {
+  font-family: inherit;
+  color: var(--gray-12);
+}
+
+/* Toolbar */
+.companyCalendar .fc .fc-toolbar, .jobCalendar .fc .fc-toolbar {
+  margin-bottom: 8px;
+}
+.companyCalendar .fc .fc-toolbar-title, .jobCalendar .fc .fc-toolbar-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-12);
+}
+.companyCalendar .fc .fc-button, .jobCalendar .fc .fc-button {
+  border-radius: 8px;
+  border: 1px solid var(--fc-button-border-color);
+  padding: 4px 10px;
+}
+.companyCalendar .fc .fc-button-primary, .jobCalendar .fc .fc-button-primary {
+  background: var(--fc-button-bg-color);
+  color: var(--fc-button-text-color);
+}
+.companyCalendar .fc .fc-button-primary:hover, .jobCalendar .fc .fc-button-primary:hover {
+  background: var(--fc-button-hover-bg-color);
+}
+.companyCalendar .fc .fc-button-active, .jobCalendar .fc .fc-button-active {
+  background: var(--fc-button-active-bg-color);
+}
+
+/* Grid */
+.companyCalendar .fc-theme-standard td, .companyCalendar .fc-theme-standard th,
+.jobCalendar .fc-theme-standard td, .jobCalendar .fc-theme-standard th {
+  border-color: var(--fc-border-color);
+}
+.companyCalendar .fc .fc-timegrid-axis-cushion,
+.jobCalendar .fc .fc-timegrid-axis-cushion {
+  color: var(--gray-11);
+}
+
+/* Today highlight */
+.companyCalendar .fc .fc-day-today, .jobCalendar .fc .fc-day-today {
+  background: var(--fc-today-bg-color);
+}
+
+/* Event appearance */
+.companyCalendar .fc .fc-event, .jobCalendar .fc .fc-event {
+  border-radius: 8px;
+  border: none;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.06);
+}
+.companyCalendar .fc .fc-event .fc-event-main, .jobCalendar .fc .fc-event .fc-event-main {
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
+/* Now indicator */
+.companyCalendar .fc .fc-timegrid-now-indicator-line,
+.jobCalendar .fc .fc-timegrid-now-indicator-line {
+  border-color: var(--fc-now-indicator-color);
+}
+.companyCalendar .fc .fc-timegrid-now-indicator-arrow,
+.jobCalendar .fc .fc-timegrid-now-indicator-arrow {
+  border-color: var(--fc-now-indicator-color);
+}
+
+/* Day headers */
+.companyCalendar .fc .fc-col-header-cell-cushion,
+.jobCalendar .fc .fc-col-header-cell-cushion {
+  font-weight: 600;
+  color: var(--gray-12);
+}
+
+/* List view */
+.companyCalendar .fc .fc-list, .jobCalendar .fc .fc-list {
+  border-radius: 8px;
+  border: 1px solid var(--fc-border-color);
+}
+.companyCalendar .fc .fc-list-day-cushion, .jobCalendar .fc .fc-list-day-cushion {
+  background: var(--gray-a3);
+}
+.companyCalendar .fc .fc-list-event:hover td, .jobCalendar .fc .fc-list-event:hover td {
+  background: var(--gray-a2);
+}

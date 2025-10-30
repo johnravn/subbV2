@@ -13,6 +13,7 @@ import {
   TextField,
 } from '@radix-ui/themes'
 import FullCalendar from '@fullcalendar/react'
+import '@shared/calendar/fullcalendar.radix.css'
 import enLocale from '@fullcalendar/core/locales/en-gb'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'

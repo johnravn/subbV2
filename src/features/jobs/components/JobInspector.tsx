@@ -20,6 +20,7 @@ import CrewTab from './tabs/CrewTab'
 import TransportTab from './tabs/TransportTab'
 import TimelineTab from './tabs/TimelineTab'
 import ContactsTab from './tabs/ContactsTab'
+import CalendarTab from './tabs/CalendarTab'
 import JobDialog from './dialogs/JobDialog'
 import { supabase } from '@shared/api/supabase'
 import { useToast } from '@shared/ui/toast/ToastProvider'
@@ -138,6 +139,7 @@ export default function JobInspector({
         <Tabs.List wrap="wrap">
           <Tabs.Trigger value="overview">Overview</Tabs.Trigger>
           <Tabs.Trigger value="timeline">Timeline</Tabs.Trigger>
+          <Tabs.Trigger value="calendar">Calendar</Tabs.Trigger>
           <Tabs.Trigger value="equipment">Equipment</Tabs.Trigger>
           <Tabs.Trigger value="crew">Crew</Tabs.Trigger>
           <Tabs.Trigger value="transport">Transportation</Tabs.Trigger>
@@ -149,6 +151,9 @@ export default function JobInspector({
         </Tabs.Content>
         <Tabs.Content value="timeline" mt={'10px'}>
           <TimelineTab jobId={job.id} />
+        </Tabs.Content>
+        <Tabs.Content value="calendar" mt={'10px'}>
+          <CalendarTab jobId={job.id} />
         </Tabs.Content>
         <Tabs.Content value="equipment" mt={'10px'}>
           <EquipmentTab jobId={job.id} />

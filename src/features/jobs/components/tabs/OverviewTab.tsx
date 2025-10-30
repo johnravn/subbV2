@@ -8,10 +8,10 @@ import {
   Heading,
   IconButton,
   Separator,
+  Skeleton,
   Text,
   TextField,
 } from '@radix-ui/themes'
-import MapEmbed from '@shared/maps/MapEmbed'
 import { CopyIconButton } from '@shared/lib/CopyIconButton'
 import { fmtVAT } from '@shared/lib/generalFunctions'
 import { prettyPhone } from '@shared/phone/phone'
@@ -40,8 +40,8 @@ export default function OverviewTab({ job }: { job: JobDetail }) {
   const { data: authUser } = useQuery({
     queryKey: ['auth', 'user'],
     queryFn: async () => {
-      const { data, error } = await supabase.auth.getUser()
-      if (error) throw error
+      const { data, error: authError } = await supabase.auth.getUser()
+      if (authError) throw authError
       return data.user
     },
   })
@@ -168,7 +168,7 @@ export default function OverviewTab({ job }: { job: JobDetail }) {
                   borderRadius: 8,
                 }}
               >
-                <MapEmbed query={addr} zoom={14} />
+                <MapWithSkeleton query={addr} zoom={14} />
               </Box>
             )}
           </Grid>
@@ -215,4 +215,60 @@ function KV({ label, children }: { label: string; children: React.ReactNode }) {
 
 function fmt(iso?: string | null) {
   return iso ? new Date(iso).toLocaleString() : '—'
+}
+
+function MapWithSkeleton({ query, zoom }: { query: string; zoom?: number }) {
+  const [isLoading, setIsLoading] = React.useState(true)
+
+  return (
+    <Box style={{ position: 'relative', width: '100%', aspectRatio: '16/9' }}>
+      {isLoading && (
+        <Skeleton
+          style={{
+            position: 'absolute',
+            inset: 0,
+            borderRadius: 8,
+            width: '100%',
+            height: '100%',
+          }}
+        />
+      )}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          opacity: isLoading ? 0 : 1,
+          transition: 'opacity 0.3s ease-in-out',
+        }}
+      >
+        <iframe
+          title="Google Maps location"
+          src={buildMapUrl(query, zoom)}
+          loading="lazy"
+          referrerPolicy="no-referrer-when-downgrade"
+          allowFullScreen
+          onLoad={() => setIsLoading(false)}
+          style={{
+            border: 0,
+            width: '100%',
+            height: '100%',
+            borderRadius: 8,
+          }}
+        />
+      </div>
+    </Box>
+  )
+}
+
+function buildMapUrl(query: string, zoom?: number) {
+  const mapsKey = import.meta.env.VITE_GOOGLE_MAPS_PLATFORM_API_KEY as
+    | string
+    | undefined
+  if (!mapsKey) return ''
+
+  const url = new URL('https://www.google.com/maps/embed/v1/place')
+  url.searchParams.set('q', query)
+  if (zoom != null) url.searchParams.set('zoom', String(zoom))
+  url.searchParams.set('key', mapsKey)
+  return url.toString()
 }
