@@ -20,24 +20,9 @@ export default function BookVehicleDialog({
   const [vehicleId, setVehicleId] = React.useState<UUID | ''>('')
   const [status, setStatus] = React.useState<ExternalReqStatus>('planned')
   const [note, setNote] = React.useState('')
-  const [startAt, setStartAt] = React.useState('')
-  const [endAt, setEndAt] = React.useState('')
+  // Times come from the selected time period
 
-  useQuery({
-    queryKey: ['job-times', jobId],
-    enabled: open,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('jobs')
-        .select('start_at, end_at')
-        .eq('id', jobId)
-        .single()
-      if (error) throw error
-      setStartAt(data.start_at ?? '')
-      setEndAt(data.end_at ?? '')
-      return data
-    },
-  })
+  // No job-times preload required
 
   const { data: vehicles = [] } = useQuery({
     queryKey: ['company', companyId, 'vehicles'],
@@ -103,20 +88,7 @@ export default function BookVehicleDialog({
             </Select.Content>
           </Select.Root>
         </Field>
-        <Field label="Start">
-          <TextField.Root
-            type="datetime-local"
-            value={toLocal(startAt)}
-            onChange={(e) => setStartAt(fromLocal(e.target.value))}
-          />
-        </Field>
-        <Field label="End">
-          <TextField.Root
-            type="datetime-local"
-            value={toLocal(endAt)}
-            onChange={(e) => setEndAt(fromLocal(e.target.value))}
-          />
-        </Field>
+        {/* Start/end are defined by the selected time period */}
         {selected?.external_owner_id && (
           <>
             <Field label="External status">
@@ -258,6 +230,4 @@ function Field({
     </div>
   )
 }
-const toLocal = (iso?: string | null) =>
-  !iso ? '' : new Date(iso).toISOString().slice(0, 16)
-const fromLocal = (v: string) => (v ? new Date(v).toISOString() : '')
+// no local time helpers needed here

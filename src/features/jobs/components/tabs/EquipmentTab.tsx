@@ -671,9 +671,7 @@ function ExternalEquipmentTable({
                     ) : (
                       <NavArrowRight width={18} height={18} />
                     )}
-                    <Badge color="blue" variant="soft" size="2">
-                      {ownerName ?? ownerId}
-                    </Badge>
+                    {ownerName ?? ownerId}
                     <Text size="2" color="gray">
                       ({ownerItems.length}{' '}
                       {ownerItems.length === 1 ? 'item' : 'items'})

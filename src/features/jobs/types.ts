@@ -178,7 +178,6 @@ export type ReservedCrewRow = {
   id: UUID
   time_period_id: UUID
   user_id: UUID
-  assignment: string | null
   notes: string | null
   status: CrewReqStatus
   start_at: string | null

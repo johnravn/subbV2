@@ -1082,11 +1082,9 @@ export type Database = {
           assignment: string | null
           created_at: string
           during: unknown
-          end_at: string | null
           id: string
           notes: string | null
           requested_at: string | null
-          start_at: string | null
           status: Database["public"]["Enums"]["crew_request_status"]
           time_period_id: string
           user_id: string
@@ -1095,11 +1093,9 @@ export type Database = {
           assignment?: string | null
           created_at?: string
           during?: unknown
-          end_at?: string | null
           id?: string
           notes?: string | null
           requested_at?: string | null
-          start_at?: string | null
           status?: Database["public"]["Enums"]["crew_request_status"]
           time_period_id: string
           user_id: string
@@ -1108,11 +1104,9 @@ export type Database = {
           assignment?: string | null
           created_at?: string
           during?: unknown
-          end_at?: string | null
           id?: string
           notes?: string | null
           requested_at?: string | null
-          start_at?: string | null
           status?: Database["public"]["Enums"]["crew_request_status"]
           time_period_id?: string
           user_id?: string
@@ -1332,9 +1326,12 @@ export type Database = {
           during: unknown
           end_at: string
           id: string
+          is_role: boolean | null
           job_id: string | null
+          needed_count: number | null
           notes: string | null
           reserved_by_user_id: string | null
+          role_category: string | null
           start_at: string
           title: string | null
           updated_at: string | null
@@ -1347,9 +1344,12 @@ export type Database = {
           during?: unknown
           end_at: string
           id?: string
+          is_role?: boolean | null
           job_id?: string | null
+          needed_count?: number | null
           notes?: string | null
           reserved_by_user_id?: string | null
+          role_category?: string | null
           start_at: string
           title?: string | null
           updated_at?: string | null
@@ -1362,9 +1362,12 @@ export type Database = {
           during?: unknown
           end_at?: string
           id?: string
+          is_role?: boolean | null
           job_id?: string | null
+          needed_count?: number | null
           notes?: string | null
           reserved_by_user_id?: string | null
+          role_category?: string | null
           start_at?: string
           title?: string | null
           updated_at?: string | null

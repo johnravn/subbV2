@@ -159,7 +159,7 @@ export default function JobInspector({
           <EquipmentTab jobId={job.id} />
         </Tabs.Content>
         <Tabs.Content value="crew" mt={'10px'}>
-          <CrewTab jobId={job.id} />
+          <CrewTab jobId={job.id} companyId={job.company_id} />
         </Tabs.Content>
         <Tabs.Content value="transport" mt={'10px'}>
           <TransportTab jobId={job.id} />

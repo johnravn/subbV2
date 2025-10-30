@@ -1,7 +1,16 @@
 // src/features/jobs/components/dialogs/AddCrewDialog.tsx
 import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Dialog, Flex, Select, TextField } from '@radix-ui/themes'
+import {
+  Box,
+  Button,
+  Dialog,
+  Flex,
+  Select,
+  Separator,
+  Text,
+  TextField,
+} from '@radix-ui/themes'
 import { supabase } from '@shared/api/supabase'
 import type { CrewReqStatus, UUID } from '../../types'
 
@@ -16,18 +25,27 @@ export default function AddCrewDialog({
 }) {
   const qc = useQueryClient()
   const [userId, setUserId] = React.useState<UUID | ''>('')
-  const [assignment, setAssignment] = React.useState('')
+  const [search, setSearch] = React.useState('')
   const [status, setStatus] = React.useState<CrewReqStatus>('planned')
-  const [startAt, setStartAt] = React.useState('')
-  const [endAt, setEndAt] = React.useState('')
+  const [timePeriodId, setTimePeriodId] = React.useState<string>('')
 
-  const { data: people = [] } = useQuery({
-    queryKey: ['crew-picker'],
+  // search crew by name/email
+  const { data: people = [], isFetching } = useQuery({
+    queryKey: ['crew-picker', search],
     enabled: open,
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from('profiles')
         .select('user_id, display_name, email')
+        .limit(20)
+
+      if (search.trim()) {
+        q = q.or(
+          `display_name.ilike.%${search.trim()}%,email.ilike.%${search.trim()}%`,
+        )
+      }
+
+      const { data, error } = await q
       if (error) throw error
       return data as Array<{
         user_id: UUID
@@ -37,41 +55,51 @@ export default function AddCrewDialog({
     },
   })
 
-  // preload job times
-  useQuery({
-    queryKey: ['job-times', jobId],
+  // Load roles (time periods with is_role = true) for this job
+  const { data: roles = [] } = useQuery({
+    queryKey: ['jobs', jobId, 'time_periods', 'roles'],
     enabled: open,
     queryFn: async () => {
+      // Try with is_role filter (assumes column exists)
       const { data, error } = await supabase
-        .from('jobs')
-        .select('start_at, end_at')
-        .eq('id', jobId)
-        .single()
-      if (error) throw error
-      const s = (data.start_at as string | null) ?? ''
-      const e = (data.end_at as string | null) ?? ''
-      setStartAt(s)
-      setEndAt(e)
-      return data
+        .from('time_periods')
+        .select('id, title, start_at, end_at')
+        .eq('job_id', jobId)
+        .eq('is_role', true)
+        .order('start_at', { ascending: true })
+
+      // If error (column might not exist), return empty array
+      // This prevents crashes but shows empty state until migration is applied
+      if (error) {
+        console.warn(
+          'is_role column may not exist yet. Please run migration:',
+          error,
+        )
+        return []
+      }
+
+      return data as Array<{
+        id: string
+        title: string | null
+        start_at: string | null
+        end_at: string | null
+      }>
     },
   })
+
+  React.useEffect(() => {
+    if (!open) return
+    if (roles.length && !timePeriodId) setTimePeriodId(roles[0].id)
+  }, [open, roles, timePeriodId])
 
   const save = useMutation({
     mutationFn: async () => {
       if (!userId) throw new Error('Choose a person')
-      const { data: resIdRow, error: resErr } = await supabase.rpc(
-        'ensure_default_time_period',
-        { p_job_id: jobId },
-      )
-      if (resErr) throw resErr
-      const time_period_id = resIdRow?.id ?? resIdRow
+      if (!timePeriodId) throw new Error('Choose a role/time period')
       const { error } = await supabase.from('reserved_crew').insert({
-        time_period_id,
+        time_period_id: timePeriodId,
         user_id: userId,
-        assignment: assignment || null,
         status,
-        start_at: startAt || null,
-        end_at: endAt || null,
       })
       if (error) throw error
     },
@@ -79,12 +107,11 @@ export default function AddCrewDialog({
       await qc.invalidateQueries({ queryKey: ['jobs.crew', jobId] })
       onOpenChange(false)
       setUserId('')
-      setAssignment('')
       setStatus('planned')
     },
   })
 
-  const disabled = save.isPending || !userId
+  const disabled = save.isPending || !userId || !timePeriodId
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -92,30 +119,89 @@ export default function AddCrewDialog({
         <Dialog.Title>Add crew booking</Dialog.Title>
 
         <Field label="Person">
-          <Select.Root value={userId} onValueChange={(v) => setUserId(v)}>
-            <Select.Trigger placeholder="Select…" />
+          <TextField.Root
+            placeholder="Search name or email…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <Box
+            mt="2"
+            p="2"
+            style={{
+              border: '1px solid var(--gray-a6)',
+              borderRadius: 8,
+              maxHeight: 220,
+              overflow: 'auto',
+            }}
+          >
+            {isFetching && (
+              <Text size="2" color="gray">
+                Searching…
+              </Text>
+            )}
+            {!isFetching && people.length === 0 && (
+              <Text size="2" color="gray">
+                No results
+              </Text>
+            )}
+            {!isFetching &&
+              people.map((p, idx) => (
+                <Box
+                  key={p.user_id}
+                  p="2"
+                  style={{
+                    cursor: 'pointer',
+                    borderRadius: 6,
+                    background:
+                      userId === p.user_id ? 'var(--blue-a3)' : 'transparent',
+                  }}
+                  onClick={() => setUserId(p.user_id)}
+                >
+                  <Flex align="center" justify="between">
+                    <div>
+                      <Text weight="medium">{p.display_name ?? p.email}</Text>
+                      {p.display_name && (
+                        <Text size="1" color="gray" style={{ marginLeft: 6 }}>
+                          {p.email}
+                        </Text>
+                      )}
+                    </div>
+                    {userId === p.user_id && (
+                      <Text size="1" color="blue">
+                        Selected
+                      </Text>
+                    )}
+                  </Flex>
+                  {idx < people.length - 1 && <Separator my="2" />}
+                </Box>
+              ))}
+          </Box>
+        </Field>
+
+        <Field label="Role / Time period">
+          <Select.Root
+            value={timePeriodId}
+            onValueChange={(v) => setTimePeriodId(v)}
+          >
+            <Select.Trigger placeholder="Select role…" />
             <Select.Content>
-              {people.map((p) => (
-                <Select.Item key={p.user_id} value={p.user_id}>
-                  {p.display_name ?? p.email}
+              {roles.map((tp) => (
+                <Select.Item key={tp.id} value={tp.id}>
+                  {(tp.title || 'Untitled') +
+                    ' — ' +
+                    formatWhen(tp.start_at) +
+                    ' → ' +
+                    formatWhen(tp.end_at)}
                 </Select.Item>
               ))}
             </Select.Content>
           </Select.Root>
         </Field>
 
-        <Field label="Assignment">
-          <TextField.Root
-            value={assignment}
-            onChange={(e) => setAssignment(e.target.value)}
-            placeholder="e.g., FOH"
-          />
-        </Field>
-
         <Field label="Status">
           <Select.Root
             value={status}
-            onValueChange={(v) => setStatus(v as CrewReqStatus)}
+            onValueChange={(v: string) => setStatus(v as CrewReqStatus)}
           >
             <Select.Trigger />
             <Select.Content>
@@ -127,20 +213,7 @@ export default function AddCrewDialog({
           </Select.Root>
         </Field>
 
-        <Field label="Start">
-          <TextField.Root
-            type="datetime-local"
-            value={toLocal(startAt)}
-            onChange={(e) => setStartAt(fromLocal(e.target.value))}
-          />
-        </Field>
-        <Field label="End">
-          <TextField.Root
-            type="datetime-local"
-            value={toLocal(endAt)}
-            onChange={(e) => setEndAt(fromLocal(e.target.value))}
-          />
-        </Field>
+        {/* Start/end are defined by the selected role's time period */}
 
         <Flex justify="end" gap="2" mt="3">
           <Dialog.Close>
@@ -169,7 +242,6 @@ export function EditCrewDialog({
   onOpenChange: (v: boolean) => void
   row: {
     id: UUID
-    assignment: string | null
     status: CrewReqStatus
     start_at: string | null
     end_at: string | null
@@ -177,17 +249,13 @@ export function EditCrewDialog({
   jobId: UUID
 }) {
   const qc = useQueryClient()
-  const [assignment, setAssignment] = React.useState(row.assignment ?? '')
   const [status, setStatus] = React.useState<CrewReqStatus>(row.status)
-  const [startAt, setStartAt] = React.useState(row.start_at ?? '')
-  const [endAt, setEndAt] = React.useState(row.end_at ?? '')
+  // Times now come from the role (time period)
 
   React.useEffect(() => {
     if (!open) return
-    setAssignment(row.assignment ?? '')
     setStatus(row.status)
-    setStartAt(row.start_at ?? '')
-    setEndAt(row.end_at ?? '')
+    // no-op for start/end
   }, [open, row])
 
   const save = useMutation({
@@ -195,10 +263,8 @@ export function EditCrewDialog({
       const { error } = await supabase
         .from('reserved_crew')
         .update({
-          assignment: assignment || null,
           status,
-          start_at: startAt || null,
-          end_at: endAt || null,
+          // start/end removed; defined by time_period
         })
         .eq('id', row.id)
       if (error) throw error
@@ -213,16 +279,10 @@ export function EditCrewDialog({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Content maxWidth="520px">
         <Dialog.Title>Edit crew booking</Dialog.Title>
-        <Field label="Assignment">
-          <TextField.Root
-            value={assignment}
-            onChange={(e) => setAssignment(e.target.value)}
-          />
-        </Field>
         <Field label="Status">
           <Select.Root
             value={status}
-            onValueChange={(v) => setStatus(v as CrewReqStatus)}
+            onValueChange={(v: string) => setStatus(v as CrewReqStatus)}
           >
             <Select.Trigger />
             <Select.Content>
@@ -233,20 +293,7 @@ export function EditCrewDialog({
             </Select.Content>
           </Select.Root>
         </Field>
-        <Field label="Start">
-          <TextField.Root
-            type="datetime-local"
-            value={toLocal(startAt)}
-            onChange={(e) => setStartAt(fromLocal(e.target.value))}
-          />
-        </Field>
-        <Field label="End">
-          <TextField.Root
-            type="datetime-local"
-            value={toLocal(endAt)}
-            onChange={(e) => setEndAt(fromLocal(e.target.value))}
-          />
-        </Field>
+        {/* Start/end are defined by the role's time period */}
         <Flex justify="end" gap="2" mt="3">
           <Dialog.Close>
             <Button variant="soft">Cancel</Button>
@@ -281,6 +328,6 @@ function Field({
   )
 }
 
-const toLocal = (iso?: string | null) =>
-  !iso ? '' : new Date(iso).toISOString().slice(0, 16)
-const fromLocal = (v: string) => (v ? new Date(v).toISOString() : '')
+function formatWhen(iso?: string | null) {
+  return iso ? new Date(iso).toLocaleString() : '—'
+}
