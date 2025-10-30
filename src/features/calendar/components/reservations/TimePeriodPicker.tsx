@@ -8,7 +8,7 @@ import {
   jobTimePeriodsQuery,
   upsertTimePeriod,
 } from '@features/jobs/api/queries'
-import type { TimePeriodLite, TimePeriodStatus } from '@features/jobs/types'
+import type { TimePeriodLite } from '@features/jobs/types'
 
 type Props = {
   jobId: string
@@ -28,7 +28,6 @@ export default function TimePeriodPicker({ jobId, value, onChange }: Props) {
     mutationFn: async (p: {
       id?: string
       title: string
-      status: TimePeriodStatus
       start_at: string
       end_at: string
     }) => {
@@ -38,7 +37,6 @@ export default function TimePeriodPicker({ jobId, value, onChange }: Props) {
         job_id: jobId,
         company_id: companyId,
         title: p.title,
-        status: p.status,
         start_at: p.start_at,
         end_at: p.end_at,
       })
@@ -109,7 +107,6 @@ export default function TimePeriodPicker({ jobId, value, onChange }: Props) {
                 job_id: jobId,
                 company_id: companyId!,
                 title: '',
-                status: 'tentative',
                 start_at: isoLocalStart(), // see util below
                 end_at: isoLocalEnd(),
               } as TimePeriodLite)
@@ -149,28 +146,6 @@ export default function TimePeriodPicker({ jobId, value, onChange }: Props) {
                 setEditing({ ...editing, end_at: fromLocal(e.target.value) })
               }
             />
-            <Select.Root
-              value={editing.status}
-              onValueChange={(v) =>
-                setEditing({ ...editing, status: v as TimePeriodStatus })
-              }
-            >
-              <Select.Trigger />
-              <Select.Content>
-                {[
-                  'tentative',
-                  'requested',
-                  'confirmed',
-                  'in_progress',
-                  'completed',
-                  'canceled',
-                ].map((s) => (
-                  <Select.Item key={s} value={s}>
-                    {s}
-                  </Select.Item>
-                ))}
-              </Select.Content>
-            </Select.Root>
             <Flex gap="2" ml="auto">
               <Button size="1" variant="soft" onClick={() => setEditing(null)}>
                 Cancel
@@ -182,7 +157,6 @@ export default function TimePeriodPicker({ jobId, value, onChange }: Props) {
                   save.mutate({
                     id: editing.id || undefined,
                     title: editing.title ?? '',
-                    status: editing.status,
                     start_at: editing.start_at,
                     end_at: editing.end_at,
                   })

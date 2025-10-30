@@ -1,8 +1,18 @@
 import * as React from 'react'
-import { Badge, Box, Button, Flex, Heading, Tabs, Text } from '@radix-ui/themes'
-import { Edit } from 'iconoir-react'
+import {
+  Badge,
+  Box,
+  Button,
+  Dialog,
+  Flex,
+  Heading,
+  Separator,
+  Tabs,
+  Text,
+} from '@radix-ui/themes'
+import { Edit, Trash } from 'iconoir-react'
 import { makeWordPresentable } from '@shared/lib/generalFunctions'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { jobDetailQuery } from '../api/queries'
 import OverviewTab from './tabs/OverviewTab'
 import EquipmentTab from './tabs/EquipmentTab'
@@ -11,6 +21,8 @@ import TransportTab from './tabs/TransportTab'
 import TimelineTab from './tabs/TimelineTab'
 import ContactsTab from './tabs/ContactsTab'
 import JobDialog from './dialogs/JobDialog'
+import { supabase } from '@shared/api/supabase'
+import { useToast } from '@shared/ui/toast/ToastProvider'
 import type { JobDetail } from '../types'
 
 const ORDER: Array<JobDetail['status']> = [
@@ -25,14 +37,52 @@ const ORDER: Array<JobDetail['status']> = [
   'paid',
 ]
 
-export default function JobInspector({ id }: { id: string | null }) {
+export default function JobInspector({
+  id,
+  onDeleted,
+}: {
+  id: string | null
+  onDeleted?: () => void
+}) {
   // ✅ hooks first
   const [editOpen, setEditOpen] = React.useState(false)
+  const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [statusTimelineOpen, setStatusTimelineOpen] = React.useState(false)
+  const qc = useQueryClient()
+  const { success, error } = useToast()
 
   const { data, isLoading } = useQuery({
     ...jobDetailQuery({ jobId: id ?? '__none__' }),
     enabled: !!id, // won't run until we have an id, but the hook is still called every render
+  })
+
+  const deleteJob = useMutation({
+    mutationFn: async (jobId: string) => {
+      // Delete related data first (cascade should handle most, but being explicit)
+      // Delete time_periods (which will cascade to reserved_items, reserved_crew, reserved_vehicles)
+      const { error: periodsErr } = await supabase
+        .from('time_periods')
+        .delete()
+        .eq('job_id', jobId)
+      if (periodsErr) throw periodsErr
+
+      // Delete the job
+      const { error: jobErr } = await supabase
+        .from('jobs')
+        .delete()
+        .eq('id', jobId)
+      if (jobErr) throw jobErr
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['company'] })
+      await qc.invalidateQueries({ queryKey: ['jobs-detail'] })
+      setDeleteOpen(false)
+      success('Job deleted', 'The job and all related data have been deleted.')
+      onDeleted?.()
+    },
+    onError: (err: any) => {
+      error('Failed to delete job', err?.message || 'Please try again.')
+    },
   })
 
   // now you can early return safely since hooks above already ran
@@ -59,14 +109,27 @@ export default function JobInspector({ id }: { id: string | null }) {
           <Button size="2" variant="soft" onClick={() => setEditOpen(true)}>
             <Edit width={16} height={16} /> Edit job
           </Button>
+          <Button
+            size="2"
+            variant="soft"
+            color="red"
+            onClick={() => setDeleteOpen(true)}
+          >
+            <Trash width={16} height={16} /> Delete job
+          </Button>
           <JobDialog
             open={editOpen}
             onOpenChange={setEditOpen}
             companyId={job.company_id}
             mode="edit"
             initialData={job}
-            // optional: refresh detail after save (on top of your invalidations)
-            // onSaved={() => queryClient.invalidateQueries({ queryKey: ['jobs-detail', job.id] })}
+          />
+          <DeleteJobDialog
+            open={deleteOpen}
+            onOpenChange={setDeleteOpen}
+            job={job}
+            onConfirm={() => deleteJob.mutate(job.id)}
+            isDeleting={deleteJob.isPending}
           />
         </div>
       </Box>
@@ -101,6 +164,99 @@ export default function JobInspector({ id }: { id: string | null }) {
         </Tabs.Content>
       </Tabs.Root>
     </Box>
+  )
+}
+
+function DeleteJobDialog({
+  open,
+  onOpenChange,
+  job,
+  onConfirm,
+  isDeleting,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  job: JobDetail
+  onConfirm: () => void
+  isDeleting: boolean
+}) {
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Content maxWidth="500px">
+        <Dialog.Title>Delete Job: {job.title}?</Dialog.Title>
+        <Separator my="3" />
+
+        <Flex direction="column" gap="3">
+          <Text size="2" color="red" weight="bold">
+            ⚠️ This action cannot be undone!
+          </Text>
+
+          <Text size="2">
+            Deleting this job will permanently remove:
+          </Text>
+
+          <Box
+            p="3"
+            style={{
+              background: 'var(--red-a2)',
+              border: '1px solid var(--red-a5)',
+              borderRadius: '8px',
+            }}
+          >
+            <Flex direction="column" gap="2">
+              <Text size="2">• All time periods</Text>
+              <Text size="2">• All booked equipment (internal & external)</Text>
+              <Text size="2">• All crew assignments</Text>
+              <Text size="2">• All vehicle bookings</Text>
+              <Text size="2">• All job contacts and related data</Text>
+            </Flex>
+          </Box>
+
+          <Text size="2" color="gray">
+            Job details:
+          </Text>
+          <Box
+            p="2"
+            style={{
+              background: 'var(--gray-a2)',
+              borderRadius: '6px',
+              fontSize: '13px',
+            }}
+          >
+            <Flex direction="column" gap="1">
+              <Text size="1">
+                <strong>Title:</strong> {job.title}
+              </Text>
+              <Text size="1">
+                <strong>Status:</strong> {makeWordPresentable(job.status)}
+              </Text>
+              {job.customer && (
+                <Text size="1">
+                  <strong>Customer:</strong> {job.customer.name}
+                </Text>
+              )}
+            </Flex>
+          </Box>
+        </Flex>
+
+        <Flex gap="3" mt="4" justify="end">
+          <Button
+            variant="soft"
+            onClick={() => onOpenChange(false)}
+            disabled={isDeleting}
+          >
+            Cancel
+          </Button>
+          <Button
+            color="red"
+            onClick={onConfirm}
+            disabled={isDeleting}
+          >
+            {isDeleting ? 'Deleting...' : 'Delete Job'}
+          </Button>
+        </Flex>
+      </Dialog.Content>
+    </Dialog.Root>
   )
 }
 

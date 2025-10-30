@@ -73,6 +73,22 @@ export default function JobDialog({
     setContactId('') // clear previous selection if customer changes
   }, [customerId])
 
+  // Set current user as project lead when creating a new job
+  React.useEffect(() => {
+    if (!open || mode !== 'create') return
+
+    const setCurrentUserAsLead = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (user?.id) {
+        setProjectLead(user.id)
+      }
+    }
+
+    setCurrentUserAsLead()
+  }, [open, mode])
+
   const { data: leads = [] } = useQuery({
     queryKey: ['company', companyId, 'project-leads'],
     enabled: open,
@@ -152,21 +168,22 @@ export default function JobDialog({
           .single()
         if (error) throw error
 
-        if (startAt && endAt) {
-          try {
-            await upsertTimePeriod({
-              job_id: data.id,
-              company_id: companyId,
-              title: 'Job duration',
-              status: jobStatusToTimePeriodStatus(status),
-              start_at: startAt,
-              end_at: endAt,
-            })
-          } catch (e: any) {
-            // Don’t fail the whole job create if time period fails — just inform the user.
-            // You already have `useToast()` in this component.
-            console.warn('Failed to create Job duration time period', e)
-          }
+        // Always create a "Job duration" time period
+        try {
+          const periodStart = startAt || new Date().toISOString()
+          const periodEnd =
+            endAt || new Date(Date.now() + 86400000).toISOString() // +1 day
+
+          await upsertTimePeriod({
+            job_id: data.id,
+            company_id: companyId,
+            title: 'Job duration',
+            start_at: periodStart,
+            end_at: periodEnd,
+          })
+        } catch (e: any) {
+          // Don't fail the whole job create if time period fails
+          console.warn('Failed to create Job duration time period', e)
         }
 
         return data.id as UUID
@@ -186,37 +203,32 @@ export default function JobDialog({
           })
           .eq('id', initialData.id)
         if (error) throw error
-        // Keep the "Job duration" reservation in sync with the job when editing
-        if (startAt && endAt) {
-          // Find existing "Job duration" reservation for this job (if any)
-          const { data: existing, error: exErr } = await supabase
-            .from('time_periods')
-            .select('id')
-            .eq('job_id', initialData.id)
-            .eq('title', 'Job duration')
-            .order('created_at', { ascending: true })
-            .limit(1)
-            .maybeSingle()
-          if (exErr) throw exErr
 
-          // Upsert with new window + mapped status
-          await upsertTimePeriod({
-            id: existing?.id, // update if found, else create
-            job_id: initialData.id,
-            company_id: companyId,
-            title: 'Job duration',
-            status: jobStatusToTimePeriodStatus(status),
-            start_at: startAt,
-            end_at: endAt,
-          })
-        } else {
-          // If job no longer has a time window, softly hide any existing "Job duration"
-          await supabase
-            .from('time_periods')
-            .update({ deleted: true })
-            .eq('job_id', initialData.id)
-            .eq('title', 'Job duration')
-        }
+        // Always keep the "Job duration" time period in sync with the job
+        // Find existing "Job duration" for this job (if any)
+        const { data: existing, error: exErr } = await supabase
+          .from('time_periods')
+          .select('id')
+          .eq('job_id', initialData.id)
+          .eq('title', 'Job duration')
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle()
+        if (exErr) throw exErr
+
+        // Use provided dates or defaults
+        const periodStart = startAt || new Date().toISOString()
+        const periodEnd = endAt || new Date(Date.now() + 86400000).toISOString() // +1 day
+
+        // Upsert with new dates
+        await upsertTimePeriod({
+          id: existing?.id, // update if found, else create
+          job_id: initialData.id,
+          company_id: companyId,
+          title: 'Job duration',
+          start_at: periodStart,
+          end_at: periodEnd,
+        })
 
         return initialData.id
       }
@@ -245,7 +257,10 @@ export default function JobDialog({
     },
   })
 
-  const disabled = upsert.isPending || !title.trim()
+  const disabled =
+    upsert.isPending ||
+    !title.trim() ||
+    (mode === 'create' && (!startAt || !endAt))
 
   const addrLabel = (a: any) =>
     [a.name, a.address_line, a.zip_code, a.city].filter(Boolean).join(' · ')
@@ -446,29 +461,4 @@ function fromLocalInput(local: string) {
   // treat as local and convert to ISO
   const d = new Date(local)
   return d.toISOString()
-}
-
-function jobStatusToTimePeriodStatus(
-  s: string,
-):
-  | 'tentative'
-  | 'requested'
-  | 'confirmed'
-  | 'in_progress'
-  | 'completed'
-  | 'canceled' {
-  switch (s) {
-    case 'requested':
-      return 'requested'
-    case 'confirmed':
-      return 'confirmed'
-    case 'in_progress':
-      return 'in_progress'
-    case 'completed':
-      return 'completed'
-    case 'canceled':
-      return 'canceled'
-    default:
-      return 'tentative' // draft/planned/invoiced/paid → tentative
-  }
 }

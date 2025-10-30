@@ -14,7 +14,6 @@ import {
 import { supabase } from '@shared/api/supabase'
 import { Edit, Plus } from 'iconoir-react'
 import { useCompany } from '@shared/companies/CompanyProvider'
-import TimePeriodPicker from '@features/calendar/components/reservations/TimePeriodPicker'
 import BookItemsDialog from '../dialogs/BookItemsDialog'
 import EditItemBookingDialog from '../dialogs/EditItemBookingDialog'
 import type { ExternalReqStatus, ItemLite, ReservedItemRow } from '../../types'
@@ -25,7 +24,7 @@ export default function EquipmentTab({ jobId }: { jobId: string }) {
   const [editItem, setEditItem] = React.useState<ReservedItemRow | null>(null)
   const { companyId } = useCompany()
   const canBook = !!companyId
-  const [timePeriodId, setTimePeriodId] = React.useState<string | null>(null)
+  const timePeriodId: string | null = null
 
   const { data } = useQuery({
     queryKey: ['jobs.equipment', jobId],
@@ -49,6 +48,10 @@ export default function EquipmentTab({ jobId }: { jobId: string }) {
             id, name, category_id,
             category:category_id ( name ),
             external_owner_id
+          ),
+          source_group:source_group_id (
+            id, name, category_id,
+            category:category_id ( name )
           ),
           time_period:time_period_id ( id, title, start_at, end_at )
         `,
@@ -89,7 +92,14 @@ export default function EquipmentTab({ jobId }: { jobId: string }) {
 
         {/* INTERNAL TAB */}
         <Tabs.Content value="internal">
-          <InternalEquipmentTable rows={data?.internal ?? []} jobId={jobId} />
+          <InternalEquipmentTable
+            rows={data?.internal ?? []}
+            jobId={jobId}
+            canBook={canBook}
+            companyId={companyId ?? undefined}
+            bookItemsOpen={bookItemsOpen}
+            setBookItemsOpen={setBookItemsOpen}
+          />
         </Tabs.Content>
 
         {/* EXTERNAL TAB */}
@@ -116,50 +126,202 @@ export default function EquipmentTab({ jobId }: { jobId: string }) {
 function InternalEquipmentTable({
   rows,
   jobId,
+  canBook,
+  companyId,
+  bookItemsOpen,
+  setBookItemsOpen,
 }: {
   rows: Array<any>
   jobId: string
+  canBook: boolean
+  companyId: string | undefined
+  bookItemsOpen: boolean
+  setBookItemsOpen: (v: boolean) => void
 }) {
+  const [expandedGroups, setExpandedGroups] = React.useState<Set<string>>(
+    new Set(),
+  )
+
+  const toggleGroup = (groupId: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(groupId)) {
+        next.delete(groupId)
+      } else {
+        next.add(groupId)
+      }
+      return next
+    })
+  }
+
+  // Group rows by source_group_id
+  const groupMap = new Map<string, Array<any>>()
+  const directRows: Array<any> = []
+
+  rows.forEach((r) => {
+    if (r.source_kind === 'group' && r.source_group_id) {
+      const arr = groupMap.get(r.source_group_id) ?? []
+      arr.push(r)
+      groupMap.set(r.source_group_id, arr)
+    } else {
+      directRows.push(r)
+    }
+  })
+
   return (
-    <Table.Root variant="surface">
-      <Table.Header>
-        <Table.Row>
-          <Table.ColumnHeaderCell>Item</Table.ColumnHeaderCell>
-          <Table.ColumnHeaderCell>Qty</Table.ColumnHeaderCell>
-          <Table.ColumnHeaderCell>Price pr</Table.ColumnHeaderCell>
-          <Table.ColumnHeaderCell>Price total</Table.ColumnHeaderCell>
-          <Table.ColumnHeaderCell>Category</Table.ColumnHeaderCell>
-          <Table.ColumnHeaderCell>Time period</Table.ColumnHeaderCell>
-        </Table.Row>
-      </Table.Header>
-      <Table.Body>
-        {rows.map((r) => {
-          const item = firstItem(r.item)
-          const pricePr = item?.price ?? 0
-          const total = pricePr * (r.quantity ?? 0)
-          return (
-            <Table.Row key={r.id}>
-              <Table.Cell>{item?.name ?? '—'}</Table.Cell>
-              <Table.Cell>{r.quantity}</Table.Cell>
-              <Table.Cell>{pricePr.toFixed(2)}</Table.Cell>
-              <Table.Cell>{total.toFixed(2)}</Table.Cell>
-              <Table.Cell>{item?.category?.name ?? '—'}</Table.Cell>
-              <Table.Cell>
-                {r.time_period?.title ??
-                  `${fmtDate(r.time_period?.start_at)} – ${fmtDate(r.time_period?.end_at)}`}
+    <Box>
+      <Box
+        mb="2"
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
+        <Heading size="3">Internal equipment</Heading>
+        <Button
+          size="2"
+          disabled={!canBook}
+          onClick={() => setBookItemsOpen(true)}
+        >
+          <Plus width={16} height={16} /> Book items
+        </Button>
+        {canBook && companyId && (
+          <BookItemsDialog
+            open={bookItemsOpen}
+            onOpenChange={setBookItemsOpen}
+            jobId={jobId}
+            companyId={companyId}
+            timePeriodId={undefined}
+          />
+        )}
+      </Box>
+
+      <Table.Root variant="surface">
+        <Table.Header>
+          <Table.Row>
+            <Table.ColumnHeaderCell>Item</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>Qty</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>Price pr</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>Price total</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>Category</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>Time period</Table.ColumnHeaderCell>
+          </Table.Row>
+        </Table.Header>
+        <Table.Body>
+          {/* Render grouped items */}
+          {Array.from(groupMap.entries()).map(([groupId, groupRows]) => {
+            const firstRow = groupRows[0]
+            const sourceGroup = Array.isArray(firstRow?.source_group)
+              ? firstRow?.source_group[0]
+              : firstRow?.source_group
+            const groupName =
+              sourceGroup?.name ?? `Group ${groupId.slice(0, 8)}`
+            const groupCategory = Array.isArray(sourceGroup?.category)
+              ? sourceGroup?.category[0]?.name
+              : sourceGroup?.category?.name
+            const isExpanded = expandedGroups.has(groupId)
+            const totalQty = groupRows.reduce(
+              (sum, r) => sum + (r.quantity ?? 0),
+              0,
+            )
+            const totalPrice = groupRows.reduce((sum, r) => {
+              const item = firstItem(r.item)
+              const pricePr = item?.price ?? 0
+              return sum + pricePr * (r.quantity ?? 0)
+            }, 0)
+
+            return (
+              <React.Fragment key={groupId}>
+                {/* Group header row */}
+                <Table.Row
+                  style={{
+                    cursor: 'pointer',
+                    backgroundColor: 'var(--gray-a1)',
+                  }}
+                  onClick={() => toggleGroup(groupId)}
+                >
+                  <Table.Cell>
+                    <Box
+                      style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+                    >
+                      <Text weight="bold">{isExpanded ? '▼' : '▶'}</Text>
+                      <Text weight="bold">{groupName}</Text>
+                      <Badge color="pink" variant="soft">
+                        Group
+                      </Badge>
+                    </Box>
+                  </Table.Cell>
+                  <Table.Cell>
+                    <Text weight="bold">{totalQty}</Text>
+                  </Table.Cell>
+                  <Table.Cell>—</Table.Cell>
+                  <Table.Cell>
+                    <Text weight="bold">{totalPrice.toFixed(2)}</Text>
+                  </Table.Cell>
+                  <Table.Cell>{groupCategory ?? '—'}</Table.Cell>
+                  <Table.Cell>
+                    {firstRow?.time_period?.title ??
+                      `${fmtDate(firstRow?.time_period?.start_at)} – ${fmtDate(firstRow?.time_period?.end_at)}`}
+                  </Table.Cell>
+                </Table.Row>
+
+                {/* Expanded group items */}
+                {isExpanded &&
+                  groupRows.map((r) => {
+                    const item = firstItem(r.item)
+                    const pricePr = item?.price ?? 0
+                    const total = pricePr * (r.quantity ?? 0)
+                    return (
+                      <Table.Row
+                        key={r.id}
+                        style={{ backgroundColor: 'var(--gray-a1)' }}
+                      >
+                        <Table.Cell style={{ paddingLeft: 32 }}>
+                          <Text color="gray">↳ {item?.name ?? '—'}</Text>
+                        </Table.Cell>
+                        <Table.Cell>{r.quantity}</Table.Cell>
+                        <Table.Cell>{pricePr.toFixed(2)}</Table.Cell>
+                        <Table.Cell>{total.toFixed(2)}</Table.Cell>
+                        <Table.Cell>{item?.category?.name ?? '—'}</Table.Cell>
+                        <Table.Cell>—</Table.Cell>
+                      </Table.Row>
+                    )
+                  })}
+              </React.Fragment>
+            )
+          })}
+
+          {/* Render direct items */}
+          {directRows.map((r) => {
+            const item = firstItem(r.item)
+            const pricePr = item?.price ?? 0
+            const total = pricePr * (r.quantity ?? 0)
+            return (
+              <Table.Row key={r.id}>
+                <Table.Cell>{item?.name ?? '—'}</Table.Cell>
+                <Table.Cell>{r.quantity}</Table.Cell>
+                <Table.Cell>{pricePr.toFixed(2)}</Table.Cell>
+                <Table.Cell>{total.toFixed(2)}</Table.Cell>
+                <Table.Cell>{item?.category?.name ?? '—'}</Table.Cell>
+                <Table.Cell>
+                  {r.time_period?.title ??
+                    `${fmtDate(r.time_period?.start_at)} – ${fmtDate(r.time_period?.end_at)}`}
+                </Table.Cell>
+              </Table.Row>
+            )
+          })}
+
+          {rows.length === 0 && (
+            <Table.Row>
+              <Table.Cell colSpan={6}>
+                <Text color="gray">No internal items</Text>
               </Table.Cell>
             </Table.Row>
-          )
-        })}
-        {rows.length === 0 && (
-          <Table.Row>
-            <Table.Cell colSpan={6}>
-              <Text color="gray">No internal items</Text>
-            </Table.Cell>
-          </Table.Row>
-        )}
-      </Table.Body>
-    </Table.Root>
+          )}
+        </Table.Body>
+      </Table.Root>
+    </Box>
   )
 }
 

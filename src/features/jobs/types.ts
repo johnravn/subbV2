@@ -120,7 +120,7 @@ export type ItemLite = {
 
 /**
  * Supabase may type nested single relations as an array when the FK
- * isn’t inferred. Allow both shapes so UI can normalize.
+ * isn't inferred. Allow both shapes so UI can normalize.
  */
 export type ReservedItemRow = {
   id: UUID
@@ -137,6 +137,20 @@ export type ReservedItemRow = {
   item:
     | { id: UUID; name: string; external_owner_id: UUID | null }
     | Array<{ id: UUID; name: string; external_owner_id: UUID | null }>
+  source_group?:
+    | {
+        id: UUID
+        name: string
+        category_id?: UUID | null
+        category?: { name: string } | null
+      }
+    | Array<{
+        id: UUID
+        name: string
+        category_id?: UUID | null
+        category?: { name: string } | null
+      }>
+    | null
 }
 
 export type TimePeriodStatus =
@@ -152,7 +166,6 @@ export type TimePeriodLite = {
   job_id: UUID | null
   company_id: UUID
   title: string | null
-  status: TimePeriodStatus
   start_at: string // ISO
   end_at: string // ISO
 }

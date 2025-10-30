@@ -16,9 +16,8 @@ import { Search } from 'iconoir-react'
 import { supabase } from '@shared/api/supabase'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { categoryNamesQuery } from '@features/inventory/api/queries'
+import TimePeriodPicker from '@features/calendar/components/reservations/TimePeriodPicker'
 import type { UUID } from '../../types'
-
-type PickerItem = { id: UUID; name: string }
 
 const ALL = '__ALL__'
 
@@ -56,15 +55,27 @@ type PickerRow =
 
 // Selection basket row
 type Row =
-  | { kind: 'item'; item_id: UUID; name: string; quantity: number }
-  | { kind: 'group'; group_id: UUID; name: string; quantity: number }
+  | {
+      kind: 'item'
+      item_id: UUID
+      name: string
+      quantity: number
+      on_hand: number | null
+    }
+  | {
+      kind: 'group'
+      group_id: UUID
+      name: string
+      quantity: number
+      on_hand: number | null
+    }
 
 export default function BookItemsDialog({
   open,
   onOpenChange,
   jobId,
   companyId,
-  timePeriodId,
+  timePeriodId: initialTimePeriodId,
   onSaved,
 }: {
   open: boolean
@@ -77,9 +88,19 @@ export default function BookItemsDialog({
   const qc = useQueryClient()
   const [search, setSearch] = React.useState('')
   const [rows, setRows] = React.useState<Array<Row>>([])
+  const [selectedTimePeriodId, setSelectedTimePeriodId] = React.useState<
+    string | null
+  >(initialTimePeriodId ?? null)
   const { success, error } = useToast()
 
-  // “External only” filter (items whose external_owner_id is set)
+  // Update local state when prop changes
+  React.useEffect(() => {
+    if (initialTimePeriodId) {
+      setSelectedTimePeriodId(initialTimePeriodId)
+    }
+  }, [initialTimePeriodId])
+
+  // "External only" filter (items whose external_owner_id is set)
   const [externalOnly, setExternalOnly] = React.useState(false)
 
   // Category filter
@@ -87,107 +108,69 @@ export default function BookItemsDialog({
     null,
   )
 
-  // Toggle Items / Groups
-  const [tab, setTab] = React.useState<'items' | 'groups'>('items')
-
   const { data: categories = [] } = useQuery({
     ...categoryNamesQuery({ companyId }),
     enabled: open,
   })
 
   const { data: picker = [], isFetching } = useQuery({
-    queryKey: [
-      'book-items',
-      companyId,
-      tab,
-      search,
-      externalOnly,
-      categoryFilter,
-    ],
+    queryKey: ['book-items', companyId, search, externalOnly, categoryFilter],
     enabled: open,
     queryFn: async (): Promise<Array<PickerRow>> => {
-      if (tab === 'items') {
-        // ITEMS
-        let q = supabase
-          .from('items')
-          .select(
-            `
-            id, name, active, deleted, allow_individual_booking,
-            internally_owned, external_owner_id,
-            category:item_categories ( name ),
-            brand:item_brands ( name ),
-            current_price, on_hand
-          ` as any,
-          )
-          // if you use a view for price/on_hand, select matching columns
-          .eq('company_id', companyId)
-          .eq('active', true)
-          .eq('deleted', false)
-          .eq('allow_individual_booking', true)
-          .limit(50)
+      // Fetch both items and groups from inventory_index
+      let q = supabase
+        .from('inventory_index')
+        .select('*')
+        .eq('company_id', companyId)
+        .eq('active', true)
+        .or('deleted.is.null,deleted.eq.false')
+        .limit(100)
 
-        if (search) q = q.ilike('name', `%${search}%`)
-        if (categoryFilter) q = q.eq('category.name', categoryFilter)
-        if (externalOnly) q = q.not('external_owner_id', 'is', null)
+      // For items, filter by allow_individual_booking
+      // For groups, always include them
+      // Combined: (is_group=true) OR (allow_individual_booking=true)
+      q = q.or('is_group.eq.true,allow_individual_booking.eq.true')
 
-        const { data, error } = await q
-        if (error) throw error
+      if (search) q = q.ilike('name', `%${search}%`)
+      if (categoryFilter) q = q.eq('category_name', categoryFilter)
+      if (externalOnly) q = q.eq('internally_owned', false)
 
-        // map to PickerRow
-        return data.map(
-          (r: any): PickerRow => ({
+      const { data, error: fetchError } = await q
+      if (fetchError) throw fetchError
+
+      // Map to PickerRow - separate items from groups
+      return data.map((r: any): PickerRow => {
+        if (r.is_group) {
+          return {
+            kind: 'group',
+            id: r.id,
+            name: r.name,
+            category_name: r.category_name ?? null,
+            brand_name: null,
+            on_hand: r.on_hand ?? null,
+            current_price: r.current_price ?? null,
+            internally_owned: true,
+            external_owner_name: null,
+            active: !!r.active,
+            is_group: true,
+            unique: r.unique ?? null,
+          }
+        } else {
+          return {
             kind: 'item',
             id: r.id,
             name: r.name,
-            category_name: r.category?.name ?? null,
-            brand_name: r.brand?.name ?? null,
+            category_name: r.category_name ?? null,
+            brand_name: r.brand_name ?? null,
             on_hand: r.on_hand ?? null,
             current_price: r.current_price ?? null,
             internally_owned: !!r.internally_owned,
-            external_owner_name: r.external_owner_id ? 'External' : null, // (optional) fetch owner name if you store it
+            external_owner_name: r.external_owner_name ?? null,
             active: !!r.active,
             is_group: false,
-          }),
-        )
-      } else {
-        // GROUPS
-        let q = supabase
-          .from('item_groups')
-          .select(
-            `
-          id, name, active, deleted, unique,
-          category:item_categories ( name )
-        `,
-          )
-          .eq('company_id', companyId)
-          .eq('active', true)
-          .eq('deleted', false)
-          .limit(50)
-
-        if (search) q = q.ilike('name', `%${search}%`)
-        if (categoryFilter) q = q.eq('category.name', categoryFilter)
-        // externalOnly intentionally ignored for groups (always internal kits)
-
-        const { data, error } = await q
-        if (error) throw error
-
-        return data.map(
-          (g: any): PickerRow => ({
-            kind: 'group',
-            id: g.id,
-            name: g.name,
-            category_name: g.category?.name ?? null,
-            brand_name: null,
-            on_hand: null,
-            current_price: null,
-            internally_owned: true,
-            external_owner_name: null,
-            active: !!g.active,
-            is_group: true,
-            unique: g.unique ?? null,
-          }),
-        )
-      }
+          }
+        }
+      })
     },
   })
 
@@ -203,71 +186,113 @@ export default function BookItemsDialog({
   //   })
   // }
   function addRow(p: PickerRow) {
+    // Check availability
+    const onHand = p.on_hand ?? 0
+
     setRows((r) => {
       if (p.kind === 'item') {
         const i = r.findIndex((x) => x.kind === 'item' && x.item_id === p.id)
         if (i >= 0) {
+          const newQty = r[i].quantity + 1
+          // Check if we're trying to book more than available
+          if (onHand > 0 && newQty > onHand) {
+            error(
+              'Not enough available',
+              `Only ${onHand} ${p.name} available. Already booking ${r[i].quantity}.`,
+            )
+            return r
+          }
           const clone = [...r]
-          clone[i] = { ...clone[i], quantity: clone[i].quantity + 1 } as Row
+          clone[i] = { ...clone[i], quantity: newQty } as Row
           return clone
+        }
+        // Adding new item
+        if (onHand > 0 && 1 > onHand) {
+          error('Not enough available', `Only ${onHand} ${p.name} available.`)
+          return r
         }
         return [
           ...r,
-          { kind: 'item', item_id: p.id, name: p.name, quantity: 1 },
+          {
+            kind: 'item',
+            item_id: p.id,
+            name: p.name,
+            quantity: 1,
+            on_hand: onHand,
+          },
         ]
       } else {
         const i = r.findIndex((x) => x.kind === 'group' && x.group_id === p.id)
         if (i >= 0) {
+          const newQty = r[i].quantity + 1
+          // Check if we're trying to book more than available
+          if (onHand > 0 && newQty > onHand) {
+            error(
+              'Not enough available',
+              `Only ${onHand} ${p.name} available. Already booking ${r[i].quantity}.`,
+            )
+            return r
+          }
           const clone = [...r]
-          clone[i] = { ...clone[i], quantity: clone[i].quantity + 1 } as Row
+          clone[i] = { ...clone[i], quantity: newQty } as Row
           return clone
+        }
+        // Adding new group
+        if (onHand > 0 && 1 > onHand) {
+          error('Not enough available', `Only ${onHand} ${p.name} available.`)
+          return r
         }
         return [
           ...r,
-          { kind: 'group', group_id: p.id, name: p.name, quantity: 1 },
+          {
+            kind: 'group',
+            group_id: p.id,
+            name: p.name,
+            quantity: 1,
+            on_hand: onHand,
+          },
         ]
       }
     })
   }
 
-  function updateQty(target: Row, qty: number) {
-    setRows((rows) =>
-      rows.map((x) =>
+  function updateQty(target: Row, qty: number, maxAvailable: number | null) {
+    // Validate against available quantity
+    if (maxAvailable !== null && maxAvailable > 0 && qty > maxAvailable) {
+      error(
+        'Not enough available',
+        `Only ${maxAvailable} available. Cannot book ${qty}.`,
+      )
+      return
+    }
+
+    setRows((prevRows) =>
+      prevRows.map((x) =>
         rowKey(x) === rowKey(target) ? ({ ...x, quantity: qty } as Row) : x,
       ),
     )
   }
   function removeRow(target: Row) {
-    setRows((rows) => rows.filter((x) => rowKey(x) !== rowKey(target)))
+    setRows((prevRows) => prevRows.filter((x) => rowKey(x) !== rowKey(target)))
   }
-
-  const [overrideTimes, setOverrideTimes] = React.useState(false)
-  const [ovStart, setOvStart] = React.useState<string>('')
-  const [ovEnd, setOvEnd] = React.useState<string>('')
 
   const save = useMutation({
     mutationFn: async () => {
       if (rows.length === 0) return
 
-      const itemRows = rows.filter(
+      // Time period is now required
+      if (!selectedTimePeriodId) {
+        throw new Error('Please select a time period')
+      }
+
+      const itemRows: Array<Extract<Row, { kind: 'item' }>> = rows.filter(
         (r): r is Extract<Row, { kind: 'item' }> => r.kind === 'item',
       )
-      const groupRows = rows.filter(
+      const groupRows: Array<Extract<Row, { kind: 'group' }>> = rows.filter(
         (r): r is Extract<Row, { kind: 'group' }> => r.kind === 'group',
       )
 
-      const time_period_id =
-        timePeriodId ??
-        (await (async () => {
-          const { data: resIdRow, error: resErr } = await supabase.rpc(
-            'ensure_default_time_period',
-            {
-              p_job_id: jobId,
-            },
-          )
-          if (resErr) throw resErr
-          return resIdRow?.id ?? resIdRow
-        })())
+      const time_period_id = selectedTimePeriodId
 
       // 2) build payload for items
       const itemPayload = itemRows.map((r) => ({
@@ -275,17 +300,11 @@ export default function BookItemsDialog({
         item_id: r.item_id,
         quantity: r.quantity,
         source_kind: 'direct' as const,
-        ...(overrideTimes && ovStart && ovEnd
-          ? {
-              start_at: new Date(ovStart).toISOString(),
-              end_at: new Date(ovEnd).toISOString(),
-            }
-          : {}),
       }))
       const groupPayload: Array<any> = []
       if (groupRows.length > 0) {
         // fetch group members in one round trip
-        const { data: members, error: gmErr } = await supabase
+        const { data: groupMembers, error: gmErr } = await supabase
           .from('group_items')
           .select('group_id, item_id, quantity')
           .in(
@@ -298,22 +317,21 @@ export default function BookItemsDialog({
           string,
           Array<{ item_id: string; quantity: number }>
         >()
-        for (const m of members) {
+        for (const m of groupMembers) {
           const arr = byGroup.get(m.group_id) ?? []
           arr.push({ item_id: m.item_id, quantity: m.quantity })
           byGroup.set(m.group_id, arr)
         }
 
         for (const g of groupRows) {
-          const members = byGroup.get(g.group_id) ?? []
-          for (const m of members) {
+          const groupItems = byGroup.get(g.group_id) ?? []
+          for (const m of groupItems) {
             groupPayload.push({
               time_period_id,
               item_id: m.item_id,
               quantity: m.quantity * g.quantity, // scale
               source_kind: 'group' as const,
               source_group_id: g.group_id,
-              // ...(overrideTimes ? { start_at: ..., end_at: ... } : {})
             })
           }
         }
@@ -324,6 +342,8 @@ export default function BookItemsDialog({
       const { error: insErr } = await supabase
         .from('reserved_items')
         .insert(payload)
+      console.log('Payload', payload)
+      console.log('insErr', insErr)
       if (insErr) throw insErr
     },
     onSuccess: async () => {
@@ -341,10 +361,17 @@ export default function BookItemsDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Content
-        maxWidth="960px"
+        maxWidth="90%"
         style={{ height: '80vh', display: 'flex', flexDirection: 'column' }}
       >
         <Dialog.Title>Book equipment</Dialog.Title>
+
+        {/* Time Period Selection - Required */}
+        <TimePeriodPicker
+          jobId={jobId}
+          value={selectedTimePeriodId}
+          onChange={setSelectedTimePeriodId}
+        />
 
         <div
           style={{
@@ -366,23 +393,6 @@ export default function BookItemsDialog({
             }}
           >
             <Flex gap="2" align="center" wrap="wrap" mb="2">
-              <Flex gap="1" align="center">
-                <Button
-                  size="1"
-                  variant={tab === 'items' ? 'classic' : 'soft'}
-                  onClick={() => setTab('items')}
-                >
-                  Items
-                </Button>
-                <Button
-                  size="1"
-                  variant={tab === 'groups' ? 'classic' : 'soft'}
-                  onClick={() => setTab('groups')}
-                >
-                  Groups
-                </Button>
-              </Flex>
-
               {/* category filter */}
               <Select.Root
                 value={categoryFilter ?? ALL}
@@ -399,19 +409,15 @@ export default function BookItemsDialog({
                 </Select.Content>
               </Select.Root>
 
-              {/* External only toggle — items tab only */}
-              {tab === 'items' && (
-                <label
-                  style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={externalOnly}
-                    onChange={(e) => setExternalOnly(e.target.checked)}
-                  />
-                  <Text as="span">External only</Text>
-                </label>
-              )}
+              {/* External only toggle */}
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={externalOnly}
+                  onChange={(e) => setExternalOnly(e.target.checked)}
+                />
+                <Text as="span">External only</Text>
+              </label>
             </Flex>
             <TextField.Root
               value={search}
@@ -602,11 +608,13 @@ export default function BookItemsDialog({
                         <TextField.Root
                           type="number"
                           min="1"
+                          max={r.on_hand ?? undefined}
                           value={String(r.quantity)}
                           onChange={(e) =>
                             updateQty(
                               r,
                               Math.max(1, Number(e.target.value || 1)),
+                              r.on_hand,
                             )
                           }
                         />
@@ -636,7 +644,9 @@ export default function BookItemsDialog({
           <Button
             variant="classic"
             onClick={() => save.mutate()}
-            disabled={save.isPending || rows.length === 0}
+            disabled={
+              save.isPending || rows.length === 0 || !selectedTimePeriodId
+            }
           >
             {save.isPending ? 'Booking…' : 'Book items'}
           </Button>

@@ -1336,7 +1336,6 @@ export type Database = {
           notes: string | null
           reserved_by_user_id: string | null
           start_at: string
-          status: Database["public"]["Enums"]["reservation_status"]
           title: string | null
           updated_at: string | null
           updated_by_user_id: string | null
@@ -1352,7 +1351,6 @@ export type Database = {
           notes?: string | null
           reserved_by_user_id?: string | null
           start_at: string
-          status?: Database["public"]["Enums"]["reservation_status"]
           title?: string | null
           updated_at?: string | null
           updated_by_user_id?: string | null
@@ -1368,7 +1366,6 @@ export type Database = {
           notes?: string | null
           reserved_by_user_id?: string | null
           start_at?: string
-          status?: Database["public"]["Enums"]["reservation_status"]
           title?: string | null
           updated_at?: string | null
           updated_by_user_id?: string | null

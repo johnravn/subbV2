@@ -1,6 +1,5 @@
 import * as React from 'react'
 import {
-  Badge,
   Box,
   Button,
   Code,
@@ -14,7 +13,7 @@ import {
 } from '@radix-ui/themes'
 import MapEmbed from '@shared/maps/MapEmbed'
 import { CopyIconButton } from '@shared/lib/CopyIconButton'
-import { fmtVAT, makeWordPresentable } from '@shared/lib/generalFunctions'
+import { fmtVAT } from '@shared/lib/generalFunctions'
 import { prettyPhone } from '@shared/phone/phone'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@shared/ui/toast/ToastProvider'
@@ -128,50 +127,56 @@ export default function OverviewTab({ job }: { job: JobDetail }) {
         </Grid>
       </Box>
       <Box>
-        <Flex align={'center'} gap={'2'} mt={'1'}>
+        <Flex align={'center'} justify={'between'} mt={'1'}>
           <Heading size="3">Location</Heading>
-          <IconButton variant="ghost" onClick={() => setEditOpen(true)}>
-            <Edit fontSize={'0.8rem'} />
-          </IconButton>
+          {job.address && (
+            <IconButton variant="ghost" onClick={() => setEditOpen(true)}>
+              <Edit fontSize={'0.8rem'} />
+            </IconButton>
+          )}
           <AddressDialog
             open={editOpen}
             onOpenChange={setEditOpen}
             companyId={job.company_id}
             mode="edit"
             initialData={job}
-            // optional: refresh detail after save (on top of your invalidations)
-            // onSaved={() => queryClient.invalidateQueries({ queryKey: ['jobs-detail', job.id] })}
           />
         </Flex>
         <Separator size="4" mb="3" />
-        <Grid columns={{ initial: '1', sm: '2' }} gap="4">
-          <Box>
-            <KV label="Name">
-              <Flex align={'center'} gap={'2'}>
-                {job.address?.name || '—'}
-              </Flex>
-            </KV>
-            <KV label="Address">{job.address?.address_line || '—'}</KV>
-            <Grid columns={'2'} gap={'4'}>
-              <KV label="Zip code">{job.address?.zip_code || '-'}</KV>
-              <KV label="City">{job.address?.city || '-'}</KV>
-            </Grid>
-            <KV label="Country">{job.address?.country || '—'}</KV>
-          </Box>
-          {addr && (
-            <Box
-              mb="3"
-              style={{
-                maxWidth: 400,
-                height: '100%',
-                overflow: 'hidden',
-                borderRadius: 8,
-              }}
-            >
-              <MapEmbed query={addr} zoom={14} />
+        {job.address ? (
+          <Grid columns={{ initial: '1', sm: '2' }} gap="4">
+            <Box>
+              <KV label="Name">
+                <Flex align={'center'} gap={'2'}>
+                  {job.address.name || '—'}
+                </Flex>
+              </KV>
+              <KV label="Address">{job.address.address_line || '—'}</KV>
+              <Grid columns={'2'} gap={'4'}>
+                <KV label="Zip code">{job.address.zip_code || '-'}</KV>
+                <KV label="City">{job.address.city || '-'}</KV>
+              </Grid>
+              <KV label="Country">{job.address.country || '—'}</KV>
             </Box>
-          )}
-        </Grid>
+            {addr && (
+              <Box
+                mb="3"
+                style={{
+                  maxWidth: 400,
+                  height: '100%',
+                  overflow: 'hidden',
+                  borderRadius: 8,
+                }}
+              >
+                <MapEmbed query={addr} zoom={14} />
+              </Box>
+            )}
+          </Grid>
+        ) : (
+          <Button size="3" variant="soft" onClick={() => setEditOpen(true)}>
+            Add location
+          </Button>
+        )}
         <KV label="Notes">
           <TextField.Root
             value={notes || ''}

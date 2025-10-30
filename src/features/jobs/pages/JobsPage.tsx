@@ -93,7 +93,10 @@ export default function JobsPage() {
               overflowY: isLarge ? 'auto' : 'visible',
             }}
           >
-            <JobInspector id={selectedId} />
+            <JobInspector
+              id={selectedId}
+              onDeleted={() => setSelectedId(null)}
+            />
           </Box>
         </Card>
       </Grid>

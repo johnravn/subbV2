@@ -5,7 +5,6 @@ import type {
   JobListRow,
   JobStatus,
   TimePeriodLite,
-  TimePeriodStatus,
 } from '../types'
 
 function escapeForPostgrestOr(value: string) {
@@ -132,7 +131,7 @@ export function jobTimePeriodsQuery({ jobId }: { jobId: string }) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('time_periods')
-        .select('id, company_id, job_id, title, status, start_at, end_at')
+        .select('id, company_id, job_id, title, start_at, end_at')
         .eq('job_id', jobId)
         .order('start_at', { ascending: true })
       if (error) throw error
@@ -147,7 +146,6 @@ export async function upsertTimePeriod(payload: {
   job_id: string
   company_id: string
   title: string
-  status: TimePeriodStatus
   start_at: string // ISO
   end_at: string // ISO
 }) {
@@ -156,7 +154,6 @@ export async function upsertTimePeriod(payload: {
       .from('time_periods')
       .update({
         title: payload.title,
-        status: payload.status,
         start_at: payload.start_at,
         end_at: payload.end_at,
       })
@@ -170,7 +167,6 @@ export async function upsertTimePeriod(payload: {
         job_id: payload.job_id,
         company_id: payload.company_id,
         title: payload.title,
-        status: payload.status,
         start_at: payload.start_at,
         end_at: payload.end_at,
       })
