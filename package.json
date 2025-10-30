@@ -10,7 +10,12 @@
     "test": "vitest run",
     "lint": "eslint",
     "format": "prettier",
-    "check": "prettier --write . && eslint --fix"
+    "check": "prettier --write . && eslint --fix",
+    "db:types": "supabase gen types typescript --local > src/shared/types/database.types.ts",
+    "db:types:remote": "supabase gen types typescript --linked > src/shared/types/database.types.ts",
+    "db:diff": "supabase db diff --use-migra -f",
+    "db:reset": "supabase db reset",
+    "db:push": "supabase db push"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.19",
@@ -48,6 +53,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "jsdom": "^26.0.0",
     "prettier": "^3.5.3",
+    "supabase": "^2.54.11",
     "typescript": "^5.7.2",
     "vite": "^6.3.5",
     "vitest": "^3.0.5",

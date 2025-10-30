@@ -1,6 +1,17 @@
 import * as React from 'react'
 import { Text } from '@radix-ui/themes'
+import TimePeriodPicker from '@features/calendar/components/reservations/TimePeriodPicker'
 
 export default function TimelineTab({ jobId }: { jobId: string }) {
-  return <Text color="gray">Timeline features coming soon…</Text>
+  const [timePeriodId, setTimePeriodId] = React.useState<string | null>(null)
+
+  return (
+    <>
+      <TimePeriodPicker
+        jobId={jobId}
+        value={timePeriodId}
+        onChange={setTimePeriodId}
+      />
+    </>
+  )
 }

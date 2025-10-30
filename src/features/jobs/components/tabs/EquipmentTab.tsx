@@ -1,4 +1,3 @@
-// src/features/jobs/components/tabs/EquipmentTab.tsx
 import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -8,6 +7,7 @@ import {
   Heading,
   SegmentedControl,
   Table,
+  Tabs,
   Text,
   TextField,
 } from '@radix-ui/themes'
@@ -21,39 +21,42 @@ import type { ExternalReqStatus, ItemLite, ReservedItemRow } from '../../types'
 
 export default function EquipmentTab({ jobId }: { jobId: string }) {
   const qc = useQueryClient()
-
   const [bookItemsOpen, setBookItemsOpen] = React.useState(false)
   const [editItem, setEditItem] = React.useState<ReservedItemRow | null>(null)
   const { companyId } = useCompany()
   const canBook = !!companyId
-
   const [timePeriodId, setTimePeriodId] = React.useState<string | null>(null)
 
   const { data } = useQuery({
     queryKey: ['jobs.equipment', jobId],
     queryFn: async () => {
-      const { data: timePeriods, error: rErr } = await supabase
+      const { data: timePeriods, error: tpErr } = await supabase
         .from('time_periods')
-        .select('id')
+        .select('id, title, start_at, end_at')
         .eq('job_id', jobId)
-      if (rErr) throw rErr
-      const resIds = timePeriods.map((r) => r.id)
+      if (tpErr) throw tpErr
+      const resIds = (timePeriods as Array<{ id: string }>).map((r) => r.id)
+
       if (!resIds.length) return { internal: [], external: [] }
 
       const { data: items, error } = await supabase
         .from('reserved_items')
         .select(
           `
-          id, time_periods_id, item_id, quantity, source_group_id, source_kind,
+          id, time_period_id, item_id, quantity, source_group_id, source_kind,
           external_status, external_note, forced,
-          item:item_id ( id, name, external_owner_id )
+          item:item_id (
+            id, name, category_id,
+            category:category_id ( name ),
+            external_owner_id
+          ),
+          time_period:time_period_id ( id, title, start_at, end_at )
         `,
         )
         .in('time_period_id', resIds)
       if (error) throw error
 
-      const rows = items as Array<ReservedItemRow>
-
+      const rows = items as Array<ReservedItemRow & any>
       const internal = rows.filter((x) => !extOwnerId(x.item))
       const external = rows.filter((x) => !!extOwnerId(x.item))
       return { internal, external }
@@ -77,91 +80,148 @@ export default function EquipmentTab({ jobId }: { jobId: string }) {
   })
 
   return (
-    <div>
-      <TimePeriodPicker
-        jobId={jobId}
-        value={timePeriodId}
-        onChange={setTimePeriodId}
-      />
-      <Heading size="3" mb="2">
-        Internal equipment
-      </Heading>
+    <Box>
+      <Tabs.Root defaultValue="internal">
+        <Tabs.List mb="3">
+          <Tabs.Trigger value="internal">Internal equipment</Tabs.Trigger>
+          <Tabs.Trigger value="external">External equipment</Tabs.Trigger>
+        </Tabs.List>
+
+        {/* INTERNAL TAB */}
+        <Tabs.Content value="internal">
+          <InternalEquipmentTable rows={data?.internal ?? []} jobId={jobId} />
+        </Tabs.Content>
+
+        {/* EXTERNAL TAB */}
+        <Tabs.Content value="external">
+          <ExternalEquipmentTable
+            rows={data?.external ?? []}
+            canBook={canBook}
+            jobId={jobId}
+            companyId={companyId}
+            bookItemsOpen={bookItemsOpen}
+            setBookItemsOpen={setBookItemsOpen}
+            editItem={editItem}
+            setEditItem={setEditItem}
+            updateExt={updateExt}
+            timePeriodId={timePeriodId}
+          />
+        </Tabs.Content>
+      </Tabs.Root>
+    </Box>
+  )
+}
+
+/* ------------------- Internal Table ------------------- */
+function InternalEquipmentTable({
+  rows,
+  jobId,
+}: {
+  rows: Array<any>
+  jobId: string
+}) {
+  return (
+    <Table.Root variant="surface">
+      <Table.Header>
+        <Table.Row>
+          <Table.ColumnHeaderCell>Item</Table.ColumnHeaderCell>
+          <Table.ColumnHeaderCell>Qty</Table.ColumnHeaderCell>
+          <Table.ColumnHeaderCell>Price pr</Table.ColumnHeaderCell>
+          <Table.ColumnHeaderCell>Price total</Table.ColumnHeaderCell>
+          <Table.ColumnHeaderCell>Category</Table.ColumnHeaderCell>
+          <Table.ColumnHeaderCell>Time period</Table.ColumnHeaderCell>
+        </Table.Row>
+      </Table.Header>
+      <Table.Body>
+        {rows.map((r) => {
+          const item = firstItem(r.item)
+          const pricePr = item?.price ?? 0
+          const total = pricePr * (r.quantity ?? 0)
+          return (
+            <Table.Row key={r.id}>
+              <Table.Cell>{item?.name ?? '—'}</Table.Cell>
+              <Table.Cell>{r.quantity}</Table.Cell>
+              <Table.Cell>{pricePr.toFixed(2)}</Table.Cell>
+              <Table.Cell>{total.toFixed(2)}</Table.Cell>
+              <Table.Cell>{item?.category?.name ?? '—'}</Table.Cell>
+              <Table.Cell>
+                {r.time_period?.title ??
+                  `${fmtDate(r.time_period?.start_at)} – ${fmtDate(r.time_period?.end_at)}`}
+              </Table.Cell>
+            </Table.Row>
+          )
+        })}
+        {rows.length === 0 && (
+          <Table.Row>
+            <Table.Cell colSpan={6}>
+              <Text color="gray">No internal items</Text>
+            </Table.Cell>
+          </Table.Row>
+        )}
+      </Table.Body>
+    </Table.Root>
+  )
+}
+
+/* ------------------- External Table ------------------- */
+function ExternalEquipmentTable({
+  rows,
+  canBook,
+  jobId,
+  companyId,
+  bookItemsOpen,
+  setBookItemsOpen,
+  editItem,
+  setEditItem,
+  updateExt,
+  timePeriodId,
+}: any) {
+  return (
+    <Box>
+      <Box
+        mb="2"
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
+        <Heading size="3">External equipment</Heading>
+        <Button
+          size="2"
+          disabled={!canBook}
+          onClick={() => setBookItemsOpen(true)}
+        >
+          <Plus width={16} height={16} /> Book items
+        </Button>
+        {canBook && (
+          <BookItemsDialog
+            open={bookItemsOpen}
+            onOpenChange={setBookItemsOpen}
+            jobId={jobId}
+            companyId={companyId}
+            timePeriodId={timePeriodId}
+          />
+        )}
+      </Box>
+
       <Table.Root variant="surface">
         <Table.Header>
           <Table.Row>
             <Table.ColumnHeaderCell>Item</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Qty</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>Conflicts</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>Note</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>Owner</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell></Table.ColumnHeaderCell>
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {(data?.internal ?? []).map((r) => (
-            <Table.Row key={r.id}>
-              <Table.Cell>{firstItem(r.item)?.name ?? '—'}</Table.Cell>
-              <Table.Cell>{r.quantity}</Table.Cell>
-              <Table.Cell>
-                <AvailabilityBadge jobId={jobId} itemId={r.item_id} />
-              </Table.Cell>
-              <Table.Cell>
-                <Button size="1" variant="soft">
-                  <Edit width={14} height={14} /> Edit booking
-                </Button>
-              </Table.Cell>
-            </Table.Row>
-          ))}
-          {(data?.internal ?? []).length === 0 && (
-            <Table.Row>
-              <Table.Cell colSpan={4}>
-                <Text color="gray">No internal items</Text>
-              </Table.Cell>
-            </Table.Row>
-          )}
-        </Table.Body>
-      </Table.Root>
-
-      <Box mt="4">
-        <Box
-          mb="2"
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <Heading size="3">External equipment</Heading>
-          <Button
-            size="2"
-            disabled={!canBook}
-            onClick={() => setBookItemsOpen(true)}
-          >
-            <Plus width={16} height={16} /> Book items
-          </Button>
-          {canBook && (
-            <BookItemsDialog
-              open={bookItemsOpen}
-              onOpenChange={setBookItemsOpen}
-              jobId={jobId}
-              companyId={companyId} // now definitely string
-              timePeriodId={timePeriodId} // NEW
-            />
-          )}
-        </Box>
-
-        <Table.Root variant="surface">
-          <Table.Header>
-            <Table.Row>
-              <Table.ColumnHeaderCell>Item</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell>Qty</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell>Note</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell></Table.ColumnHeaderCell>
-            </Table.Row>
-          </Table.Header>
-          <Table.Body>
-            {(data?.external ?? []).map((r) => (
+          {rows.map((r: ReservedItemRow) => {
+            const item = firstItem(r.item)
+            return (
               <Table.Row key={r.id}>
-                <Table.Cell>{firstItem(r.item)?.name ?? '—'}</Table.Cell>
+                <Table.Cell>{item?.name ?? '—'}</Table.Cell>
                 <Table.Cell>{r.quantity}</Table.Cell>
                 <Table.Cell>
                   <StatusBadge
@@ -185,12 +245,17 @@ export default function EquipmentTab({ jobId }: { jobId: string }) {
                   />
                 </Table.Cell>
                 <Table.Cell>
+                  <Badge color="blue" variant="soft">
+                    {item?.external_owner_id ?? '—'}
+                  </Badge>
+                </Table.Cell>
+                <Table.Cell>
                   <Button
                     size="1"
                     variant="soft"
                     onClick={() => setEditItem(r)}
                   >
-                    …Edit booking
+                    <Edit width={14} height={14} /> Edit booking
                   </Button>
                   {editItem && (
                     <EditItemBookingDialog
@@ -202,21 +267,22 @@ export default function EquipmentTab({ jobId }: { jobId: string }) {
                   )}
                 </Table.Cell>
               </Table.Row>
-            ))}
-            {(data?.external ?? []).length === 0 && (
-              <Table.Row>
-                <Table.Cell colSpan={5}>
-                  <Text color="gray">No external items</Text>
-                </Table.Cell>
-              </Table.Row>
-            )}
-          </Table.Body>
-        </Table.Root>
-      </Box>
-    </div>
+            )
+          })}
+          {rows.length === 0 && (
+            <Table.Row>
+              <Table.Cell colSpan={6}>
+                <Text color="gray">No external items</Text>
+              </Table.Cell>
+            </Table.Row>
+          )}
+        </Table.Body>
+      </Table.Root>
+    </Box>
   )
 }
 
+/* ------------------- Helpers ------------------- */
 function StatusBadge({
   value,
   onChange,
@@ -240,48 +306,12 @@ function StatusBadge({
   )
 }
 
-// supabase sometimes returns nested relation as array; normalize
 function firstItem(it: ReservedItemRow['item']): ItemLite | null {
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  if (!it) return null
   return Array.isArray(it) ? (it[0] ?? null) : it
 }
 function extOwnerId(it: ReservedItemRow['item']) {
   return firstItem(it)?.external_owner_id ?? null
 }
-
-/* availability badge via RPC */
-function AvailabilityBadge({
-  itemId,
-  jobId,
-}: {
-  itemId: string
-  jobId: string
-}) {
-  const { data, isLoading } = useQuery({
-    queryKey: ['jobs.itemAvail', jobId, itemId],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc(
-        'check_item_availability_for_job',
-        {
-          p_job_id: jobId,
-          p_item_id: itemId,
-        },
-      )
-      if (error) throw error
-      return data as { conflicts: number }
-    },
-  })
-  if (isLoading) return <Badge variant="soft">checking…</Badge>
-  if (!data || data.conflicts === 0)
-    return (
-      <Badge color="green" variant="soft" radius="full">
-        free
-      </Badge>
-    )
-  return (
-    <Badge color="red" variant="soft" radius="full">
-      conflicts: {data.conflicts}
-    </Badge>
-  )
+function fmtDate(v?: string) {
+  return v ? new Date(v).toLocaleDateString() : ''
 }

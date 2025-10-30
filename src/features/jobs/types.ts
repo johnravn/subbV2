@@ -92,9 +92,30 @@ export type JobDetail = {
 export type ExternalReqStatus = 'planned' | 'requested' | 'confirmed'
 
 export type ItemLite = {
-  id: UUID
+  id: string
   name: string
-  external_owner_id: UUID | null
+  category_id?: string | null
+  brand_id?: string | null
+  model?: string | null
+  total_quantity?: number | null
+  active?: boolean
+  internally_owned?: boolean
+  external_owner_id?: string | null
+  notes?: string | null
+
+  // Joined relations (optional)
+  category?: {
+    id: string
+    name: string
+  } | null
+
+  brand?: {
+    id: string
+    name: string
+  } | null
+
+  // Optional price info if joined in your query
+  price?: number | null
 }
 
 /**

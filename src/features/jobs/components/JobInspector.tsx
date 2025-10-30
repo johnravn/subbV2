@@ -74,15 +74,18 @@ export default function JobInspector({ id }: { id: string | null }) {
       <Tabs.Root defaultValue="overview">
         <Tabs.List wrap="wrap">
           <Tabs.Trigger value="overview">Overview</Tabs.Trigger>
+          <Tabs.Trigger value="timeline">Timeline</Tabs.Trigger>
           <Tabs.Trigger value="equipment">Equipment</Tabs.Trigger>
           <Tabs.Trigger value="crew">Crew</Tabs.Trigger>
           <Tabs.Trigger value="transport">Transportation</Tabs.Trigger>
-          <Tabs.Trigger value="timeline">Timeline</Tabs.Trigger>
           <Tabs.Trigger value="contacts">Contacts</Tabs.Trigger>
         </Tabs.List>
 
         <Tabs.Content value="overview" mt={'10px'}>
           <OverviewTab job={job} />
+        </Tabs.Content>
+        <Tabs.Content value="timeline" mt={'10px'}>
+          <TimelineTab jobId={job.id} />
         </Tabs.Content>
         <Tabs.Content value="equipment" mt={'10px'}>
           <EquipmentTab jobId={job.id} />
@@ -92,9 +95,6 @@ export default function JobInspector({ id }: { id: string | null }) {
         </Tabs.Content>
         <Tabs.Content value="transport" mt={'10px'}>
           <TransportTab jobId={job.id} />
-        </Tabs.Content>
-        <Tabs.Content value="timeline" mt={'10px'}>
-          <TimelineTab jobId={job.id} />
         </Tabs.Content>
         <Tabs.Content value="contacts" mt={'10px'}>
           <ContactsTab jobId={job.id} companyId={job.company_id} />
