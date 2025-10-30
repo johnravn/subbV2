@@ -112,7 +112,7 @@ export function AppToastProvider({ children }: { children: React.ReactNode }) {
             flexDirection: 'column',
             gap: 10,
             width: 'min(420px, calc(100vw - 32px))',
-            zIndex: 1000, // keep above sheets/dialogs
+            zIndex: 99999, // keep above sheets/dialogs
             outline: 'none',
           }}
         />

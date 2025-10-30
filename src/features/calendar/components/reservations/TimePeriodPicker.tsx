@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Badge, Box, Button, Flex, Select, TextField } from '@radix-ui/themes'
+import { Box, Button, Flex, Select, TextField } from '@radix-ui/themes'
 import { Calendar, Edit, Plus } from 'iconoir-react'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { useCompany } from '@shared/companies/CompanyProvider'
@@ -57,6 +57,7 @@ export default function TimePeriodPicker({ jobId, value, onChange }: Props) {
     <Box
       mb="3"
       p="2"
+      height="100%"
       style={{ border: '1px dashed var(--gray-a6)', borderRadius: 10 }}
     >
       <Flex direction={'column'} align="start" gap="2">
@@ -198,4 +199,188 @@ function isoLocalStart() {
 }
 function isoLocalEnd() {
   return new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
+}
+
+/* =============== Fixed Time Period Editor (No Switching) =============== */
+type FixedTimePeriodEditorProps = {
+  jobId: string
+  timePeriodId: string
+}
+
+export function FixedTimePeriodEditor({
+  jobId,
+  timePeriodId,
+}: FixedTimePeriodEditorProps) {
+  const qc = useQueryClient()
+  const { companyId } = useCompany()
+  const { data: timePeriods = [] } = useQuery(jobTimePeriodsQuery({ jobId }))
+  const { success, error } = useToast()
+
+  const [editing, setEditing] = React.useState(false)
+  const [editData, setEditData] = React.useState<{
+    start_at: string
+    end_at: string
+  } | null>(null)
+
+  const timePeriod = timePeriods.find((tp) => tp.id === timePeriodId)
+
+  // Initialize edit data when editing starts
+  React.useEffect(() => {
+    if (editing && timePeriod && !editData) {
+      setEditData({
+        start_at: timePeriod.start_at,
+        end_at: timePeriod.end_at,
+      })
+    }
+  }, [editing, timePeriod, editData])
+
+  const save = useMutation({
+    mutationFn: async () => {
+      if (!companyId || !editData || !timePeriod) throw new Error('Missing data')
+      await upsertTimePeriod({
+        id: timePeriodId,
+        job_id: jobId,
+        company_id: companyId,
+        title: timePeriod.title ?? '', // Keep existing title
+        start_at: editData.start_at,
+        end_at: editData.end_at,
+      })
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['jobs', jobId, 'time_periods'] })
+      setEditing(false)
+      setEditData(null)
+      success('Success', 'Time period updated successfully')
+    },
+    onError: (e: any) => {
+      error('Failed to update', e?.hint || e?.message || 'Please try again.')
+    },
+  })
+
+  if (!timePeriod) {
+    return (
+      <Box
+        p="2"
+        style={{
+          border: '1px dashed var(--red-a6)',
+          borderRadius: 8,
+          background: 'var(--red-a2)',
+        }}
+      >
+        <Flex align="center" gap="2">
+          <Calendar />
+          <strong style={{ color: 'var(--red-11)' }}>
+            Time period not found
+          </strong>
+        </Flex>
+      </Box>
+    )
+  }
+
+  return (
+    <Box
+      p="2"
+      style={{
+        border: '1px dashed var(--gray-a6)',
+        borderRadius: 8,
+        background: editing ? 'var(--blue-a2)' : undefined,
+      }}
+    >
+      <Flex direction="column" gap="2">
+        <Flex align="center" justify="between">
+          <Flex align="center" gap="2">
+            <Calendar />
+            <strong>{timePeriod.title || '(untitled)'}</strong>
+          </Flex>
+          {!editing && (
+            <Button
+              size="1"
+              variant="soft"
+              onClick={() => setEditing(true)}
+            >
+              <Edit width={14} height={14} /> Edit
+            </Button>
+          )}
+        </Flex>
+
+        {!editing ? (
+          <Flex gap="2" wrap="wrap">
+            <Box
+              p="1"
+              px="2"
+              style={{
+                background: 'var(--gray-a3)',
+                borderRadius: 6,
+                fontSize: '0.875rem',
+              }}
+            >
+              {fmt(timePeriod.start_at)}
+            </Box>
+            <span>→</span>
+            <Box
+              p="1"
+              px="2"
+              style={{
+                background: 'var(--gray-a3)',
+                borderRadius: 6,
+                fontSize: '0.875rem',
+              }}
+            >
+              {fmt(timePeriod.end_at)}
+            </Box>
+          </Flex>
+        ) : (
+          editData && (
+            <Box
+              p="2"
+              style={{ background: 'var(--gray-2)', borderRadius: 8 }}
+            >
+              <Flex gap="2" wrap="wrap" align="center">
+                <TextField.Root
+                  type="datetime-local"
+                  value={toLocal(editData.start_at)}
+                  onChange={(e) =>
+                    setEditData({
+                      ...editData,
+                      start_at: fromLocal(e.target.value),
+                    })
+                  }
+                />
+                <TextField.Root
+                  type="datetime-local"
+                  value={toLocal(editData.end_at)}
+                  onChange={(e) =>
+                    setEditData({
+                      ...editData,
+                      end_at: fromLocal(e.target.value),
+                    })
+                  }
+                />
+                <Flex gap="2" ml="auto">
+                  <Button
+                    size="1"
+                    variant="soft"
+                    onClick={() => {
+                      setEditing(false)
+                      setEditData(null)
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="1"
+                    variant="classic"
+                    onClick={() => save.mutate()}
+                    disabled={save.isPending}
+                  >
+                    {save.isPending ? 'Saving...' : 'Save'}
+                  </Button>
+                </Flex>
+              </Flex>
+            </Box>
+          )
+        )}
+      </Flex>
+    </Box>
+  )
 }

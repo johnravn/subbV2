@@ -58,7 +58,11 @@ export default function TimelineTab({ jobId }: { jobId: string }) {
         <Heading size="3" mb="3">
           Time Periods
         </Heading>
-        <TimePeriodsManager jobId={jobId} />
+        <TimePeriodsManager
+          jobId={jobId}
+          defaultStartAt={job.start_at}
+          defaultEndAt={job.end_at}
+        />
       </Card>
     </Box>
   )
@@ -215,7 +219,15 @@ function JobStatusTimeline({
   )
 }
 
-function TimePeriodsManager({ jobId }: { jobId: string }) {
+function TimePeriodsManager({
+  jobId,
+  defaultStartAt,
+  defaultEndAt,
+}: {
+  jobId: string
+  defaultStartAt: string | null
+  defaultEndAt: string | null
+}) {
   const qc = useQueryClient()
   const { companyId } = useCompany()
   const { data: timePeriods = [] } = useQuery(jobTimePeriodsQuery({ jobId }))
@@ -340,11 +352,6 @@ function TimePeriodsManager({ jobId }: { jobId: string }) {
                   <Text weight={isJobDuration(tp) ? 'bold' : 'regular'}>
                     {tp.title || '(untitled)'}
                   </Text>
-                  {isJobDuration(tp) && (
-                    <Badge size="1" color="orange">
-                      Required
-                    </Badge>
-                  )}
                 </Flex>
               </Table.Cell>
               <Table.Cell>
@@ -354,23 +361,29 @@ function TimePeriodsManager({ jobId }: { jobId: string }) {
                 <Text size="2">{formatDateTime(tp.end_at)}</Text>
               </Table.Cell>
               <Table.Cell>
-                <Flex gap="1">
-                  <IconButton
-                    size="1"
-                    variant="ghost"
-                    onClick={() => setEditing(tp)}
-                  >
-                    <Edit width={14} height={14} />
-                  </IconButton>
-                  {!isJobDuration(tp) && (
-                    <IconButton
-                      size="1"
-                      variant="ghost"
-                      color="red"
-                      onClick={() => setDeleting(tp)}
-                    >
-                      <Trash width={14} height={14} />
-                    </IconButton>
+                <Flex gap="2">
+                  {!isJobDuration(tp) ? (
+                    <>
+                      <IconButton
+                        size="1"
+                        variant="ghost"
+                        onClick={() => setEditing(tp)}
+                      >
+                        <Edit />
+                      </IconButton>
+                      <IconButton
+                        size="1"
+                        variant="ghost"
+                        color="red"
+                        onClick={() => setDeleting(tp)}
+                      >
+                        <Trash />
+                      </IconButton>
+                    </>
+                  ) : (
+                    <Badge size="1" color="orange">
+                      Required
+                    </Badge>
                   )}
                 </Flex>
               </Table.Cell>
@@ -388,8 +401,9 @@ function TimePeriodsManager({ jobId }: { jobId: string }) {
             job_id: jobId,
             company_id: companyId!,
             title: '',
-            start_at: new Date().toISOString(),
-            end_at: new Date(Date.now() + 86400000).toISOString(), // +1 day
+            start_at: defaultStartAt || new Date().toISOString(),
+            end_at:
+              defaultEndAt || new Date(Date.now() + 86400000).toISOString(),
           } as TimePeriodLite)
         }
       >
@@ -481,16 +495,45 @@ function EditTimePeriodDialog({
         <Separator my="3" />
 
         <Flex direction="column" gap="3">
-          <label>
-            <Text as="div" size="2" mb="1" weight="medium">
-              Title
-            </Text>
-            <TextField.Root
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Setup, Show, Teardown"
-            />
-          </label>
+          <Box>
+            <label>
+              <Text as="div" size="2" mb="1" weight="medium">
+                Title
+              </Text>
+              <TextField.Root
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. Setup, Show, Teardown"
+              />
+            </label>
+            {!timePeriod.id && (
+              <Flex gap="2" wrap="wrap" mt="2">
+                <Text size="1" color="gray" style={{ width: '100%' }}>
+                  Quick suggestions:
+                </Text>
+                {[
+                  'Equipment period',
+                  'Crew period',
+                  'Vehicle period',
+                  'Setup',
+                  'Show',
+                  'Teardown',
+                  'Load in',
+                  'Load out',
+                ].map((suggestion) => (
+                  <Button
+                    key={suggestion}
+                    size="1"
+                    variant="soft"
+                    color="gray"
+                    onClick={() => setTitle(suggestion)}
+                  >
+                    {suggestion}
+                  </Button>
+                ))}
+              </Flex>
+            )}
+          </Box>
 
           <label>
             <Text as="div" size="2" mb="1" weight="medium">

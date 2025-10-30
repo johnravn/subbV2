@@ -127,7 +127,7 @@ export default function OverviewTab({ job }: { job: JobDetail }) {
         </Grid>
       </Box>
       <Box>
-        <Flex align={'center'} justify={'between'} mt={'1'}>
+        <Flex align={'center'} gap={'2'} mt={'1'}>
           <Heading size="3">Location</Heading>
           {job.address && (
             <IconButton variant="ghost" onClick={() => setEditOpen(true)}>

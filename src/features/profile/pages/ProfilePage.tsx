@@ -392,8 +392,6 @@ export default function ProfilePage() {
         <ThemeToggle />
       </Flex>
 
-      <Separator />
-
       {/* Three columns: personal (left), address (middle), optional (right) */}
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         <Flex direction="column" gap="4" p="4">

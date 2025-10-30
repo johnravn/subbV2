@@ -16,6 +16,7 @@ import { Search } from 'iconoir-react'
 import { supabase } from '@shared/api/supabase'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { categoryNamesQuery } from '@features/inventory/api/queries'
+import { jobTimePeriodsQuery } from '@features/jobs/api/queries'
 import TimePeriodPicker from '@features/calendar/components/reservations/TimePeriodPicker'
 import type { UUID } from '../../types'
 
@@ -91,7 +92,35 @@ export default function BookItemsDialog({
   const [selectedTimePeriodId, setSelectedTimePeriodId] = React.useState<
     string | null
   >(initialTimePeriodId ?? null)
+  const [message, setMessage] = React.useState<{
+    type: 'error' | 'warning' | 'info'
+    text: string
+  } | null>(null)
   const { success, error } = useToast()
+
+  // Fetch time periods to find default
+  const { data: timePeriods = [] } = useQuery({
+    ...jobTimePeriodsQuery({ jobId }),
+    enabled: open,
+  })
+
+  // Set default time period when dialog opens
+  React.useEffect(() => {
+    if (!open || initialTimePeriodId || selectedTimePeriodId) return
+
+    // Find "Equipment period" or "Job duration"
+    const equipmentPeriod = timePeriods.find((tp) =>
+      tp.title?.toLowerCase().includes('equipment period'),
+    )
+    const jobDuration = timePeriods.find((tp) =>
+      tp.title?.toLowerCase().includes('job duration'),
+    )
+
+    const defaultPeriod = equipmentPeriod || jobDuration
+    if (defaultPeriod) {
+      setSelectedTimePeriodId(defaultPeriod.id)
+    }
+  }, [open, timePeriods, initialTimePeriodId, selectedTimePeriodId])
 
   // Update local state when prop changes
   React.useEffect(() => {
@@ -99,6 +128,13 @@ export default function BookItemsDialog({
       setSelectedTimePeriodId(initialTimePeriodId)
     }
   }, [initialTimePeriodId])
+
+  // Clear message when dialog closes
+  React.useEffect(() => {
+    if (!open) {
+      setMessage(null)
+    }
+  }, [open])
 
   // "External only" filter (items whose external_owner_id is set)
   const [externalOnly, setExternalOnly] = React.useState(false)
@@ -189,27 +225,42 @@ export default function BookItemsDialog({
     // Check availability
     const onHand = p.on_hand ?? 0
 
+    // Pre-validate before updating state
+    const currentRow =
+      p.kind === 'item'
+        ? rows.find((x) => x.kind === 'item' && x.item_id === p.id)
+        : rows.find((x) => x.kind === 'group' && x.group_id === p.id)
+
+    if (currentRow) {
+      const newQty = currentRow.quantity + 1
+      if (onHand > 0 && newQty > onHand) {
+        setMessage({
+          type: 'error',
+          text: `Only ${onHand} ${p.name} available. Already booking ${currentRow.quantity}.`,
+        })
+        return
+      }
+    } else {
+      // Adding new item/group
+      if (onHand > 0 && 1 > onHand) {
+        setMessage({
+          type: 'error',
+          text: `Only ${onHand} ${p.name} available.`,
+        })
+        return
+      }
+    }
+
+    // Clear any previous messages on success
+    setMessage(null)
+
     setRows((r) => {
       if (p.kind === 'item') {
         const i = r.findIndex((x) => x.kind === 'item' && x.item_id === p.id)
         if (i >= 0) {
-          const newQty = r[i].quantity + 1
-          // Check if we're trying to book more than available
-          if (onHand > 0 && newQty > onHand) {
-            error(
-              'Not enough available',
-              `Only ${onHand} ${p.name} available. Already booking ${r[i].quantity}.`,
-            )
-            return r
-          }
           const clone = [...r]
-          clone[i] = { ...clone[i], quantity: newQty } as Row
+          clone[i] = { ...clone[i], quantity: clone[i].quantity + 1 } as Row
           return clone
-        }
-        // Adding new item
-        if (onHand > 0 && 1 > onHand) {
-          error('Not enough available', `Only ${onHand} ${p.name} available.`)
-          return r
         }
         return [
           ...r,
@@ -224,23 +275,9 @@ export default function BookItemsDialog({
       } else {
         const i = r.findIndex((x) => x.kind === 'group' && x.group_id === p.id)
         if (i >= 0) {
-          const newQty = r[i].quantity + 1
-          // Check if we're trying to book more than available
-          if (onHand > 0 && newQty > onHand) {
-            error(
-              'Not enough available',
-              `Only ${onHand} ${p.name} available. Already booking ${r[i].quantity}.`,
-            )
-            return r
-          }
           const clone = [...r]
-          clone[i] = { ...clone[i], quantity: newQty } as Row
+          clone[i] = { ...clone[i], quantity: clone[i].quantity + 1 } as Row
           return clone
-        }
-        // Adding new group
-        if (onHand > 0 && 1 > onHand) {
-          error('Not enough available', `Only ${onHand} ${p.name} available.`)
-          return r
         }
         return [
           ...r,
@@ -259,12 +296,15 @@ export default function BookItemsDialog({
   function updateQty(target: Row, qty: number, maxAvailable: number | null) {
     // Validate against available quantity
     if (maxAvailable !== null && maxAvailable > 0 && qty > maxAvailable) {
-      error(
-        'Not enough available',
-        `Only ${maxAvailable} available. Cannot book ${qty}.`,
-      )
+      setMessage({
+        type: 'error',
+        text: `Only ${maxAvailable} available. Cannot book ${qty}.`,
+      })
       return
     }
+
+    // Clear any previous messages on success
+    setMessage(null)
 
     setRows((prevRows) =>
       prevRows.map((x) =>
@@ -292,15 +332,120 @@ export default function BookItemsDialog({
         (r): r is Extract<Row, { kind: 'group' }> => r.kind === 'group',
       )
 
-      const time_period_id = selectedTimePeriodId
+      // Fetch job details for duration times
+      const { data: job, error: jobErr } = await supabase
+        .from('jobs')
+        .select('start_at, end_at')
+        .eq('id', jobId)
+        .single()
+      if (jobErr) throw jobErr
 
-      // 2) build payload for items
-      const itemPayload = itemRows.map((r) => ({
-        time_period_id,
-        item_id: r.item_id,
-        quantity: r.quantity,
-        source_kind: 'direct' as const,
-      }))
+      // Fetch all time periods for this job
+      const { data: existingTimePeriods, error: tpErr } = await supabase
+        .from('time_periods')
+        .select('id, title')
+        .eq('job_id', jobId)
+      if (tpErr) throw tpErr
+
+      // Map of item_id -> external_owner info
+      const itemOwnerMap = new Map<
+        string,
+        { owner_id: string | null; owner_name: string | null }
+      >()
+
+      // Fetch item details to get external_owner_id and owner names
+      if (itemRows.length > 0) {
+        const itemIds = itemRows.map((r) => r.item_id)
+        const { data: itemDetails, error: itemErr } = await supabase
+          .from('items')
+          .select(
+            'id, external_owner_id, external_owner:external_owner_id(id, name)',
+          )
+          .in('id', itemIds)
+        if (itemErr) throw itemErr
+
+        for (const item of itemDetails) {
+          const ownerData = Array.isArray(item.external_owner)
+            ? item.external_owner[0]
+            : item.external_owner
+          itemOwnerMap.set(item.id, {
+            owner_id: item.external_owner_id,
+            owner_name: ownerData.name ?? null,
+          })
+        }
+      }
+
+      // Create time periods for external owners if needed
+      const ownerTimePeriodMap = new Map<string, string>() // owner_id -> time_period_id
+
+      for (const ownerInfo of itemOwnerMap.values()) {
+        if (!ownerInfo.owner_id || !ownerInfo.owner_name) continue
+        if (ownerTimePeriodMap.has(ownerInfo.owner_id)) continue // Already processed
+
+        const expectedTitle = `${ownerInfo.owner_name} Equipment period`
+        let tp = existingTimePeriods.find((t) => t.title === expectedTitle)
+
+        if (!tp) {
+          // Create the time period
+          const { data: newTp, error: createErr } = await supabase
+            .from('time_periods')
+            .insert({
+              job_id: jobId,
+              company_id: companyId,
+              title: expectedTitle,
+              start_at: job.start_at,
+              end_at: job.end_at,
+            })
+            .select('id, title')
+            .single()
+          if (createErr) throw createErr
+          tp = newTp
+          existingTimePeriods.push(newTp)
+        }
+
+        ownerTimePeriodMap.set(ownerInfo.owner_id, tp.id)
+      }
+
+      // Collect all time period IDs we'll be using
+      const allTimePeriodIds = new Set<string>([selectedTimePeriodId])
+      for (const tpId of ownerTimePeriodMap.values()) {
+        allTimePeriodIds.add(tpId)
+      }
+
+      // 1) Fetch existing reserved_items for all relevant time periods
+      const { data: existingReservations, error: fetchErr } = await supabase
+        .from('reserved_items')
+        .select(
+          'id, item_id, quantity, source_kind, source_group_id, time_period_id',
+        )
+        .in('time_period_id', Array.from(allTimePeriodIds))
+
+      if (fetchErr) throw fetchErr
+
+      // Create a lookup map for existing reservations
+      // Key format: "item_id:source_kind:source_group_id:time_period_id"
+      const existingMap = new Map<string, { id: string; quantity: number }>()
+      for (const res of existingReservations) {
+        const key = `${res.item_id}:${res.source_kind}:${res.source_group_id || 'null'}:${res.time_period_id}`
+        existingMap.set(key, { id: res.id, quantity: res.quantity })
+      }
+
+      // 2) build payload for items - use owner-specific time periods for external items
+      const itemPayload = itemRows.map((r) => {
+        const ownerInfo = itemOwnerMap.get(r.item_id)
+        const isExternal = ownerInfo?.owner_id
+        const tpId = isExternal
+          ? ownerTimePeriodMap.get(ownerInfo.owner_id!)
+          : selectedTimePeriodId
+
+        return {
+          time_period_id: tpId,
+          item_id: r.item_id,
+          quantity: r.quantity,
+          source_kind: 'direct' as const,
+          source_group_id: null,
+        }
+      })
       const groupPayload: Array<any> = []
       if (groupRows.length > 0) {
         // fetch group members in one round trip
@@ -327,7 +472,7 @@ export default function BookItemsDialog({
           const groupItems = byGroup.get(g.group_id) ?? []
           for (const m of groupItems) {
             groupPayload.push({
-              time_period_id,
+              time_period_id: selectedTimePeriodId, // Groups are always internal
               item_id: m.item_id,
               quantity: m.quantity * g.quantity, // scale
               source_kind: 'group' as const,
@@ -339,15 +484,47 @@ export default function BookItemsDialog({
 
       const payload = [...itemPayload, ...groupPayload]
       if (payload.length === 0) return
-      const { error: insErr } = await supabase
-        .from('reserved_items')
-        .insert(payload)
-      console.log('Payload', payload)
-      console.log('insErr', insErr)
-      if (insErr) throw insErr
+
+      // 3) Split into updates and inserts
+      const toUpdate: Array<{ id: string; quantity: number }> = []
+      const toInsert: Array<any> = []
+
+      for (const item of payload) {
+        const key = `${item.item_id}:${item.source_kind}:${item.source_group_id || 'null'}:${item.time_period_id}`
+        const existing = existingMap.get(key)
+
+        if (existing) {
+          // Update existing reservation by adding quantities
+          toUpdate.push({
+            id: existing.id,
+            quantity: existing.quantity + item.quantity,
+          })
+        } else {
+          // Insert new reservation
+          toInsert.push(item)
+        }
+      }
+
+      // 4) Execute updates
+      for (const update of toUpdate) {
+        const { error: updateErr } = await supabase
+          .from('reserved_items')
+          .update({ quantity: update.quantity })
+          .eq('id', update.id)
+        if (updateErr) throw updateErr
+      }
+
+      // 5) Execute inserts
+      if (toInsert.length > 0) {
+        const { error: insErr } = await supabase
+          .from('reserved_items')
+          .insert(toInsert)
+        if (insErr) throw insErr
+      }
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['jobs.equipment', jobId] })
+      await qc.invalidateQueries({ queryKey: ['jobs', jobId, 'time_periods'] })
       onOpenChange(false)
       onSaved?.()
       setRows([])
@@ -366,18 +543,76 @@ export default function BookItemsDialog({
       >
         <Dialog.Title>Book equipment</Dialog.Title>
 
-        {/* Time Period Selection - Required */}
-        <TimePeriodPicker
-          jobId={jobId}
-          value={selectedTimePeriodId}
-          onChange={setSelectedTimePeriodId}
-        />
+        {/* Top section: Time Period Picker + Messages */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '65fr 35fr',
+            gap: 16,
+            marginTop: 8,
+            alignItems: 'stretch',
+          }}
+        >
+          {/* LEFT: Time Period Picker */}
+          <TimePeriodPicker
+            jobId={jobId}
+            value={selectedTimePeriodId}
+            onChange={setSelectedTimePeriodId}
+          />
+
+          {/* RIGHT: Message Area */}
+          <div
+            style={{
+              transition: '100ms',
+              borderRadius: 8,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 12,
+              background: message
+                ? message.type === 'error'
+                  ? 'var(--red-a3)'
+                  : message.type === 'warning'
+                    ? 'var(--amber-a3)'
+                    : 'var(--blue-a3)'
+                : 'var(--gray-a2)',
+              border: message
+                ? message.type === 'error'
+                  ? '1px solid var(--red-a6)'
+                  : message.type === 'warning'
+                    ? '1px solid var(--amber-a6)'
+                    : '1px solid var(--blue-a6)'
+                : '1px solid var(--gray-a4)',
+            }}
+          >
+            {message ? (
+              <Text
+                size="2"
+                weight="medium"
+                color={
+                  message.type === 'error'
+                    ? 'red'
+                    : message.type === 'warning'
+                      ? 'amber'
+                      : 'blue'
+                }
+                style={{ textAlign: 'center' }}
+              >
+                {message.text}
+              </Text>
+            ) : (
+              <Text size="2" color="gray" style={{ textAlign: 'center' }}>
+                Messages will appear here
+              </Text>
+            )}
+          </div>
+        </div>
 
         <div
           style={{
             marginTop: 8,
             display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
+            gridTemplateColumns: '65fr 35fr',
             gap: 16,
             flex: 1,
             minHeight: 0,
