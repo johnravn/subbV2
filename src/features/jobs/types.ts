@@ -21,6 +21,7 @@ export type JobListRow = {
   title: string
   status: JobStatus
   start_at: string | null
+  end_at: string | null
   customer?: {
     id: UUID
     name: string | null

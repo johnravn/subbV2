@@ -179,22 +179,35 @@ export default function AddItemDialog({
   const createMutation = useMutation({
     mutationFn: async (f: FormState) => {
       if (!companyId) throw new Error('No company selected')
-      const { error } = await supabase.rpc('create_item_with_price', {
-        p_company_id: companyId,
-        p_name: f.name,
-        p_category_id: f.categoryId ?? null,
-        p_brand_id: f.brandId ?? null,
-        p_model: f.model || null,
-        p_allow_individual_booking: f.allow_individual_booking,
-        p_total_quantity: f.total_quantity || 0,
-        p_active: f.active,
-        p_notes: f.notes || null,
-        p_price: f.price ?? null,
-        p_effective_from: null,
-        p_internally_owned: f.internally_owned,
-        p_external_owner_id: f.internally_owned ? null : f.external_owner_id,
-      })
+      const { data: itemId, error } = await supabase.rpc(
+        'create_item_with_price',
+        {
+          p_company_id: companyId,
+          p_name: f.name,
+          p_category_id: f.categoryId ?? null,
+          p_brand_id: f.brandId ?? null,
+          p_model: f.model || null,
+          p_allow_individual_booking: f.allow_individual_booking,
+          p_total_quantity: f.total_quantity || 0,
+          p_active: f.active,
+          p_notes: f.notes || null,
+          p_price: f.price ?? null,
+          p_effective_from: null,
+        },
+      )
       if (error) throw error
+
+      // Update internally_owned and external_owner_id separately since the function doesn't support them
+      if (itemId) {
+        const { error: updateError } = await supabase
+          .from('items')
+          .update({
+            internally_owned: f.internally_owned,
+            external_owner_id: f.internally_owned ? null : f.external_owner_id,
+          })
+          .eq('id', itemId)
+        if (updateError) throw updateError
+      }
     },
     onSuccess: async () => {
       await Promise.all([

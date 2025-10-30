@@ -1079,7 +1079,6 @@ export type Database = {
       }
       reserved_crew: {
         Row: {
-          assignment: string | null
           created_at: string
           during: unknown
           id: string
@@ -1090,7 +1089,6 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          assignment?: string | null
           created_at?: string
           during?: unknown
           id?: string
@@ -1101,7 +1099,6 @@ export type Database = {
           user_id: string
         }
         Update: {
-          assignment?: string | null
           created_at?: string
           during?: unknown
           id?: string

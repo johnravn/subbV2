@@ -4,18 +4,22 @@ import {
   Badge,
   Button,
   Flex,
-  SegmentedControl,
+  IconButton,
+  Popover,
   Spinner,
   Table,
   Text,
   TextField,
 } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
-import { Plus, Search } from 'iconoir-react'
+import { ArrowDown, ArrowUp, Calendar, Plus, Search, X } from 'iconoir-react'
 import { makeWordPresentable } from '@shared/lib/generalFunctions'
 import { jobsIndexQuery } from '../api/queries'
 import JobDialog from './dialogs/JobDialog'
-import type { JobListRow, JobStatus } from '../types'
+import type { JobListRow } from '../types'
+
+type SortBy = 'title' | 'start_at' | 'status' | 'customer_name'
+type SortDir = 'asc' | 'desc'
 
 export default function JobsTable({
   selectedId,
@@ -26,9 +30,9 @@ export default function JobsTable({
 }) {
   const { companyId } = useCompany()
   const [search, setSearch] = React.useState('')
-  const [statusFilter, setStatusFilter] = React.useState<JobStatus | 'all'>(
-    'all',
-  )
+  const [selectedDate, setSelectedDate] = React.useState<string>('')
+  const [sortBy, setSortBy] = React.useState<SortBy>('start_at')
+  const [sortDir, setSortDir] = React.useState<SortDir>('desc')
 
   const [createOpen, setCreateOpen] = React.useState(false)
 
@@ -36,42 +40,84 @@ export default function JobsTable({
     ...jobsIndexQuery({
       companyId: companyId ?? '__none__',
       search,
-      status: statusFilter,
+      selectedDate,
+      sortBy,
+      sortDir,
     }),
     enabled: !!companyId,
   })
 
+  const handleSort = (column: SortBy) => {
+    if (sortBy === column) {
+      setSortDir(sortDir === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortBy(column)
+      setSortDir('asc')
+    }
+  }
+
   return (
     <>
       <Flex gap="2" align="center" wrap="wrap" mb="3">
-        <TextField.Root
-          placeholder="Search jobs…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          size="3"
-          style={{ flex: '1 1 240px' }}
-        >
-          <TextField.Slot side="left">
-            <Search />
-          </TextField.Slot>
-          <TextField.Slot side="right">
-            {isFetching && <Spinner />}
-          </TextField.Slot>
-        </TextField.Root>
+        <Flex gap="2" align="center" style={{ flex: '1 1 240px' }}>
+          <TextField.Root
+            placeholder="Search title, customer, or date…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            size="3"
+            style={{ flex: 1 }}
+          >
+            <TextField.Slot side="left">
+              <Search />
+            </TextField.Slot>
+            <TextField.Slot side="right">
+              {isFetching && <Spinner />}
+            </TextField.Slot>
+          </TextField.Root>
 
-        <SegmentedControl.Root
-          value={statusFilter}
-          onValueChange={(v) => setStatusFilter(v as any)}
-        >
-          <SegmentedControl.Item value="all">All</SegmentedControl.Item>
-          <SegmentedControl.Item value="planned">Planned</SegmentedControl.Item>
-          <SegmentedControl.Item value="confirmed">
-            Confirmed
-          </SegmentedControl.Item>
-          <SegmentedControl.Item value="in_progress">
-            Active
-          </SegmentedControl.Item>
-        </SegmentedControl.Root>
+          <Flex align="center" gap="2">
+            <Popover.Root>
+              <Popover.Trigger>
+                <IconButton
+                  size="3"
+                  variant={selectedDate ? 'soft' : 'ghost'}
+                  color={selectedDate ? 'blue' : undefined}
+                >
+                  <Calendar width={18} height={18} />
+                </IconButton>
+              </Popover.Trigger>
+              <Popover.Content style={{ width: 300 }}>
+                <Flex direction="column" gap="3">
+                  <Flex align="center" justify="between">
+                    <Text size="2" weight="medium">
+                      Filter by date
+                    </Text>
+                    {selectedDate && (
+                      <IconButton
+                        size="1"
+                        variant="ghost"
+                        onClick={() => setSelectedDate('')}
+                      >
+                        <X width={14} height={14} />
+                      </IconButton>
+                    )}
+                  </Flex>
+                  <TextField.Root
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    placeholder="Select date"
+                  />
+                </Flex>
+              </Popover.Content>
+            </Popover.Root>
+            {selectedDate && (
+              <Text size="2" color="gray">
+                {new Date(selectedDate).toLocaleDateString()}
+              </Text>
+            )}
+          </Flex>
+        </Flex>
 
         <Button size="2" variant="classic" onClick={() => setCreateOpen(true)}>
           <Plus width={16} height={16} /> New job
@@ -93,10 +139,70 @@ export default function JobsTable({
       <Table.Root variant="surface">
         <Table.Header>
           <Table.Row>
-            <Table.ColumnHeaderCell>Title</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>Customer</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>Start</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>
+              <Flex
+                align="center"
+                gap="2"
+                style={{ cursor: 'pointer', userSelect: 'none' }}
+                onClick={() => handleSort('title')}
+              >
+                Title
+                {sortBy === 'title' &&
+                  (sortDir === 'asc' ? (
+                    <ArrowUp width={14} height={14} />
+                  ) : (
+                    <ArrowDown width={14} height={14} />
+                  ))}
+              </Flex>
+            </Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>
+              <Flex
+                align="center"
+                gap="2"
+                style={{ cursor: 'pointer', userSelect: 'none' }}
+                onClick={() => handleSort('customer_name')}
+              >
+                Customer
+                {sortBy === 'customer_name' &&
+                  (sortDir === 'asc' ? (
+                    <ArrowUp width={14} height={14} />
+                  ) : (
+                    <ArrowDown width={14} height={14} />
+                  ))}
+              </Flex>
+            </Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>
+              <Flex
+                align="center"
+                gap="2"
+                style={{ cursor: 'pointer', userSelect: 'none' }}
+                onClick={() => handleSort('start_at')}
+              >
+                Start
+                {sortBy === 'start_at' &&
+                  (sortDir === 'asc' ? (
+                    <ArrowUp width={14} height={14} />
+                  ) : (
+                    <ArrowDown width={14} height={14} />
+                  ))}
+              </Flex>
+            </Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>
+              <Flex
+                align="center"
+                gap="2"
+                style={{ cursor: 'pointer', userSelect: 'none' }}
+                onClick={() => handleSort('status')}
+              >
+                Status
+                {sortBy === 'status' &&
+                  (sortDir === 'asc' ? (
+                    <ArrowUp width={14} height={14} />
+                  ) : (
+                    <ArrowDown width={14} height={14} />
+                  ))}
+              </Flex>
+            </Table.ColumnHeaderCell>
           </Table.Row>
         </Table.Header>
         <Table.Body>

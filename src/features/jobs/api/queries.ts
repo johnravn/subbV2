@@ -3,7 +3,6 @@ import type {
   AddressListRow,
   JobDetail,
   JobListRow,
-  JobStatus,
   TimePeriodLite,
 } from '../types'
 
@@ -16,30 +15,112 @@ function escapeForPostgrestOr(value: string) {
 export function jobsIndexQuery({
   companyId,
   search,
-  status,
+  selectedDate,
+  sortBy = 'start_at',
+  sortDir = 'desc',
 }: {
   companyId: string
   search: string
-  status: JobStatus | 'all'
+  selectedDate?: string
+  sortBy?: 'title' | 'start_at' | 'status' | 'customer_name'
+  sortDir?: 'asc' | 'desc'
 }) {
   return {
-    queryKey: ['company', companyId, 'jobs-index', search, status],
+    queryKey: [
+      'company',
+      companyId,
+      'jobs-index',
+      search,
+      selectedDate,
+      sortBy,
+      sortDir,
+    ],
     queryFn: async (): Promise<Array<JobListRow>> => {
       let q = supabase
         .from('jobs')
         .select(
           `
-          id, company_id, title, status, start_at,
+          id, company_id, title, status, start_at, end_at,
           customer:customer_id ( id, name )
         `,
         )
         .eq('company_id', companyId)
-        .order('start_at', { ascending: false })
-      if (search) q = q.ilike('title', `%${search}%`)
-      if (status !== 'all') q = q.eq('status', status)
+
+      // Note: We don't filter server-side when searching because we need to search
+      // customer name (joined relation) which PostgREST doesn't support.
+      // All filtering is done client-side to support title, customer, and date search.
+
+      // Sorting
+      if (sortBy === 'customer_name') {
+        // For customer name, we need to sort by the joined relation
+        // PostgREST doesn't support sorting by joined columns directly,
+        // so we'll sort client-side or use a different approach
+        q = q.order('start_at', { ascending: sortDir === 'asc' })
+      } else {
+        q = q.order(sortBy, { ascending: sortDir === 'asc' })
+      }
+
       const { data, error } = await q
       if (error) throw error
-      return data as unknown as Array<JobListRow>
+
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      let results = (data || []) as unknown as Array<JobListRow>
+
+      // Filter by selected date (jobs in progress on that date)
+      if (selectedDate) {
+        const selected = new Date(selectedDate)
+        selected.setHours(0, 0, 0, 0)
+        const selectedDateStr = selected.toISOString().split('T')[0]
+
+        results = results.filter((job) => {
+          if (!job.start_at) return false
+
+          const startDate = new Date(job.start_at)
+          startDate.setHours(0, 0, 0, 0)
+          const startDateStr = startDate.toISOString().split('T')[0]
+
+          // If no end_at, check if selected date >= start date
+          const jobEndAt = job.end_at
+          if (!jobEndAt) {
+            return selectedDateStr >= startDateStr
+          }
+
+          const endDate = new Date(jobEndAt)
+          endDate.setHours(0, 0, 0, 0)
+          const endDateStr = endDate.toISOString().split('T')[0]
+
+          // Job is in progress if selected date is between start and end (inclusive)
+          return (
+            selectedDateStr >= startDateStr && selectedDateStr <= endDateStr
+          )
+        })
+      }
+
+      // Client-side filtering across title, customer name, and date
+      // (PostgREST doesn't support filtering on joined columns like customer.name)
+      if (search.trim()) {
+        const searchLower = search.trim().toLowerCase()
+        results = results.filter((job) => {
+          const customerMatch =
+            job.customer?.name?.toLowerCase().includes(searchLower) ?? false
+          const titleMatch = job.title.toLowerCase().includes(searchLower)
+          const dateMatch =
+            job.start_at?.toLowerCase().includes(searchLower) ?? false
+          return customerMatch || titleMatch || dateMatch
+        })
+      }
+
+      // Client-side sort for customer_name
+      if (sortBy === 'customer_name') {
+        results = [...results].sort((a, b) => {
+          const aName = a.customer?.name ?? ''
+          const bName = b.customer?.name ?? ''
+          const comparison = aName.localeCompare(bName)
+          return sortDir === 'asc' ? comparison : -comparison
+        })
+      }
+
+      return results
     },
     staleTime: 10_000,
   }
