@@ -1,6 +1,13 @@
 // src/features/calendar/InspectorCalendar.tsx
 import * as React from 'react'
-import { Box, Flex, IconButton, Link as RLink, Text } from '@radix-ui/themes'
+import {
+  Box,
+  Button,
+  Flex,
+  IconButton,
+  Link as RLink,
+  Text,
+} from '@radix-ui/themes'
 import { ArrowRight, Calendar, List } from 'iconoir-react'
 import FullCalendar from '@fullcalendar/react'
 import nbLocale from '@fullcalendar/core/locales/nb'
@@ -24,6 +31,10 @@ type Props = {
   }) => void
   onUpdate?: (id: string, patch: Partial<EventInput>) => void
   onDelete?: (id: string) => void
+  // Pagination props for list view
+  hasMore?: boolean // whether there are more events to load
+  onLoadNext?: () => void // callback to load next page
+  showPagination?: boolean // whether to show pagination controls
 }
 
 export default function InspectorCalendar({
@@ -32,6 +43,9 @@ export default function InspectorCalendar({
   onCreate,
   onUpdate,
   onDelete,
+  hasMore = false,
+  onLoadNext,
+  showPagination = false,
 }: Props) {
   const [listMode, setListMode] = React.useState(false)
 
@@ -64,6 +78,7 @@ export default function InspectorCalendar({
         <Text weight="bold">Schedule</Text>
         <Flex gap="2" align="center">
           <IconButton
+            type="button"
             size="1"
             variant={listMode ? 'soft' : 'solid'}
             onClick={() => setListMode(false)}
@@ -72,6 +87,7 @@ export default function InspectorCalendar({
             <Calendar />
           </IconButton>
           <IconButton
+            type="button"
             size="1"
             variant={listMode ? 'solid' : 'soft'}
             onClick={() => setListMode(true)}
@@ -90,6 +106,7 @@ export default function InspectorCalendar({
 
       {!listMode ? (
         <FullCalendar
+          key="timegrid"
           plugins={[timeGridPlugin, interactionPlugin]}
           initialView="timeGridThreeDay"
           headerToolbar={false}
@@ -114,48 +131,35 @@ export default function InspectorCalendar({
           eventDisplay="block"
         />
       ) : (
-        <FullCalendar
-          plugins={[listPlugin]}
-          initialView="listWeek"
-          headerToolbar={false}
-          timeZone="Europe/Oslo"
-          locale={nbLocale}
-          events={events}
-          height="auto"
-          listDayFormat={{ weekday: 'short', day: '2-digit', month: 'short' }}
-          listDaySideFormat={false}
-          noEventsContent="No bookings"
-          // limit to 5 rows visually; show "See more" under
-        />
-      )}
-
-      {/* “See more” for list mode (client-side count) */}
-      {listMode && (
-        <SeeMoreFooter events={events} calendarHref={calendarHref} />
+        <>
+          <FullCalendar
+            key="list"
+            plugins={[listPlugin]}
+            initialView="listMonth"
+            initialDate={new Date()}
+            headerToolbar={false}
+            timeZone="Europe/Oslo"
+            locale={nbLocale}
+            events={events}
+            height="auto"
+            validRange={{
+              start: new Date().toISOString().split('T')[0],
+            }}
+            listDayFormat={{ weekday: 'short', day: '2-digit', month: 'short' }}
+            listDaySideFormat={false}
+            noEventsContent="No bookings"
+          />
+          {/* Pagination footer for list mode */}
+          {showPagination && hasMore && onLoadNext && (
+            <Flex justify="center" mt="2">
+              <Button size="2" variant="soft" onClick={onLoadNext}>
+                <Text>Next 5</Text>
+                <ArrowRight />
+              </Button>
+            </Flex>
+          )}
+        </>
       )}
     </Box>
-  )
-}
-
-function SeeMoreFooter({
-  events,
-  calendarHref,
-}: {
-  events: Array<EventInput>
-  calendarHref: string
-}) {
-  // Very small heuristic: we can't read FullCalendar's internal list count easily,
-  // so we just compare total events in the active week and show a link if > 5.
-  const moreThanFive = events.length > 5
-  if (!moreThanFive) return null
-  return (
-    <Flex justify="center" mt="2">
-      <RLink href={calendarHref} target="_blank">
-        <Flex align="center" gap="1">
-          <Text>See more</Text>
-          <ArrowRight />
-        </Flex>
-      </RLink>
-    </Flex>
   )
 }

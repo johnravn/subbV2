@@ -6,6 +6,7 @@ import {
   Dialog,
   Flex,
   Heading,
+  SegmentedControl,
   Separator,
   Tabs,
   Text,
@@ -49,6 +50,8 @@ export default function JobInspector({
   const [editOpen, setEditOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [statusTimelineOpen, setStatusTimelineOpen] = React.useState(false)
+  const [crewView, setCrewView] = React.useState<'roles' | 'crew'>('roles')
+  const [activeTab, setActiveTab] = React.useState<string>('overview')
   const qc = useQueryClient()
   const { success, error } = useToast()
 
@@ -108,7 +111,7 @@ export default function JobInspector({
             {job.status}
           </Badge>
           <Button size="2" variant="soft" onClick={() => setEditOpen(true)}>
-            <Edit width={16} height={16} /> Edit job
+            <Edit width={16} height={16} />
           </Button>
           <Button
             size="2"
@@ -116,7 +119,7 @@ export default function JobInspector({
             color="red"
             onClick={() => setDeleteOpen(true)}
           >
-            <Trash width={16} height={16} /> Delete job
+            <Trash width={16} height={16} />
           </Button>
           <JobDialog
             open={editOpen}
@@ -135,8 +138,12 @@ export default function JobInspector({
         </div>
       </Box>
 
-      <Tabs.Root defaultValue="overview">
-        <Tabs.List wrap="wrap">
+      <Tabs.Root
+        defaultValue="overview"
+        value={activeTab}
+        onValueChange={setActiveTab}
+      >
+        <Tabs.List wrap="wrap" mb="2">
           <Tabs.Trigger value="overview">Overview</Tabs.Trigger>
           <Tabs.Trigger value="timeline">Timeline</Tabs.Trigger>
           <Tabs.Trigger value="calendar">Calendar</Tabs.Trigger>
@@ -159,7 +166,12 @@ export default function JobInspector({
           <EquipmentTab jobId={job.id} />
         </Tabs.Content>
         <Tabs.Content value="crew" mt={'10px'}>
-          <CrewTab jobId={job.id} companyId={job.company_id} />
+          <CrewTab
+            jobId={job.id}
+            companyId={job.company_id}
+            view={crewView}
+            onViewChange={setCrewView}
+          />
         </Tabs.Content>
         <Tabs.Content value="transport" mt={'10px'}>
           <TransportTab jobId={job.id} />

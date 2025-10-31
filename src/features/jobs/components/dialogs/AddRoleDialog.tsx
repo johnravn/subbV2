@@ -2,6 +2,7 @@ import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Box, Button, Dialog, Flex, Text, TextField } from '@radix-ui/themes'
 import { supabase } from '@shared/api/supabase'
+import DateTimePicker from '@shared/ui/components/DateTimePicker'
 
 export default function AddRoleDialog({
   open,
@@ -43,10 +44,10 @@ export default function AddRoleDialog({
   React.useEffect(() => {
     if (!open || !job) return
     if (!startAt && job.start_at) {
-      setStartAt(toLocal(job.start_at))
+      setStartAt(job.start_at)
     }
     if (!endAt && job.end_at) {
-      setEndAt(toLocal(job.end_at))
+      setEndAt(job.end_at)
     }
   }, [open, job, startAt, endAt])
 
@@ -69,10 +70,10 @@ export default function AddRoleDialog({
         job_id: jobId,
         company_id: job.company_id,
         title: title.trim(),
-        start_at: fromLocal(startAt),
-        end_at: fromLocal(endAt),
+        start_at: startAt,
+        end_at: endAt,
         needed_count: needed,
-        is_role: true,
+        category: 'crew',
         role_category: roleCategory.trim().toLowerCase() || null,
       }
 
@@ -116,22 +117,16 @@ export default function AddRoleDialog({
               style={{ width: 120 }}
             />
           </Box>
-          <Box>
-            <Text size="2" color="gray" mb="1">Start</Text>
-            <TextField.Root
-              type="datetime-local"
-              value={startAt}
-              onChange={(e) => setStartAt(e.target.value)}
-            />
-          </Box>
-          <Box>
-            <Text size="2" color="gray" mb="1">End</Text>
-            <TextField.Root
-              type="datetime-local"
-              value={endAt}
-              onChange={(e) => setEndAt(e.target.value)}
-            />
-          </Box>
+          <DateTimePicker
+            label="Start"
+            value={startAt}
+            onChange={setStartAt}
+          />
+          <DateTimePicker
+            label="End"
+            value={endAt}
+            onChange={setEndAt}
+          />
           <Box>
             <Text size="2" color="gray" mb="1">Role Category</Text>
             <TextField.Root
@@ -170,13 +165,4 @@ export default function AddRoleDialog({
   )
 }
 
-function toLocal(iso: string | null) {
-  if (!iso) return ''
-  return new Date(iso).toISOString().slice(0, 16)
-}
-
-function fromLocal(local: string) {
-  if (!local) return ''
-  return new Date(local).toISOString()
-}
 

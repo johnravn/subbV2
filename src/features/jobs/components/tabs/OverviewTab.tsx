@@ -84,7 +84,7 @@ export default function OverviewTab({ job }: { job: JobDetail }) {
           <KV label="Customer">{job.customer?.name ?? '—'}</KV>
           <KV label="Customer VAT">
             <Flex align={'center'} gap={'2'}>
-              {fmtVAT((job as any).customer?.vat_number ?? '—')}
+              {fmtVAT((job as any).customer?.vat_number)}
               <CopyIconButton text={(job as any).customer?.vat_number} />
             </Flex>
           </KV>
@@ -214,7 +214,15 @@ function KV({ label, children }: { label: string; children: React.ReactNode }) {
 }
 
 function fmt(iso?: string | null) {
-  return iso ? new Date(iso).toLocaleString() : '—'
+  return iso
+    ? new Date(iso).toLocaleString(undefined, {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '—'
 }
 
 function MapWithSkeleton({ query, zoom }: { query: string; zoom?: number }) {

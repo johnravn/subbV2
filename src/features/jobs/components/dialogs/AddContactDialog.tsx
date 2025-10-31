@@ -2,17 +2,20 @@
 import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  Box,
   Button,
   Dialog,
   Flex,
-  RadioGroup,
-  Select,
+  Grid,
+  SegmentedControl,
   Separator,
   Text,
   TextArea,
   TextField,
 } from '@radix-ui/themes'
 import { supabase } from '@shared/api/supabase'
+import { PhoneInputField } from '@shared/phone/PhoneInputField'
+import { useToast } from '@shared/ui/toast/ToastProvider'
 import type { UUID } from '../../types'
 
 export default function AddContactDialog({
@@ -27,10 +30,19 @@ export default function AddContactDialog({
   companyId: UUID
 }) {
   const qc = useQueryClient()
+  const { success, error: toastError } = useToast()
   const [mode, setMode] = React.useState<'existing' | 'new'>('existing')
   const [contactId, setContactId] = React.useState<UUID | ''>('')
+  const [searchQuery, setSearchQuery] = React.useState('')
   const [role, setRole] = React.useState('')
   const [notes, setNotes] = React.useState('')
+
+  const roleSuggestions = [
+    'Venue contact',
+    'Site manager',
+    'Technical support',
+    'Supplier',
+  ]
 
   // new contact fields
   const [name, setName] = React.useState('')
@@ -40,18 +52,44 @@ export default function AddContactDialog({
   const [companyText, setCompanyText] = React.useState('')
 
   const { data: contacts = [] } = useQuery({
-    queryKey: ['company', companyId, 'contacts'],
+    queryKey: ['company', companyId, 'contacts', searchQuery],
     enabled: open,
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from('contacts')
-        .select('id, name, email, phone')
+        .select('id, name, email, phone, title')
         .eq('company_id', companyId)
         .order('name', { ascending: true })
+
+      if (searchQuery.trim()) {
+        q = q.or(
+          `name.ilike.%${searchQuery.trim()}%,email.ilike.%${searchQuery.trim()}%,phone.ilike.%${searchQuery.trim()}%`,
+        )
+      }
+
+      const { data, error } = await q.limit(20)
       if (error) throw error
-      return data as Array<{ id: UUID; name: string; email: string | null }>
+      return data as Array<{
+        id: UUID
+        name: string
+        email: string | null
+        phone: string | null
+        title: string | null
+      }>
     },
   })
+
+  // Filter contacts based on search
+  const filteredContacts = React.useMemo(() => {
+    if (!searchQuery.trim()) return contacts
+    const query = searchQuery.toLowerCase().trim()
+    return contacts.filter(
+      (c) =>
+        c.name.toLowerCase().includes(query) ||
+        c.email?.toLowerCase().includes(query) ||
+        c.phone?.includes(query),
+    )
+  }, [contacts, searchQuery])
 
   const save = useMutation({
     mutationFn: async () => {
@@ -78,7 +116,7 @@ export default function AddContactDialog({
       const { error: linkErr } = await supabase.from('job_contacts').insert({
         job_id: jobId,
         contact_id: cid,
-        role: role || null,
+        role: role.trim() || null,
         notes: notes || null,
       })
       if (linkErr) throw linkErr
@@ -87,6 +125,7 @@ export default function AddContactDialog({
       await qc.invalidateQueries({ queryKey: ['jobs.contacts', jobId] })
       onOpenChange(false)
       setContactId('')
+      setSearchQuery('')
       setRole('')
       setNotes('')
       setName('')
@@ -94,92 +133,203 @@ export default function AddContactDialog({
       setPhone('')
       setTitle('')
       setCompanyText('')
+      setMode('existing')
+      success('Success', 'Contact added to job')
+    },
+    onError: (e: any) => {
+      toastError('Failed to add contact', e?.message ?? 'Please try again.')
     },
   })
 
   const disabled =
     save.isPending || (mode === 'existing' ? !contactId : !name.trim())
 
+  React.useEffect(() => {
+    if (!open) {
+      setMode('existing')
+      setContactId('')
+      setSearchQuery('')
+      setRole('')
+      setNotes('')
+      setName('')
+      setEmail('')
+      setPhone('')
+      setTitle('')
+      setCompanyText('')
+    }
+  }, [open])
+
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content maxWidth="640px">
+      <Dialog.Content maxWidth={mode === 'new' ? '720px' : '520px'}>
         <Dialog.Title>Add contact</Dialog.Title>
 
-        <RadioGroup.Root
-          value={mode}
-          onValueChange={(v) => setMode(v as any)}
-          style={{ display: 'flex', gap: 12, margin: '8px 0 12px' }}
-        >
-          <RadioGroup.Item value="existing" /> <Text>Existing</Text>
-          <RadioGroup.Item value="new" /> <Text>New</Text>
-        </RadioGroup.Root>
-
-        {mode === 'existing' ? (
-          <Field label="Contact">
-            <Select.Root
-              value={contactId}
-              onValueChange={(v) => setContactId(v)}
+        <Flex direction="column" gap="3" mt="3">
+          <Field label="Type">
+            <SegmentedControl.Root
+              value={mode}
+              onValueChange={(v) => {
+                setMode(v as 'existing' | 'new')
+                setContactId('')
+                setSearchQuery('')
+              }}
             >
-              <Select.Trigger placeholder="Select…" />
-              <Select.Content>
-                {contacts.map((c) => (
-                  <Select.Item key={c.id} value={c.id}>
-                    {c.name} {c.email ? `· ${c.email}` : ''}
-                  </Select.Item>
-                ))}
-              </Select.Content>
-            </Select.Root>
+              <SegmentedControl.Item value="existing">
+                Existing
+              </SegmentedControl.Item>
+              <SegmentedControl.Item value="new">New</SegmentedControl.Item>
+            </SegmentedControl.Root>
           </Field>
-        ) : (
-          <>
-            <Field label="Name">
-              <TextField.Root
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </Field>
-            <Field label="Email">
-              <TextField.Root
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </Field>
-            <Field label="Phone">
-              <TextField.Root
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-              />
-            </Field>
-            <Field label="Title">
-              <TextField.Root
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-              />
-            </Field>
-            <Field label="Company text">
-              <TextArea
-                rows={2}
-                value={companyText}
-                onChange={(e) => setCompanyText(e.target.value)}
-              />
-            </Field>
-          </>
-        )}
 
-        <Field label="Role on job">
-          <TextField.Root
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-            placeholder="e.g., Venue contact"
-          />
-        </Field>
-        <Field label="Notes">
-          <TextArea
-            rows={2}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-          />
-        </Field>
+          {mode === 'existing' ? (
+            <Field label="Search contact">
+              <TextField.Root
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value)
+                  setContactId('')
+                }}
+                placeholder="Search by name, email, or phone..."
+                autoFocus
+              />
+              {searchQuery.trim() && filteredContacts.length > 0 && (
+                <Box
+                  mt="2"
+                  style={{
+                    border: '1px solid var(--gray-a6)',
+                    borderRadius: 8,
+                    maxHeight: 200,
+                    overflowY: 'auto',
+                  }}
+                >
+                  {filteredContacts.map((c) => (
+                    <Box
+                      key={c.id}
+                      p="3"
+                      style={{
+                        cursor: 'pointer',
+                        backgroundColor:
+                          contactId === c.id
+                            ? 'var(--accent-a3)'
+                            : 'transparent',
+                      }}
+                      onClick={() => {
+                        setContactId(c.id)
+                        setSearchQuery(
+                          `${c.name}${c.email ? ` · ${c.email}` : ''}`,
+                        )
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'var(--gray-a3)'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor =
+                          contactId === c.id
+                            ? 'var(--accent-a3)'
+                            : 'transparent'
+                      }}
+                    >
+                      <Text
+                        size="2"
+                        weight={contactId === c.id ? 'medium' : 'regular'}
+                      >
+                        {c.name}
+                      </Text>
+                      {(c.email || c.title) && (
+                        <Text size="1" color="gray" mt="1">
+                          {c.email || ''}
+                          {c.email && c.title ? ' · ' : ''}
+                          {c.title || ''}
+                        </Text>
+                      )}
+                    </Box>
+                  ))}
+                </Box>
+              )}
+              {searchQuery.trim() && filteredContacts.length === 0 && (
+                <Text size="2" color="gray" mt="2">
+                  No contacts found
+                </Text>
+              )}
+            </Field>
+          ) : (
+            <Grid columns={{ initial: '1', sm: '2' }} gap="3">
+              <Field label="Name *">
+                <TextField.Root
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Contact full name"
+                  autoFocus
+                />
+              </Field>
+              <Field label="Title / Role">
+                <TextField.Root
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g., Project Manager, CFO"
+                />
+              </Field>
+              <Field label="Email">
+                <TextField.Root
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="email@example.com"
+                />
+              </Field>
+              <Field label="Phone">
+                <PhoneInputField
+                  id="contact-phone"
+                  value={phone}
+                  onChange={(val) => setPhone(val ?? '')}
+                  defaultCountry="NO"
+                  placeholder="Enter phone number"
+                />
+              </Field>
+              <Field label="Company" style={{ gridColumn: 'span 2' }}>
+                <TextField.Root
+                  value={companyText}
+                  onChange={(e) => setCompanyText(e.target.value)}
+                  placeholder="Scandic Bjørvika"
+                />
+              </Field>
+            </Grid>
+          )}
+
+          <Separator my="2" />
+
+          <Field label="Role on job">
+            <TextField.Root
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              placeholder="e.g., Venue contact, Site manager"
+            />
+            <Flex gap="2" wrap="wrap" mt="2">
+              <Text size="1" color="gray" style={{ width: '100%' }}>
+                Quick suggestions:
+              </Text>
+              {roleSuggestions.map((suggestion) => (
+                <Button
+                  key={suggestion}
+                  size="1"
+                  variant="soft"
+                  color="gray"
+                  onClick={() => setRole(suggestion)}
+                >
+                  {suggestion}
+                </Button>
+              ))}
+            </Flex>
+          </Field>
+          <Field label="Notes">
+            <TextArea
+              rows={3}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Additional information about this contact's role"
+            />
+          </Field>
+        </Flex>
 
         <Flex justify="end" gap="2" mt="3">
           <Dialog.Close>
@@ -229,6 +379,13 @@ export function EditContactDialog({
     contact.company_text ?? '',
   )
 
+  const roleSuggestions = [
+    'Venue contact',
+    'Site manager',
+    'Technical support',
+    'Supplier',
+  ]
+
   React.useEffect(() => {
     if (!open) return
     setRole(link.role ?? '')
@@ -245,7 +402,7 @@ export function EditContactDialog({
       const [{ error: upLink }, { error: upContact }] = await Promise.all([
         supabase
           .from('job_contacts')
-          .update({ role: role || null, notes: notes || null })
+          .update({ role: role.trim() || null, notes: notes || null })
           .eq('job_id', jobId)
           .eq('contact_id', link.contact_id),
         supabase
@@ -276,7 +433,24 @@ export function EditContactDialog({
           <TextField.Root
             value={role}
             onChange={(e) => setRole(e.target.value)}
+            placeholder="e.g., Venue contact, Site manager"
           />
+          <Flex gap="2" wrap="wrap" mt="2">
+            <Text size="1" color="gray" style={{ width: '100%' }}>
+              Quick suggestions:
+            </Text>
+            {roleSuggestions.map((suggestion) => (
+              <Button
+                key={suggestion}
+                size="1"
+                variant="soft"
+                color="gray"
+                onClick={() => setRole(suggestion)}
+              >
+                {suggestion}
+              </Button>
+            ))}
+          </Flex>
         </Field>
         <Field label="Notes">
           <TextArea
@@ -313,11 +487,11 @@ export function EditContactDialog({
             onChange={(e) => setTitle(e.target.value)}
           />
         </Field>
-        <Field label="Company text">
-          <TextArea
-            rows={2}
+        <Field label="Company">
+          <TextField.Root
             value={companyText}
             onChange={(e) => setCompanyText(e.target.value)}
+            placeholder="Scandic Bjørvika"
           />
         </Field>
         <Flex justify="end" gap="2" mt="3">
@@ -340,12 +514,14 @@ export function EditContactDialog({
 function Field({
   label,
   children,
+  style,
 }: {
   label: string
   children: React.ReactNode
+  style?: React.CSSProperties
 }) {
   return (
-    <div style={{ marginTop: 10 }}>
+    <div style={{ marginTop: 10, ...style }}>
       <div style={{ color: 'var(--gray-11)', fontSize: 12, marginBottom: 6 }}>
         {label}
       </div>

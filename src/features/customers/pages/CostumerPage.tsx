@@ -116,7 +116,10 @@ export default function CustomerPage() {
               overflowY: isLarge ? 'auto' : 'visible',
             }}
           >
-            <CustomerInspector id={selectedId} />
+            <CustomerInspector
+              id={selectedId}
+              onDeleted={() => setSelectedId(null)}
+            />
           </Box>
         </Card>
       </div>

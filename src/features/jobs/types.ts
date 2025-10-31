@@ -26,6 +26,12 @@ export type JobListRow = {
     id: UUID
     name: string | null
   } | null
+  project_lead?: {
+    user_id: UUID
+    display_name: string | null
+    email: string
+    avatar_url: string | null
+  } | null
 }
 
 export type AddressListRow = {
@@ -169,6 +175,7 @@ export type TimePeriodLite = {
   title: string | null
   start_at: string // ISO
   end_at: string // ISO
+  category?: 'program' | 'equipment' | 'crew' | 'transport' | null
 }
 
 /* ---------- Crew tab ---------- */

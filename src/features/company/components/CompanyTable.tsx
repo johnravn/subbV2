@@ -13,7 +13,7 @@ import {
 } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { useToast } from '@shared/ui/toast/ToastProvider'
-import { EditPencil, Search } from 'iconoir-react'
+import { EditPencil, Search, Trash } from 'iconoir-react'
 import {
   crewIndexQuery,
   deleteInvite,
@@ -405,7 +405,7 @@ export default function CompanyTable({
                         }}
                         disabled={delInvite.isPending}
                       >
-                        {delInvite.isPending ? 'Deleting…' : 'Delete'}
+                        <Trash width={14} height={14} />
                       </Button>
                     )}
                   </Table.Cell>

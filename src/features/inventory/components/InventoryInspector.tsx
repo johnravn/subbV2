@@ -18,6 +18,9 @@ import { useCompany } from '@shared/companies/CompanyProvider'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { supabase } from '@shared/api/supabase'
 import { Edit, Trash } from 'iconoir-react'
+import { toEventInputs } from '@features/calendar/components/domain'
+import InspectorCalendar from '@features/calendar/components/InspectorCalendar'
+import { itemCalendarQuery } from '@features/calendar/api/queries'
 import { inventoryDetailQuery } from '../api/queries'
 
 // ⬇️ We'll pass edit props to these (next step we'll add mode/initialData in those files)
@@ -82,6 +85,21 @@ export default function InventoryInspector({ id }: { id: string | null }) {
     enabled,
   })
 
+  // Fetch calendar events for this item (only if it's an item, not a group)
+  const isItem = data?.type === 'item'
+  const { data: calendarRecords = [] } = useQuery({
+    ...itemCalendarQuery({
+      companyId: companyId ?? '',
+      itemId: id ?? '',
+    }),
+    enabled: enabled && !!id && isItem,
+  })
+
+  const events = React.useMemo(
+    () => toEventInputs(calendarRecords),
+    [calendarRecords],
+  )
+
   if (!id)
     return <Text color="gray">Select an item/bundle to view details.</Text>
 
@@ -109,7 +127,15 @@ export default function InventoryInspector({ id }: { id: string | null }) {
 
   const entry = data
   const fmtDate = (iso?: string | null) =>
-    iso ? new Date(iso).toLocaleString() : '—'
+    iso
+      ? new Date(iso).toLocaleString(undefined, {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : '—'
 
   // Build initialData we’ll feed into the dialogs in edit mode
   const initialItemData =
@@ -175,8 +201,7 @@ export default function InventoryInspector({ id }: { id: string | null }) {
         </div>
         <Flex gap="2">
           <Button size="2" variant="soft" onClick={() => setEditOpen(true)}>
-            <Edit style={{ marginRight: 6 }} />
-            Edit
+            <Edit />
           </Button>
 
           <Button
@@ -185,8 +210,7 @@ export default function InventoryInspector({ id }: { id: string | null }) {
             color="red"
             onClick={() => setDeleteOpen(true)}
           >
-            <Trash style={{ marginRight: 6 }} />
-            Delete
+            <Trash />
           </Button>
         </Flex>
       </Flex>
@@ -323,6 +347,15 @@ export default function InventoryInspector({ id }: { id: string | null }) {
               </Box>
             )}
           </div>
+
+          {/* Calendar */}
+          <InspectorCalendar
+            events={events}
+            calendarHref={`/calendar?itemId=${id}`}
+            onCreate={(e) => console.log('create in inspector', e)}
+            onUpdate={(id, patch) => console.log('update', id, patch)}
+            onDelete={(id) => console.log('delete', id)}
+          />
         </Flex>
       ) : null}
 

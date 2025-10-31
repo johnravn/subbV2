@@ -17,16 +17,21 @@ import { useToast } from '@shared/ui/toast/ToastProvider'
 import { supabase } from '@shared/api/supabase'
 import { toEventInputs } from '@features/calendar/components/domain'
 import InspectorCalendar from '@features/calendar/components/InspectorCalendar'
+import { vehicleCalendarQuery } from '@features/calendar/api/queries'
 import { markVehicleDeleted, vehicleDetailQuery } from '../api/queries'
 import AddEditVehicleDialog from './dialogs/AddEditVehicleDialog'
-import type { CalendarRecord } from '@features/calendar/components/domain'
+import type { EventInput } from '@fullcalendar/core'
 
 export default function VehicleInspector({ id }: { id: string | null }) {
   const { companyId } = useCompany()
-  const { info, error: toastError, success } = useToast()
+  const { error: toastError, success } = useToast()
   const qc = useQueryClient()
   const [editOpen, setEditOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
+  const [calendarOffset, setCalendarOffset] = React.useState(0)
+  const [accumulatedEvents, setAccumulatedEvents] = React.useState<
+    Array<EventInput>
+  >([])
 
   const enabled = Boolean(companyId && id)
   const { data, isLoading, isError, error } = useQuery({
@@ -34,29 +39,75 @@ export default function VehicleInspector({ id }: { id: string | null }) {
     enabled,
   })
 
-  const jobId = 'kasdk'
+  // Get current date in ISO format for filtering future events
+  const now = React.useMemo(() => new Date().toISOString(), [])
 
-  const rows: Array<CalendarRecord> = [
-    {
-      id: 'j1',
-      title: 'Job: Concert build',
-      start: '2025-10-27T08:30:00',
-      end: '2025-10-27T12:00:00',
-      kind: 'job',
-      ref: { jobId },
-    },
-    {
-      id: 'i1',
-      title: 'Item: Mixer',
-      start: '2025-10-27T07:00:00',
-      end: '2025-10-28T10:00:00',
-      kind: 'item',
-      ref: { jobId, itemId: 'item_42' },
-    },
-    // ...
-  ]
+  // Track the last processed offset to prevent duplicate processing
+  const lastProcessedOffsetRef = React.useRef<number>(-1)
 
-  const events = React.useMemo(() => toEventInputs(rows), [rows])
+  // Fetch calendar events for this vehicle with pagination
+  const { data: calendarRecords = [], isLoading: isLoadingCalendar } = useQuery(
+    {
+      ...vehicleCalendarQuery({
+        companyId: companyId ?? '',
+        vehicleId: id ?? '',
+        limit: 5,
+        offset: calendarOffset,
+        fromDate: now, // Only future events
+      }),
+      enabled: enabled && !!id,
+    },
+  )
+
+  // Reset when vehicle changes
+  React.useEffect(() => {
+    setAccumulatedEvents([])
+    setCalendarOffset(0)
+    lastProcessedOffsetRef.current = -1
+  }, [id])
+
+  // Accumulate events as we load more pages - only process once per offset
+  React.useEffect(() => {
+    // Skip if loading or if we've already processed this offset
+    if (
+      isLoadingCalendar ||
+      lastProcessedOffsetRef.current === calendarOffset
+    ) {
+      return
+    }
+
+    // Mark this offset as processed
+    lastProcessedOffsetRef.current = calendarOffset
+
+    if (calendarRecords.length > 0) {
+      const newEvents = toEventInputs(calendarRecords)
+
+      if (calendarOffset === 0) {
+        // First page - replace
+        setAccumulatedEvents(newEvents)
+      } else {
+        // Subsequent pages - append (use functional update to avoid stale closure)
+        setAccumulatedEvents((prev) => {
+          // Prevent duplicates by checking IDs
+          const existingIds = new Set(prev.map((e) => e.id))
+          const uniqueNew = newEvents.filter(
+            (e) => e.id && !existingIds.has(e.id),
+          )
+          return [...prev, ...uniqueNew]
+        })
+      }
+    } else if (calendarOffset === 0) {
+      // No events on first page - reset
+      setAccumulatedEvents([])
+    }
+  }, [calendarRecords, calendarOffset, isLoadingCalendar])
+
+  // Determine if there are more events to load
+  const hasMoreEvents = calendarRecords.length === 5
+
+  const handleLoadNext = React.useCallback(() => {
+    setCalendarOffset((prev) => prev + 5)
+  }, [])
 
   const del = useMutation({
     mutationFn: async () => {
@@ -138,8 +189,7 @@ export default function VehicleInspector({ id }: { id: string | null }) {
         </div>
         <Flex gap="2">
           <Button size="2" variant="soft" onClick={() => setEditOpen(true)}>
-            <Edit style={{ marginRight: 6 }} />
-            Edit
+            <Edit />
           </Button>
           <Button
             size="2"
@@ -147,8 +197,7 @@ export default function VehicleInspector({ id }: { id: string | null }) {
             color="red"
             onClick={() => setDeleteOpen(true)}
           >
-            <Trash style={{ marginRight: 6 }} />
-            Delete
+            <Trash />
           </Button>
         </Flex>
       </Flex>
@@ -204,17 +253,26 @@ export default function VehicleInspector({ id }: { id: string | null }) {
         />
         <Field
           label="Created"
-          value={new Date(v.created_at).toLocaleString()}
+          value={new Date(v.created_at).toLocaleString(undefined, {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
         />
         <Field label="Notes" value={v.notes || '—'} />
       </Flex>
 
       <InspectorCalendar
-        events={events}
-        calendarHref={`/calendar?jobId=${jobId}`}
+        events={accumulatedEvents}
+        calendarHref={`/calendar?vehicleId=${id}`}
         onCreate={(e) => console.log('create in inspector', e)}
-        onUpdate={(id, patch) => console.log('update', id, patch)}
-        onDelete={(id) => console.log('delete', id)}
+        onUpdate={(eventId, patch) => console.log('update', eventId, patch)}
+        onDelete={(eventId) => console.log('delete', eventId)}
+        hasMore={hasMoreEvents}
+        onLoadNext={handleLoadNext}
+        showPagination={true}
       />
 
       {/* Edit dialog */}

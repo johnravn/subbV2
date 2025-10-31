@@ -14,7 +14,7 @@ import {
   TextField,
 } from '@radix-ui/themes'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Edit, Plus, Trash } from 'iconoir-react'
+import { Edit, NavArrowDown, NavArrowRight, Plus, Trash } from 'iconoir-react'
 import {
   jobDetailQuery,
   jobTimePeriodsQuery,
@@ -22,6 +22,7 @@ import {
 } from '@features/jobs/api/queries'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { useToast } from '@shared/ui/toast/ToastProvider'
+import DateTimePicker from '@shared/ui/components/DateTimePicker'
 import { supabase } from '@shared/api/supabase'
 import { makeWordPresentable } from '@shared/lib/generalFunctions'
 import type { JobStatus, TimePeriodLite } from '@features/jobs/types'
@@ -235,6 +236,71 @@ function TimePeriodsManager({
 
   const [editing, setEditing] = React.useState<TimePeriodLite | null>(null)
   const [deleting, setDeleting] = React.useState<TimePeriodLite | null>(null)
+  const [expandedCategories, setExpandedCategories] = React.useState<
+    Set<string>
+  >(new Set())
+
+  // Helper function to check if time period is Job duration
+  const isJobDuration = (tp: TimePeriodLite) =>
+    tp.title?.toLowerCase().includes('job duration')
+
+  // Separate Job duration from other periods
+  const { jobDuration, otherPeriods } = React.useMemo(() => {
+    const jobDurationPeriod = timePeriods.find((tp) => isJobDuration(tp))
+    const others = timePeriods.filter((tp) => !isJobDuration(tp))
+    return {
+      jobDuration: jobDurationPeriod || null,
+      otherPeriods: others,
+    }
+  }, [timePeriods])
+
+  // Group other time periods by category
+  const groupedPeriods = React.useMemo(() => {
+    const groups = new Map<
+      'program' | 'equipment' | 'crew' | 'transport',
+      Array<TimePeriodLite>
+    >()
+    const defaultCategory: 'program' | 'equipment' | 'crew' | 'transport' =
+      'program'
+
+    for (const tp of otherPeriods) {
+      const category = tp.category || defaultCategory
+      const existing = groups.get(category) || []
+      existing.push(tp)
+      groups.set(category, existing)
+    }
+
+    return groups
+  }, [otherPeriods])
+
+  const toggleCategory = (category: string) => {
+    setExpandedCategories((prev) => {
+      const next = new Set(prev)
+      if (next.has(category)) {
+        next.delete(category)
+      } else {
+        next.add(category)
+      }
+      return next
+    })
+  }
+
+  const categoryLabels: Record<
+    'program' | 'equipment' | 'crew' | 'transport',
+    string
+  > = {
+    program: 'Program',
+    equipment: 'Equipment',
+    crew: 'Crew',
+    transport: 'Transport',
+  }
+
+  const categoryOrder: Array<'program' | 'equipment' | 'crew' | 'transport'> = [
+    'program',
+    'equipment',
+    'crew',
+    'transport',
+  ]
 
   const save = useMutation({
     mutationFn: async (p: {
@@ -267,31 +333,31 @@ function TimePeriodsManager({
   const deleteTimePeriod = useMutation({
     mutationFn: async (periodId: string) => {
       // Find the "Job duration" time period to reassign items to
-      const jobDuration = timePeriods.find((tp) =>
+      const durationPeriod = timePeriods.find((tp) =>
         tp.title?.toLowerCase().includes('job duration'),
       )
-      if (!jobDuration) {
+      if (!durationPeriod) {
         throw new Error('Job duration time period not found. Cannot delete.')
       }
 
       // Reassign all reserved_items to job duration
       const { error: itemsErr } = await supabase
         .from('reserved_items')
-        .update({ time_period_id: jobDuration.id })
+        .update({ time_period_id: durationPeriod.id })
         .eq('time_period_id', periodId)
       if (itemsErr) throw itemsErr
 
       // Reassign all reserved_crew to job duration
       const { error: crewErr } = await supabase
         .from('reserved_crew')
-        .update({ time_period_id: jobDuration.id })
+        .update({ time_period_id: durationPeriod.id })
         .eq('time_period_id', periodId)
       if (crewErr) throw crewErr
 
       // Reassign all reserved_vehicles to job duration
       const { error: vehiclesErr } = await supabase
         .from('reserved_vehicles')
-        .update({ time_period_id: jobDuration.id })
+        .update({ time_period_id: durationPeriod.id })
         .eq('time_period_id', periodId)
       if (vehiclesErr) throw vehiclesErr
 
@@ -318,9 +384,6 @@ function TimePeriodsManager({
     },
   })
 
-  const isJobDuration = (tp: TimePeriodLite) =>
-    tp.title?.toLowerCase().includes('job duration')
-
   return (
     <Box>
       {/* Time Periods Table */}
@@ -345,50 +408,114 @@ function TimePeriodsManager({
               </Table.Cell>
             </Table.Row>
           )}
-          {timePeriods.map((tp) => (
-            <Table.Row key={tp.id}>
+
+          {/* Job Duration Row (always visible at top) */}
+          {jobDuration && (
+            <Table.Row>
               <Table.Cell>
                 <Flex align="center" gap="2">
-                  <Text weight={isJobDuration(tp) ? 'bold' : 'regular'}>
-                    {tp.title || '(untitled)'}
-                  </Text>
+                  <Text weight="bold">{jobDuration.title || '(untitled)'}</Text>
                 </Flex>
               </Table.Cell>
               <Table.Cell>
-                <Text size="2">{formatDateTime(tp.start_at)}</Text>
+                <Text size="2">{formatDateTime(jobDuration.start_at)}</Text>
               </Table.Cell>
               <Table.Cell>
-                <Text size="2">{formatDateTime(tp.end_at)}</Text>
+                <Text size="2">{formatDateTime(jobDuration.end_at)}</Text>
               </Table.Cell>
               <Table.Cell>
-                <Flex gap="2">
-                  {!isJobDuration(tp) ? (
-                    <>
-                      <IconButton
-                        size="1"
-                        variant="ghost"
-                        onClick={() => setEditing(tp)}
-                      >
-                        <Edit />
-                      </IconButton>
-                      <IconButton
-                        size="1"
-                        variant="ghost"
-                        color="red"
-                        onClick={() => setDeleting(tp)}
-                      >
-                        <Trash />
-                      </IconButton>
-                    </>
-                  ) : (
-                    <Badge size="1" color="orange">
-                      Required
-                    </Badge>
-                  )}
-                </Flex>
+                <Badge size="1" color="orange">
+                  Required
+                </Badge>
               </Table.Cell>
             </Table.Row>
-          ))}
+          )}
+
+          {/* Category Groups */}
+          {categoryOrder.map((category) => {
+            const periods = groupedPeriods.get(category) || []
+            if (periods.length === 0) return null
+
+            const isExpanded = expandedCategories.has(category)
+            const categoryLabel = categoryLabels[category]
+
+            return (
+              <React.Fragment key={category}>
+                {/* Category Header Row */}
+                <Table.Row
+                  style={{
+                    cursor: 'pointer',
+                    background: 'var(--gray-a2)',
+                    fontWeight: '600',
+                  }}
+                  onClick={() => toggleCategory(category)}
+                >
+                  <Table.Cell colSpan={4}>
+                    <Flex align="center" gap="2">
+                      {isExpanded ? (
+                        <NavArrowDown width={18} height={18} />
+                      ) : (
+                        <NavArrowRight width={18} height={18} />
+                      )}
+                      <Text weight="bold">{categoryLabel}</Text>
+                      <Badge size="1" variant="soft" color="gray">
+                        {periods.length}
+                      </Badge>
+                    </Flex>
+                  </Table.Cell>
+                </Table.Row>
+
+                {/* Time Period Rows (when expanded) */}
+                {isExpanded &&
+                  periods.map((tp) => (
+                    <Table.Row key={tp.id}>
+                      <Table.Cell>
+                        <Flex
+                          align="center"
+                          gap="2"
+                          style={{ paddingLeft: 24 }}
+                        >
+                          <Text weight="regular">
+                            {tp.title || '(untitled)'}
+                          </Text>
+                        </Flex>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Text size="2">{formatDateTime(tp.start_at)}</Text>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Text size="2">{formatDateTime(tp.end_at)}</Text>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Flex gap="2">
+                          <IconButton
+                            size="1"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setEditing(tp)
+                            }}
+                          >
+                            <Edit />
+                          </IconButton>
+                          <IconButton
+                            size="1"
+                            variant="ghost"
+                            color="red"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setDeleting(tp)
+                            }}
+                          >
+                            <Trash />
+                          </IconButton>
+                        </Flex>
+                      </Table.Cell>
+                    </Table.Row>
+                  ))}
+              </React.Fragment>
+            )
+          })}
         </Table.Body>
       </Table.Root>
 
@@ -472,17 +599,15 @@ function EditTimePeriodDialog({
   isSaving: boolean
 }) {
   const [title, setTitle] = React.useState(timePeriod.title || '')
-  const [startAt, setStartAt] = React.useState(
-    toLocalInput(timePeriod.start_at),
-  )
-  const [endAt, setEndAt] = React.useState(toLocalInput(timePeriod.end_at))
+  const [startAt, setStartAt] = React.useState(timePeriod.start_at)
+  const [endAt, setEndAt] = React.useState(timePeriod.end_at)
 
   const handleSave = () => {
     onSave({
       id: timePeriod.id || undefined,
       title: title.trim(),
-      start_at: fromLocalInput(startAt),
-      end_at: fromLocalInput(endAt),
+      start_at: startAt,
+      end_at: endAt,
     })
   }
 
@@ -535,27 +660,8 @@ function EditTimePeriodDialog({
             )}
           </Box>
 
-          <label>
-            <Text as="div" size="2" mb="1" weight="medium">
-              Start
-            </Text>
-            <TextField.Root
-              type="datetime-local"
-              value={startAt}
-              onChange={(e) => setStartAt(e.target.value)}
-            />
-          </label>
-
-          <label>
-            <Text as="div" size="2" mb="1" weight="medium">
-              End
-            </Text>
-            <TextField.Root
-              type="datetime-local"
-              value={endAt}
-              onChange={(e) => setEndAt(e.target.value)}
-            />
-          </label>
+          <DateTimePicker label="Start" value={startAt} onChange={setStartAt} />
+          <DateTimePicker label="End" value={endAt} onChange={setEndAt} />
         </Flex>
 
         <Flex gap="3" mt="4" justify="end">
@@ -581,23 +687,4 @@ function formatDateTime(iso: string) {
     hour: '2-digit',
     minute: '2-digit',
   })
-}
-
-function toLocalInput(iso: string) {
-  const d = new Date(iso)
-  const y = d.getFullYear()
-  const m = pad(d.getMonth() + 1)
-  const da = pad(d.getDate())
-  const h = pad(d.getHours())
-  const mi = pad(d.getMinutes())
-  return `${y}-${m}-${da}T${h}:${mi}`
-}
-
-function fromLocalInput(local: string) {
-  const d = new Date(local)
-  return d.toISOString()
-}
-
-function pad(n: number) {
-  return n < 10 ? '0' + n : String(n)
 }

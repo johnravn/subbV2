@@ -12,15 +12,10 @@ import {
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@shared/api/supabase'
-import {
-  formatPhoneNumberIntl,
-  isValidPhoneNumber,
-} from 'react-phone-number-input'
-import {
-  formatInternational,
-  isPhoneValid,
-  prettyPhone,
-} from '@shared/phone/phone'
+import { prettyPhone } from '@shared/phone/phone'
+import { toEventInputs } from '@features/calendar/components/domain'
+import InspectorCalendar from '@features/calendar/components/InspectorCalendar'
+import { crewCalendarQuery } from '@features/calendar/api/queries'
 import { crewDetailQuery } from '../api/queries'
 import type { CrewDetail } from '../api/queries'
 
@@ -36,6 +31,20 @@ export default function CrewInspector({ userId }: { userId: string | null }) {
         }),
     enabled: !!companyId && !!userId,
   })
+
+  // Fetch calendar events for this crew member
+  const { data: calendarRecords = [] } = useQuery({
+    ...crewCalendarQuery({
+      companyId: companyId ?? '',
+      userId: userId ?? '',
+    }),
+    enabled: !!companyId && !!userId,
+  })
+
+  const events = React.useMemo(
+    () => toEventInputs(calendarRecords),
+    [calendarRecords],
+  )
 
   const avatarUrl = React.useMemo(() => {
     if (!data?.avatar_url) return null
@@ -123,6 +132,15 @@ export default function CrewInspector({ userId }: { userId: string | null }) {
             '—'
           )}
         </DD>
+
+        <DT>First name</DT>
+        <DD>{data.first_name || '—'}</DD>
+
+        <DT>Last name</DT>
+        <DD>{data.last_name || '—'}</DD>
+
+        <DT>Display name</DT>
+        <DD>{data.display_name || '—'}</DD>
       </DefinitionList>
 
       {/* Bio */}
@@ -144,7 +162,7 @@ export default function CrewInspector({ userId }: { userId: string | null }) {
         <DT>Date of birth</DT>
         <DD>{formatMonthYear(data.preferences?.date_of_birth)}</DD>
 
-        <DT>Driver’s license</DT>
+        <DT>Driver's license</DT>
         <DD>{data.preferences?.drivers_license || '—'}</DD>
 
         <DT>Other licenses</DT>
@@ -160,6 +178,17 @@ export default function CrewInspector({ userId }: { userId: string | null }) {
           </Text>
         </DD>
       </DefinitionList>
+
+      <Separator my="2" />
+
+      {/* Calendar */}
+      <InspectorCalendar
+        events={events}
+        calendarHref={`/calendar?userId=${userId}`}
+        onCreate={(e) => console.log('create in inspector', e)}
+        onUpdate={(id, patch) => console.log('update', id, patch)}
+        onDelete={(id) => console.log('delete', id)}
+      />
     </Box>
   )
 }

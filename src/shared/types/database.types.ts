@@ -212,6 +212,7 @@ export type Database = {
           address: string | null
           company_id: string
           created_at: string
+          deleted: boolean
           email: string | null
           id: string
           is_partner: boolean
@@ -224,6 +225,7 @@ export type Database = {
           address?: string | null
           company_id: string
           created_at?: string
+          deleted?: boolean
           email?: string | null
           id?: string
           is_partner?: boolean
@@ -236,6 +238,7 @@ export type Database = {
           address?: string | null
           company_id?: string
           created_at?: string
+          deleted?: boolean
           email?: string | null
           id?: string
           is_partner?: boolean
@@ -1317,13 +1320,13 @@ export type Database = {
       }
       time_periods: {
         Row: {
+          category: Database["public"]["Enums"]["time_period_category"]
           company_id: string
           created_at: string
           deleted: boolean
           during: unknown
           end_at: string
           id: string
-          is_role: boolean | null
           job_id: string | null
           needed_count: number | null
           notes: string | null
@@ -1335,13 +1338,13 @@ export type Database = {
           updated_by_user_id: string | null
         }
         Insert: {
+          category?: Database["public"]["Enums"]["time_period_category"]
           company_id: string
           created_at?: string
           deleted?: boolean
           during?: unknown
           end_at: string
           id?: string
-          is_role?: boolean | null
           job_id?: string | null
           needed_count?: number | null
           notes?: string | null
@@ -1353,13 +1356,13 @@ export type Database = {
           updated_by_user_id?: string | null
         }
         Update: {
+          category?: Database["public"]["Enums"]["time_period_category"]
           company_id?: string
           created_at?: string
           deleted?: boolean
           during?: unknown
           end_at?: string
           id?: string
-          is_role?: boolean | null
           job_id?: string | null
           needed_count?: number | null
           notes?: string | null
@@ -2079,6 +2082,7 @@ export type Database = {
         | "in_progress"
         | "completed"
         | "canceled"
+      time_period_category: "program" | "equipment" | "crew" | "transport"
       unit_status: "in_service" | "needs_service" | "lost" | "retired"
     }
     CompositeTypes: {
@@ -2235,6 +2239,7 @@ export const Constants = {
         "completed",
         "canceled",
       ],
+      time_period_category: ["program", "equipment", "crew", "transport"],
       unit_status: ["in_service", "needs_service", "lost", "retired"],
     },
   },

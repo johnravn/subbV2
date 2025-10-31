@@ -32,6 +32,19 @@ export type CalendarRecord = {
   notes?: string
   location?: string
   meta?: Record<string, unknown>
+  // Project lead info for job events
+  projectLead?:
+    | {
+        user_id: string
+        display_name: string | null
+        email: string
+        avatar_url: string | null
+      }
+    | undefined
+  // Category for coloring
+  category?: 'program' | 'equipment' | 'crew' | 'transport' | undefined
+  // Job title for events that belong to a job
+  jobTitle?: string | undefined
 }
 
 /** Convert our normalized records to FullCalendar EventInput[] */
@@ -48,6 +61,9 @@ export function toEventInputs(rows: Array<CalendarRecord>): Array<EventInput> {
       status: r.status,
       notes: r.notes,
       location: r.location,
+      projectLead: r.projectLead,
+      category: r.category,
+      jobTitle: r.jobTitle,
       ...r.meta,
     },
   }))

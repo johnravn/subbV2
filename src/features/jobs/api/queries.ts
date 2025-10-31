@@ -41,7 +41,8 @@ export function jobsIndexQuery({
         .select(
           `
           id, company_id, title, status, start_at, end_at,
-          customer:customer_id ( id, name )
+          customer:customer_id ( id, name ),
+          project_lead:project_lead_user_id ( user_id, display_name, email, avatar_url )
         `,
         )
         .eq('company_id', companyId)
@@ -96,7 +97,7 @@ export function jobsIndexQuery({
         })
       }
 
-      // Client-side filtering across title, customer name, and date
+      // Client-side filtering across title, customer name, project lead name, and date
       // (PostgREST doesn't support filtering on joined columns like customer.name)
       if (search.trim()) {
         const searchLower = search.trim().toLowerCase()
@@ -106,7 +107,13 @@ export function jobsIndexQuery({
           const titleMatch = job.title.toLowerCase().includes(searchLower)
           const dateMatch =
             job.start_at?.toLowerCase().includes(searchLower) ?? false
-          return customerMatch || titleMatch || dateMatch
+          const projectLeadMatch =
+            job.project_lead?.display_name
+              ?.toLowerCase()
+              .includes(searchLower) ??
+            job.project_lead?.email?.toLowerCase().includes(searchLower) ??
+            false
+          return customerMatch || titleMatch || dateMatch || projectLeadMatch
         })
       }
 
@@ -212,7 +219,7 @@ export function jobTimePeriodsQuery({ jobId }: { jobId: string }) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('time_periods')
-        .select('id, company_id, job_id, title, start_at, end_at')
+        .select('id, company_id, job_id, title, start_at, end_at, category')
         .eq('job_id', jobId)
         .order('start_at', { ascending: true })
       if (error) throw error
@@ -229,6 +236,7 @@ export async function upsertTimePeriod(payload: {
   title: string
   start_at: string // ISO
   end_at: string // ISO
+  category?: 'program' | 'equipment' | 'crew' | 'transport'
 }) {
   if (payload.id) {
     const { error } = await supabase
@@ -237,6 +245,7 @@ export async function upsertTimePeriod(payload: {
         title: payload.title,
         start_at: payload.start_at,
         end_at: payload.end_at,
+        // Don't update category on edit (preserve existing)
       })
       .eq('id', payload.id)
     if (error) throw error
@@ -250,6 +259,7 @@ export async function upsertTimePeriod(payload: {
         title: payload.title,
         start_at: payload.start_at,
         end_at: payload.end_at,
+        category: payload.category ?? 'program',
       })
       .select('id')
       .single()

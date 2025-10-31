@@ -364,13 +364,22 @@ export default function BookItemsDialog({
           .in('id', itemIds)
         if (itemErr) throw itemErr
 
-        for (const item of itemDetails) {
-          const ownerData = Array.isArray(item.external_owner)
-            ? item.external_owner[0]
-            : item.external_owner
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        for (const item of itemDetails || []) {
+          let ownerName: string | null = null
+          if (item.external_owner_id) {
+            const ownerData = Array.isArray(item.external_owner)
+              ? item.external_owner[0]
+              : item.external_owner
+            // Handle case where owner might be deleted (returns null)
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+            if (ownerData && typeof ownerData === 'object') {
+              ownerName = (ownerData as any)?.name ?? null
+            }
+          }
           itemOwnerMap.set(item.id, {
             owner_id: item.external_owner_id,
-            owner_name: ownerData.name ?? null,
+            owner_name: ownerName,
           })
         }
       }
@@ -386,7 +395,7 @@ export default function BookItemsDialog({
         let tp = existingTimePeriods.find((t) => t.title === expectedTitle)
 
         if (!tp) {
-          // Create the time period
+          // Create the time period with equipment category
           const { data: newTp, error: createErr } = await supabase
             .from('time_periods')
             .insert({
@@ -395,6 +404,7 @@ export default function BookItemsDialog({
               title: expectedTitle,
               start_at: job.start_at,
               end_at: job.end_at,
+              category: 'equipment',
             })
             .select('id, title')
             .single()
@@ -433,9 +443,11 @@ export default function BookItemsDialog({
       // 2) build payload for items - use owner-specific time periods for external items
       const itemPayload = itemRows.map((r) => {
         const ownerInfo = itemOwnerMap.get(r.item_id)
-        const isExternal = ownerInfo?.owner_id
+        // Only treat as external if owner_id exists AND owner_name exists (owner not deleted)
+        const isExternal = ownerInfo?.owner_id && ownerInfo.owner_name !== null
         const tpId = isExternal
-          ? ownerTimePeriodMap.get(ownerInfo.owner_id!)
+          ? (ownerTimePeriodMap.get(ownerInfo.owner_id!) ??
+            selectedTimePeriodId)
           : selectedTimePeriodId
 
         return {

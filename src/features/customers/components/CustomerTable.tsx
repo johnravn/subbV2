@@ -12,6 +12,7 @@ import {
 } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { InfoCircle, Search } from 'iconoir-react'
+import { fmtVAT } from '@shared/lib/generalFunctions'
 import { customersIndexQuery } from '../api/queries'
 import AddCustomerDialog from './dialogs/AddCustomerDialog'
 
@@ -138,7 +139,7 @@ export default function CustomerTable({
                       </Text>
                     )}
                   </Table.Cell>
-                  <Table.Cell>{r.vat_number || '—'}</Table.Cell>
+                  <Table.Cell>{fmtVAT(r.vat_number)}</Table.Cell>
                   <Table.Cell>
                     {r.is_partner ? (
                       <Badge variant="soft" color="green">

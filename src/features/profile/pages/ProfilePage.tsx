@@ -17,6 +17,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@shared/api/supabase'
 import { useToast } from '@shared/ui/toast/ToastProvider'
+import DateTimePicker from '@shared/ui/components/DateTimePicker'
 import { Camera } from 'iconoir-react'
 import { PhoneInputField } from '@shared/phone/PhoneInputField'
 import MapEmbed from '@shared/maps/MapEmbed' // <- ensure this path fits your project
@@ -488,10 +489,22 @@ export default function ProfilePage() {
             {/* RIGHT: Optional info */}
             <Column title="Optional details">
               <Field label="Date of birth" maxWidth={FIELD_MAX}>
-                <TextField.Root
-                  type="date"
-                  value={form.date_of_birth}
-                  onChange={(e) => set('date_of_birth', e.target.value)}
+                <DateTimePicker
+                  value={
+                    form.date_of_birth
+                      ? new Date(form.date_of_birth + 'T00:00:00').toISOString()
+                      : ''
+                  }
+                  onChange={(iso) => {
+                    if (iso) {
+                      const d = new Date(iso)
+                      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+                      set('date_of_birth', dateStr)
+                    } else {
+                      set('date_of_birth', '')
+                    }
+                  }}
+                  dateOnly
                 />
               </Field>
               <Field label="Driver’s license" maxWidth={FIELD_MAX}>

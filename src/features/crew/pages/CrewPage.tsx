@@ -1,14 +1,17 @@
 import * as React from 'react'
 import {
   Box,
+  Button,
   Card,
+  Checkbox,
+  DropdownMenu,
   Flex,
   Heading,
   Separator,
-  Switch,
   Text,
 } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
+import { NavArrowDown } from 'iconoir-react'
 import CrewTable from '../components/CrewTable'
 import CrewInspector from '../components/CrewInspector'
 
@@ -64,23 +67,14 @@ export default function CrewPage() {
         >
           <Flex align="center" justify="between" mb="3">
             <Heading size="5">Crew</Heading>
-            <Flex align="center" gap="3">
-              <LabelledSwitch
-                label="Employees"
-                checked={showEmployees}
-                onChange={setShowEmployees}
-              />
-              <LabelledSwitch
-                label="Freelancers"
-                checked={showFreelancers}
-                onChange={setShowFreelancers}
-              />
-              <LabelledSwitch
-                label="My pending invites"
-                checked={showMyPending}
-                onChange={setShowMyPending}
-              />
-            </Flex>
+            <StatusDropdown
+              showEmployees={showEmployees}
+              showFreelancers={showFreelancers}
+              showMyPending={showMyPending}
+              onShowEmployeesChange={setShowEmployees}
+              onShowFreelancersChange={setShowFreelancers}
+              onShowMyPendingChange={setShowMyPending}
+            />
           </Flex>
           <Separator size="4" mb="3" />
           <Box
@@ -131,21 +125,81 @@ export default function CrewPage() {
   )
 }
 
-function LabelledSwitch({
-  label,
-  checked,
-  onChange,
+function StatusDropdown({
+  showEmployees,
+  showFreelancers,
+  showMyPending,
+  onShowEmployeesChange,
+  onShowFreelancersChange,
+  onShowMyPendingChange,
 }: {
-  label: string
-  checked: boolean
-  onChange: (v: boolean) => void
+  showEmployees: boolean
+  showFreelancers: boolean
+  showMyPending: boolean
+  onShowEmployeesChange: (v: boolean) => void
+  onShowFreelancersChange: (v: boolean) => void
+  onShowMyPendingChange: (v: boolean) => void
 }) {
+  const selectedCount = [showEmployees, showFreelancers, showMyPending].filter(
+    Boolean,
+  ).length
+
+  const label =
+    selectedCount === 3
+      ? 'All statuses'
+      : selectedCount === 0
+        ? 'No statuses'
+        : `${selectedCount} selected`
+
   return (
-    <Flex align="center" gap="1">
-      <Text size="2" color="gray">
-        {label}
-      </Text>
-      <Switch checked={checked} onCheckedChange={(v) => onChange(!!v)} />
-    </Flex>
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger>
+        <Button variant="soft" size="2">
+          <Text>{label}</Text>
+          <NavArrowDown width={14} height={14} />
+        </Button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content>
+        <DropdownMenu.Item
+          onSelect={(e) => {
+            e.preventDefault()
+          }}
+        >
+          <Flex align="center" gap="2">
+            <Checkbox
+              checked={showEmployees}
+              onCheckedChange={onShowEmployeesChange}
+            />
+            <Text>Employees</Text>
+          </Flex>
+        </DropdownMenu.Item>
+        <DropdownMenu.Item
+          onSelect={(e) => {
+            e.preventDefault()
+          }}
+        >
+          <Flex align="center" gap="2">
+            <Checkbox
+              checked={showFreelancers}
+              onCheckedChange={onShowFreelancersChange}
+            />
+            <Text>Freelancers</Text>
+          </Flex>
+        </DropdownMenu.Item>
+        <DropdownMenu.Item
+          onSelect={(e) => {
+            e.preventDefault()
+          }}
+        >
+          <Flex align="center" gap="2">
+            <Checkbox
+              checked={showMyPending}
+              onCheckedChange={onShowMyPendingChange}
+            />
+            <Text>My pending invites</Text>
+          </Flex>
+        </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
   )
 }

@@ -55,28 +55,19 @@ export default function AddCrewDialog({
     },
   })
 
-  // Load roles (time periods with is_role = true) for this job
+  // Load roles (time periods with category = 'crew') for this job
   const { data: roles = [] } = useQuery({
     queryKey: ['jobs', jobId, 'time_periods', 'roles'],
     enabled: open,
     queryFn: async () => {
-      // Try with is_role filter (assumes column exists)
       const { data, error } = await supabase
         .from('time_periods')
         .select('id, title, start_at, end_at')
         .eq('job_id', jobId)
-        .eq('is_role', true)
+        .eq('category', 'crew')
         .order('start_at', { ascending: true })
 
-      // If error (column might not exist), return empty array
-      // This prevents crashes but shows empty state until migration is applied
-      if (error) {
-        console.warn(
-          'is_role column may not exist yet. Please run migration:',
-          error,
-        )
-        return []
-      }
+      if (error) throw error
 
       return data as Array<{
         id: string
@@ -329,5 +320,13 @@ function Field({
 }
 
 function formatWhen(iso?: string | null) {
-  return iso ? new Date(iso).toLocaleString() : '—'
+  return iso
+    ? new Date(iso).toLocaleString(undefined, {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '—'
 }

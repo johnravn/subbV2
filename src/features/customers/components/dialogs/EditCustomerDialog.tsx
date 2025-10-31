@@ -12,6 +12,7 @@ import {
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { PhoneInputField } from '@shared/phone/PhoneInputField'
+import { fmtVAT } from '@shared/lib/generalFunctions'
 import { upsertCustomer } from '../../api/queries'
 
 type Initial = {
@@ -37,8 +38,22 @@ export default function EditCustomerDialog({
 }) {
   const { companyId } = useCompany()
   const qc = useQueryClient()
-  const [form, setForm] = React.useState<Initial>(initial)
-  React.useEffect(() => setForm(initial), [initial.id])
+  // Format VAT number on initial load
+  const formatVATForInput = (vat: string | null | undefined): string => {
+    if (!vat) return ''
+    const formatted = fmtVAT(vat)
+    return formatted === '—' ? '' : formatted
+  }
+  const [form, setForm] = React.useState<Initial>({
+    ...initial,
+    vat_number: formatVATForInput(initial.vat_number),
+  })
+  React.useEffect(() => {
+    setForm({
+      ...initial,
+      vat_number: formatVATForInput(initial.vat_number),
+    })
+  }, [initial.id])
   const set = (k: keyof Initial, v: any) => setForm((s) => ({ ...s, [k]: v }))
   const { success, error } = useToast()
 
@@ -51,7 +66,10 @@ export default function EditCustomerDialog({
         name: form.name,
         email: form.email || null,
         phone: form.phone || null,
-        vat_number: form.vat_number || null,
+        // Strip spaces before saving to DB
+        vat_number: form.vat_number
+          ? form.vat_number.replace(/[\s-]/g, '') || null
+          : null,
         address: form.address || null,
         is_partner: !!form.is_partner,
       })
@@ -94,7 +112,21 @@ export default function EditCustomerDialog({
           <Field label="VAT number">
             <TextField.Root
               value={form.vat_number}
-              onChange={(e) => set('vat_number', e.target.value)}
+              onChange={(e) => {
+                const input = e.target.value.replace(/[\s-]/g, '')
+                // Only allow digits, max 9 digits
+                if (input === '' || /^\d{0,9}$/.test(input)) {
+                  // Format as "xxx xxx xxx" as user types
+                  const formatted =
+                    input.length <= 3
+                      ? input
+                      : input.length <= 6
+                        ? `${input.slice(0, 3)} ${input.slice(3)}`
+                        : `${input.slice(0, 3)} ${input.slice(3, 6)} ${input.slice(6)}`
+                  set('vat_number', formatted)
+                }
+              }}
+              placeholder="123 456 789"
             />
           </Field>
           <Field label="Address">

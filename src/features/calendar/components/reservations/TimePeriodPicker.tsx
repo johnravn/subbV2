@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Box, Button, Flex, Select, TextField } from '@radix-ui/themes'
 import { Calendar, Edit, Plus } from 'iconoir-react'
 import { useToast } from '@shared/ui/toast/ToastProvider'
+import DateTimePicker from '@shared/ui/components/DateTimePicker'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import {
   jobTimePeriodsQuery,
@@ -133,18 +134,16 @@ export default function TimePeriodPicker({ jobId, value, onChange }: Props) {
                 setEditing({ ...editing, title: e.target.value })
               }
             />
-            <TextField.Root
-              type="datetime-local"
-              value={toLocal(editing.start_at)}
-              onChange={(e) =>
-                setEditing({ ...editing, start_at: fromLocal(e.target.value) })
+            <DateTimePicker
+              value={editing.start_at}
+              onChange={(iso) =>
+                setEditing({ ...editing, start_at: iso })
               }
             />
-            <TextField.Root
-              type="datetime-local"
-              value={toLocal(editing.end_at)}
-              onChange={(e) =>
-                setEditing({ ...editing, end_at: fromLocal(e.target.value) })
+            <DateTimePicker
+              value={editing.end_at}
+              onChange={(iso) =>
+                setEditing({ ...editing, end_at: iso })
               }
             />
             <Flex gap="2" ml="auto">
@@ -175,25 +174,15 @@ export default function TimePeriodPicker({ jobId, value, onChange }: Props) {
 
 function fmt(iso: string) {
   const d = new Date(iso)
-  return d.toLocaleString()
+  return d.toLocaleString(undefined, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
-// datetime-local ↔ ISO helpers (preserve local timezone semantics)
-function toLocal(iso: string) {
-  const d = new Date(iso)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  const y = d.getFullYear()
-  const m = pad(d.getMonth() + 1)
-  const da = pad(d.getDate())
-  const h = pad(d.getHours())
-  const mi = pad(d.getMinutes())
-  return `${y}-${m}-${da}T${h}:${mi}`
-}
-function fromLocal(local: string) {
-  // Treat as local time, convert to ISO with timezone
-  const d = new Date(local)
-  return d.toISOString()
-}
 function isoLocalStart() {
   return new Date().toISOString()
 }
@@ -336,23 +325,21 @@ export function FixedTimePeriodEditor({
               style={{ background: 'var(--gray-2)', borderRadius: 8 }}
             >
               <Flex gap="2" wrap="wrap" align="center">
-                <TextField.Root
-                  type="datetime-local"
-                  value={toLocal(editData.start_at)}
-                  onChange={(e) =>
+                <DateTimePicker
+                  value={editData.start_at}
+                  onChange={(iso) =>
                     setEditData({
                       ...editData,
-                      start_at: fromLocal(e.target.value),
+                      start_at: iso,
                     })
                   }
                 />
-                <TextField.Root
-                  type="datetime-local"
-                  value={toLocal(editData.end_at)}
-                  onChange={(e) =>
+                <DateTimePicker
+                  value={editData.end_at}
+                  onChange={(iso) =>
                     setEditData({
                       ...editData,
-                      end_at: fromLocal(e.target.value),
+                      end_at: iso,
                     })
                   }
                 />

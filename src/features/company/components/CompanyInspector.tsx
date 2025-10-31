@@ -3,6 +3,7 @@ import * as React from 'react'
 import { Box, Code, Flex, Separator, Spinner, Text } from '@radix-ui/themes'
 import { useQuery } from '@tanstack/react-query'
 import { useCompany } from '@shared/companies/CompanyProvider'
+import { fmtVAT } from '@shared/lib/generalFunctions'
 import { companyDetailQuery } from '../api/queries'
 
 export default function CompanyInspector() {
@@ -47,7 +48,7 @@ export default function CompanyInspector() {
         <DD>{data.address || '—'}</DD>
 
         <DT>VAT number</DT>
-        <DD>{data.vat_number || '—'}</DD>
+        <DD>{fmtVAT(data.vat_number)}</DD>
 
         <DT>General email</DT>
         <DD>

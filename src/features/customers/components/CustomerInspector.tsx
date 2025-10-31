@@ -8,21 +8,36 @@ import {
   Button,
   Code,
   Flex,
+  Grid,
   Separator,
   Spinner,
   Table,
   Text,
 } from '@radix-ui/themes'
+import { Edit, Trash } from 'iconoir-react'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { prettyPhone } from '@shared/phone/phone'
 import { useToast } from '@shared/ui/toast/ToastProvider'
-import { addContact, customerDetailQuery, deleteContact } from '../api/queries'
+import { fmtVAT } from '@shared/lib/generalFunctions'
+import { CopyIconButton } from '@shared/lib/CopyIconButton'
+import MapEmbed from '@shared/maps/MapEmbed'
+import {
+  customerDetailQuery,
+  deleteContact,
+  deleteCustomer,
+} from '../api/queries'
 import EditCustomerDialog from './dialogs/EditCustomerDialog'
 import AddContactDialog from './dialogs/AddContactDialog'
 import EditContactDialog from './dialogs/EditContactDialog'
 import type { ContactRow } from '../api/queries'
 
-export default function CustomerInspector({ id }: { id: string | null }) {
+export default function CustomerInspector({
+  id,
+  onDeleted,
+}: {
+  id: string | null
+  onDeleted?: () => void
+}) {
   const { companyId } = useCompany()
   const qc = useQueryClient()
   const [editOpen, setEditOpen] = React.useState(false)
@@ -32,11 +47,12 @@ export default function CustomerInspector({ id }: { id: string | null }) {
   const [editContactOpen, setEditContactOpen] = React.useState(false)
   const [editTarget, setEditTarget] = React.useState<ContactRow | null>(null)
 
-  const { success } = useToast()
+  const { success, error: toastError } = useToast()
   const [confirmOpen, setConfirmOpen] = React.useState(false)
   const [pendingDeleteId, setPendingDeleteId] = React.useState<string | null>(
     null,
   )
+  const [deleteCustomerOpen, setDeleteCustomerOpen] = React.useState(false)
 
   const enabled = Boolean(companyId && id)
   const { data, isLoading, isError, error } = useQuery({
@@ -58,6 +74,38 @@ export default function CustomerInspector({ id }: { id: string | null }) {
       setPendingDeleteId(null)
     },
   })
+
+  const deleteCustomerMut = useMutation({
+    mutationFn: async () => {
+      if (!companyId || !id) throw new Error('Missing ids')
+      return deleteCustomer({ companyId, id })
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({
+          queryKey: ['company', companyId, 'customers-index'],
+          exact: false,
+        }),
+        qc.invalidateQueries({
+          queryKey: ['company', companyId, 'customer-detail'],
+          exact: false,
+        }),
+      ])
+      success('Deleted', 'Customer was marked as deleted.')
+      setDeleteCustomerOpen(false)
+      // Clear selection immediately when deleted
+      onDeleted?.()
+    },
+    onError: (e: any) =>
+      toastError('Failed to delete', e?.message ?? 'Please try again.'),
+  })
+
+  // If query returns no data (customer was deleted), clear selection
+  React.useEffect(() => {
+    if (enabled && !isLoading && data === undefined && !isError && onDeleted) {
+      onDeleted()
+    }
+  }, [enabled, isLoading, data, isError, onDeleted])
 
   if (!id) return <Text color="gray">Select a customer.</Text>
   if (!enabled) return <Text color="gray">Preparing…</Text>
@@ -121,48 +169,78 @@ export default function CustomerInspector({ id }: { id: string | null }) {
             }}
           />
           <Button size="2" variant="soft" onClick={() => setEditOpen(true)}>
-            Edit
+            <Edit />
+          </Button>
+          <Button
+            size="2"
+            variant="surface"
+            color="red"
+            onClick={() => setDeleteCustomerOpen(true)}
+          >
+            <Trash />
           </Button>
         </Flex>
       </Flex>
 
       <Separator my="3" />
 
-      {/* Meta */}
-      <Flex direction="column" gap="2" mb="3">
-        <div>
-          <Text as="div" size="1" color="gray" style={{ marginBottom: 4 }}>
-            Email
-          </Text>
-          <Text as="div" size="2">
-            <a href={`mailto:${c.email}`} style={{ color: 'inherit' }}>
-              {c.email}
-            </a>
-          </Text>
-        </div>
-        <div>
-          <Text as="div" size="1" color="gray" style={{ marginBottom: 4 }}>
-            Phone
-          </Text>
-          <Text as="div" size="2">
-            {c.phone ? (
-              <a href={`tel:${c.phone}`} style={{ color: 'inherit' }}>
-                {prettyPhone(c.phone)}
+      {/* Two-column layout: Meta info on left, Map on right */}
+      <Grid columns={{ initial: '1', sm: '2' }} gap="4" mb="3">
+        {/* Left column: Meta */}
+        <Flex direction="column" gap="2">
+          <div>
+            <Text as="div" size="1" color="gray" style={{ marginBottom: 4 }}>
+              Email
+            </Text>
+            <Text as="div" size="2">
+              <a href={`mailto:${c.email}`} style={{ color: 'inherit' }}>
+                {c.email}
               </a>
-            ) : (
-              '—'
-            )}
-          </Text>
-        </div>
-        <div>
-          <Text as="div" size="1" color="gray" style={{ marginBottom: 4 }}>
-            VAT
-          </Text>
-          <Text as="div" size="2">
-            {c.vat_number}
-          </Text>
-        </div>
-      </Flex>
+            </Text>
+          </div>
+          <div>
+            <Text as="div" size="1" color="gray" style={{ marginBottom: 4 }}>
+              Phone
+            </Text>
+            <Text as="div" size="2">
+              {c.phone ? (
+                <a href={`tel:${c.phone}`} style={{ color: 'inherit' }}>
+                  {prettyPhone(c.phone)}
+                </a>
+              ) : (
+                '—'
+              )}
+            </Text>
+          </div>
+          <div>
+            <Text as="div" size="1" color="gray" style={{ marginBottom: 4 }}>
+              VAT
+            </Text>
+            <Flex align="center" gap="2">
+              <Text as="div" size="2">
+                {fmtVAT(c.vat_number)}
+              </Text>
+              {c.vat_number && (
+                <CopyIconButton text={c.vat_number.replace(/[\s-]/g, '')} />
+              )}
+            </Flex>
+          </div>
+        </Flex>
+
+        {/* Right column: Map */}
+        {c.address && (
+          <Box>
+            <Text as="div" size="2" color="gray" mb="2">
+              Location
+            </Text>
+            <MapEmbed
+              query={c.address}
+              zoom={15}
+              style={{ maxWidth: '100%' }}
+            />
+          </Box>
+        )}
+      </Grid>
 
       {/* Contacts */}
       <Flex align="baseline" justify="between" mb="2">
@@ -225,7 +303,7 @@ export default function CustomerInspector({ id }: { id: string | null }) {
                           setEditContactOpen(true)
                         }}
                       >
-                        Edit
+                        <Edit width={14} height={14} />
                       </Button>
                       <Button
                         size="1"
@@ -236,7 +314,7 @@ export default function CustomerInspector({ id }: { id: string | null }) {
                           setConfirmOpen(true)
                         }}
                       >
-                        Delete
+                        <Trash width={14} height={14} />
                       </Button>
                     </Flex>
                   </Table.Cell>
@@ -301,19 +379,37 @@ export default function CustomerInspector({ id }: { id: string | null }) {
           </Flex>
         </AlertDialog.Content>
       </AlertDialog.Root>
-    </Box>
-  )
-}
 
-function Field({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div>
-      <Text as="div" size="1" color="gray" style={{ marginBottom: 4 }}>
-        {label}
-      </Text>
-      <Text as="div" size="2">
-        {value}
-      </Text>
-    </div>
+      {/* Delete customer confirm */}
+      <AlertDialog.Root
+        open={deleteCustomerOpen}
+        onOpenChange={setDeleteCustomerOpen}
+      >
+        <AlertDialog.Content maxWidth="480px">
+          <AlertDialog.Title>Delete customer?</AlertDialog.Title>
+          <AlertDialog.Description size="2">
+            This will mark <b>{c.name}</b> as deleted. The customer will be
+            hidden from all views. This action cannot be undone.
+          </AlertDialog.Description>
+          <Flex gap="3" justify="end" mt="4">
+            <AlertDialog.Cancel>
+              <Button variant="soft" disabled={deleteCustomerMut.isPending}>
+                Cancel
+              </Button>
+            </AlertDialog.Cancel>
+            <AlertDialog.Action>
+              <Button
+                color="red"
+                variant="solid"
+                onClick={() => deleteCustomerMut.mutate()}
+                disabled={deleteCustomerMut.isPending}
+              >
+                {deleteCustomerMut.isPending ? 'Deleting…' : 'Yes, delete'}
+              </Button>
+            </AlertDialog.Action>
+          </Flex>
+        </AlertDialog.Content>
+      </AlertDialog.Root>
+    </Box>
   )
 }

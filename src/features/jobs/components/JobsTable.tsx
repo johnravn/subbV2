@@ -1,25 +1,37 @@
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
+  Avatar,
   Badge,
   Button,
   Flex,
   IconButton,
-  Popover,
   Spinner,
   Table,
   Text,
   TextField,
+  Tooltip,
 } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
-import { ArrowDown, ArrowUp, Calendar, Plus, Search, X } from 'iconoir-react'
+import DateTimePicker from '@shared/ui/components/DateTimePicker'
+import { ArrowDown, ArrowUp, CalendarXmark, Plus, Search } from 'iconoir-react'
 import { makeWordPresentable } from '@shared/lib/generalFunctions'
+import { supabase } from '@shared/api/supabase'
 import { jobsIndexQuery } from '../api/queries'
 import JobDialog from './dialogs/JobDialog'
 import type { JobListRow } from '../types'
 
 type SortBy = 'title' | 'start_at' | 'status' | 'customer_name'
 type SortDir = 'asc' | 'desc'
+
+function getInitials(displayOrEmail: string | null): string {
+  const base = (displayOrEmail || '').trim()
+  if (!base) return '?'
+  const parts = base.split(/\s+/).filter(Boolean)
+  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
+  if (base.includes('@')) return base[0].toUpperCase()
+  return base.slice(0, 2).toUpperCase()
+}
 
 export default function JobsTable({
   selectedId,
@@ -61,7 +73,7 @@ export default function JobsTable({
       <Flex gap="2" align="center" wrap="wrap" mb="3">
         <Flex gap="2" align="center" style={{ flex: '1 1 240px' }}>
           <TextField.Root
-            placeholder="Search title, customer, or date…"
+            placeholder="Search title, customer, project lead, or date…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             size="3"
@@ -75,48 +87,35 @@ export default function JobsTable({
             </TextField.Slot>
           </TextField.Root>
 
-          <Flex align="center" gap="2">
-            <Popover.Root>
-              <Popover.Trigger>
-                <IconButton
-                  size="3"
-                  variant={selectedDate ? 'soft' : 'ghost'}
-                  color={selectedDate ? 'blue' : undefined}
-                >
-                  <Calendar width={18} height={18} />
-                </IconButton>
-              </Popover.Trigger>
-              <Popover.Content style={{ width: 300 }}>
-                <Flex direction="column" gap="3">
-                  <Flex align="center" justify="between">
-                    <Text size="2" weight="medium">
-                      Filter by date
-                    </Text>
-                    {selectedDate && (
-                      <IconButton
-                        size="1"
-                        variant="ghost"
-                        onClick={() => setSelectedDate('')}
-                      >
-                        <X width={14} height={14} />
-                      </IconButton>
-                    )}
-                  </Flex>
-                  <TextField.Root
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    placeholder="Select date"
-                  />
-                </Flex>
-              </Popover.Content>
-            </Popover.Root>
-            {selectedDate && (
-              <Text size="2" color="gray">
-                {new Date(selectedDate).toLocaleDateString()}
-              </Text>
-            )}
-          </Flex>
+          {selectedDate ? (
+            <IconButton
+              size="3"
+              variant="soft"
+              onClick={() => setSelectedDate('')}
+            >
+              <CalendarXmark width={18} height={18} />
+            </IconButton>
+          ) : (
+            <DateTimePicker
+              value=""
+              onChange={(iso) => {
+                // Convert ISO to YYYY-MM-DD for the query (which expects date string)
+                if (iso) {
+                  const d = new Date(iso)
+                  const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+                  setSelectedDate(dateStr)
+                }
+              }}
+              dateOnly
+              iconButton
+              iconButtonSize="3"
+            />
+          )}
+          {selectedDate && (
+            <Text size="2" color="gray">
+              {new Date(selectedDate).toLocaleDateString()}
+            </Text>
+          )}
         </Flex>
 
         <Button size="2" variant="classic" onClick={() => setCreateOpen(true)}>
@@ -139,6 +138,7 @@ export default function JobsTable({
       <Table.Root variant="surface">
         <Table.Header>
           <Table.Row>
+            <Table.ColumnHeaderCell style={{ width: 50 }} />
             <Table.ColumnHeaderCell>
               <Flex
                 align="center"
@@ -208,6 +208,18 @@ export default function JobsTable({
         <Table.Body>
           {(data ?? []).map((j: JobListRow) => {
             const active = j.id === selectedId
+            const projectLead = j.project_lead
+            const avatarUrl = projectLead?.avatar_url
+              ? supabase.storage
+                  .from('avatars')
+                  .getPublicUrl(projectLead.avatar_url).data.publicUrl
+              : null
+            const initials = projectLead
+              ? getInitials(projectLead.display_name || projectLead.email)
+              : ''
+            const leadName =
+              projectLead?.display_name || projectLead?.email || null
+
             return (
               <Table.Row
                 key={j.id}
@@ -218,10 +230,41 @@ export default function JobsTable({
                 }}
                 data-state={active ? 'active' : undefined}
               >
+                <Table.Cell style={{ width: 50 }}>
+                  {leadName ? (
+                    <Tooltip content={leadName}>
+                      <Avatar
+                        size="2"
+                        radius="full"
+                        fallback={initials}
+                        src={avatarUrl || undefined}
+                        style={{ border: '1px solid var(--gray-5)' }}
+                      />
+                    </Tooltip>
+                  ) : (
+                    <Avatar
+                      size="2"
+                      radius="full"
+                      fallback="—"
+                      style={{
+                        border: '1px solid var(--gray-5)',
+                        opacity: 0.5,
+                      }}
+                    />
+                  )}
+                </Table.Cell>
                 <Table.Cell>{j.title}</Table.Cell>
                 <Table.Cell>{j.customer?.name ?? '—'}</Table.Cell>
                 <Table.Cell>
-                  {j.start_at ? new Date(j.start_at).toLocaleString() : '—'}
+                  {j.start_at
+                    ? new Date(j.start_at).toLocaleString(undefined, {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })
+                    : '—'}
                 </Table.Cell>
                 <Table.Cell>
                   <Badge radius="full" highContrast>
@@ -233,7 +276,7 @@ export default function JobsTable({
           })}
           {(!data || data.length === 0) && (
             <Table.Row>
-              <Table.Cell colSpan={4}>
+              <Table.Cell colSpan={5}>
                 <Text color="gray">No jobs</Text>
               </Table.Cell>
             </Table.Row>

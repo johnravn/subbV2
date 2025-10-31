@@ -66,6 +66,7 @@ export default function AddContactDialog({
             <TextField.Root
               value={form.name}
               onChange={(e) => set('name', e.target.value)}
+              placeholder="Contact full name"
               autoFocus
             />
           </Field>
@@ -75,6 +76,7 @@ export default function AddContactDialog({
                 type="email"
                 value={form.email}
                 onChange={(e) => set('email', e.target.value)}
+                placeholder="email@example.com"
               />
             </Field>
             <Field label="Phone">
@@ -91,6 +93,7 @@ export default function AddContactDialog({
             <TextField.Root
               value={form.title}
               onChange={(e) => set('title', e.target.value)}
+              placeholder="e.g., Project Manager, CFO"
             />
           </Field>
           <Field label="Notes">
@@ -98,6 +101,7 @@ export default function AddContactDialog({
               rows={3}
               value={form.notes}
               onChange={(e) => set('notes', e.target.value)}
+              placeholder="Additional information about this contact"
             />
           </Field>
         </Flex>

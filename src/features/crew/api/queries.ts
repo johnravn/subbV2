@@ -81,6 +81,11 @@ export type CrewDetail = {
   created_at: string | null
   bio: string | null
   preferences: CrewOptionalFields | null
+  locale: string | null
+  timezone: string | null
+  superuser: boolean
+  primary_address_id: string | null
+  selected_company_id: string | null
 }
 
 export function crewDetailQuery({
@@ -106,19 +111,35 @@ export function crewDetailQuery({
       if (error) throw error
       if (!base) return null
 
-      // 2) Pull the person’s profile-only fields (bio, preferences)
+      // 2) Pull the person's profile-only fields (bio, preferences, and other profile fields)
       const { data: prof, error: pErr } = await supabase
         .from('profiles')
-        .select('bio, preferences')
+        .select(
+          'bio, preferences, locale, timezone, superuser, primary_address_id, selected_company_id',
+        )
         .eq('user_id', userId)
         .maybeSingle()
 
       if (pErr) throw pErr
 
       return {
-        ...(base as Omit<CrewDetail, 'bio' | 'preferences'>),
+        ...(base as Omit<
+          CrewDetail,
+          | 'bio'
+          | 'preferences'
+          | 'locale'
+          | 'timezone'
+          | 'superuser'
+          | 'primary_address_id'
+          | 'selected_company_id'
+        >),
         bio: prof?.bio ?? null,
         preferences: prof?.preferences ?? null,
+        locale: prof?.locale ?? null,
+        timezone: prof?.timezone ?? null,
+        superuser: prof?.superuser ?? false,
+        primary_address_id: prof?.primary_address_id ?? null,
+        selected_company_id: prof?.selected_company_id ?? null,
       }
     },
   }

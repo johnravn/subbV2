@@ -15,6 +15,7 @@ import { supabase } from '@shared/api/supabase'
 import { upsertTimePeriod } from '@features/jobs/api/queries'
 import { makeWordPresentable } from '@shared/lib/generalFunctions'
 import { useToast } from '@shared/ui/toast/ToastProvider'
+import DateTimePicker from '@shared/ui/components/DateTimePicker'
 import type { JobDetail, JobStatus, UUID } from '../../types'
 
 type Props = {
@@ -36,7 +37,7 @@ export default function JobDialog({
 }: Props) {
   const qc = useQueryClient()
 
-  const { success, info, error } = useToast()
+  const { success, error: showError } = useToast()
 
   const [title, setTitle] = React.useState(initialData?.title ?? '')
   const [description, setDescription] = React.useState(
@@ -113,6 +114,7 @@ export default function JobDialog({
         .from('customers')
         .select('id, name')
         .eq('company_id', companyId)
+        .or('deleted.is.null,deleted.eq.false')
         .order('name', { ascending: true })
       if (error) throw error
       return data as Array<{ id: UUID; name: string }>
@@ -180,6 +182,7 @@ export default function JobDialog({
             title: 'Job duration',
             start_at: periodStart,
             end_at: periodEnd,
+            category: 'program',
           })
         } catch (e: any) {
           // Don't fail the whole job create if time period fails
@@ -251,7 +254,7 @@ export default function JobDialog({
       onSaved?.(id)
     },
     onError: (e: any) => {
-      error('Failed to save job', e?.message ?? 'Please try again.')
+      showError('Failed to save job', e?.message ?? 'Please try again.')
       // (Optional) keep the dialog open so they can fix inputs
       // You already keep it open by default on error since onOpenChange(false) is only in onSuccess
     },
@@ -261,9 +264,6 @@ export default function JobDialog({
     upsert.isPending ||
     !title.trim() ||
     (mode === 'create' && (!startAt || !endAt))
-
-  const addrLabel = (a: any) =>
-    [a.name, a.address_line, a.zip_code, a.city].filter(Boolean).join(' · ')
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -289,6 +289,7 @@ export default function JobDialog({
               <TextField.Root
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
+                placeholder="Enter job title"
               />
             </Field>
 
@@ -387,20 +388,12 @@ export default function JobDialog({
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <Field label="Start">
-              <TextField.Root
-                type="datetime-local"
-                value={toLocalInput(startAt)}
-                onChange={(e) => setStartAt(fromLocalInput(e.target.value))}
-              />
-            </Field>
-            <Field label="End">
-              <TextField.Root
-                type="datetime-local"
-                value={toLocalInput(endAt)}
-                onChange={(e) => setEndAt(fromLocalInput(e.target.value))}
-              />
-            </Field>
+            <DateTimePicker
+              label="Start"
+              value={startAt}
+              onChange={setStartAt}
+            />
+            <DateTimePicker label="End" value={endAt} onChange={setEndAt} />
             <Field label="Notes">
               <TextArea
                 rows={5}
@@ -419,7 +412,7 @@ export default function JobDialog({
             variant="classic"
             onClick={() => {
               if (!title.trim()) {
-                return error('Missing title', 'Please enter a job title.')
+                return showError('Missing title', 'Please enter a job title.')
               }
               upsert.mutate()
             }}
@@ -448,17 +441,4 @@ function Field({
       {children}
     </div>
   )
-}
-
-function toLocalInput(iso?: string | null) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  const tzOffset = d.getTimezoneOffset() * 60000
-  return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16)
-}
-function fromLocalInput(local: string) {
-  if (!local) return ''
-  // treat as local and convert to ISO
-  const d = new Date(local)
-  return d.toISOString()
 }

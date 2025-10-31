@@ -11,7 +11,7 @@ import {
 } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { useToast } from '@shared/ui/toast/ToastProvider'
-import { Search } from 'iconoir-react'
+import { ArrowDown, ArrowUp, Search, Trash } from 'iconoir-react'
 import {
   crewIndexQuery,
   deleteInvite,
@@ -33,7 +33,11 @@ type Row = {
   title: string
   subtitle?: string
   role?: 'owner' | 'employee' | 'freelancer' | 'super_user'
+  email: string
 }
+
+type SortColumn = 'name' | 'email' | 'status'
+type SortDirection = 'asc' | 'desc'
 
 export default function CrewTable({
   selectedUserId,
@@ -45,11 +49,9 @@ export default function CrewTable({
   const { companyId } = useCompany()
   const qc = useQueryClient()
   const [search, setSearch] = React.useState('')
-  const { success, error } = useToast()
-
-  const { data: userRes } = (window as any).supabase
-    ? { data: null }
-    : { data: null } // not used here; we will call supabase inside dialog for auth user
+  const [sortColumn, setSortColumn] = React.useState<SortColumn | null>(null)
+  const [sortDirection, setSortDirection] = React.useState<SortDirection>('asc')
+  const { success } = useToast()
 
   const { data: employees = [], isLoading: empLoading } = useQuery({
     ...crewIndexQuery({ companyId: companyId!, kind: 'employee' }),
@@ -91,6 +93,7 @@ export default function CrewTable({
           id: u.user_id,
           title: u.display_name ?? u.email,
           subtitle: `${u.email} · employee`,
+          email: u.email,
         }),
       )
     }
@@ -102,6 +105,7 @@ export default function CrewTable({
           id: u.user_id,
           title: u.display_name ?? u.email,
           subtitle: `${u.email} · freelancer`,
+          email: u.email,
         }),
       )
     }
@@ -112,6 +116,7 @@ export default function CrewTable({
         id: u.user_id,
         title: u.display_name ?? u.email,
         subtitle: `${u.email} · owner`,
+        email: u.email,
       }),
     )
 
@@ -123,6 +128,7 @@ export default function CrewTable({
           title: i.email,
           subtitle: `${i.role} · expires ${new Date(i.expires_at).toLocaleDateString()}`,
           role: i.role as Row['role'],
+          email: i.email,
         }),
       )
     }
@@ -136,15 +142,50 @@ export default function CrewTable({
         )
       : L
 
-    // ⬇️ Put invites first; then owner, employee, freelancer. Tie-break by title.
-    const priority: Record<(typeof filtered)[number]['kind'], number> = {
-      invite: 0,
-      owner: 1,
-      employee: 2,
-      freelancer: 3,
+    // Apply sorting
+    const sorted = filtered.slice()
+    if (sortColumn) {
+      sorted.sort((a, b) => {
+        let comparison = 0
+
+        if (sortColumn === 'name') {
+          comparison = a.title.localeCompare(b.title)
+        } else if (sortColumn === 'email') {
+          comparison = a.email.localeCompare(b.email)
+        } else {
+          // sortColumn === 'status'
+          const priority: Record<(typeof filtered)[number]['kind'], number> = {
+            invite: 0,
+            owner: 1,
+            employee: 2,
+            freelancer: 3,
+          }
+          comparison = priority[a.kind] - priority[b.kind]
+          // If same kind, tie-break by title
+          if (comparison === 0) {
+            comparison = a.title.localeCompare(b.title)
+          }
+        }
+
+        return sortDirection === 'asc' ? comparison : -comparison
+      })
+    } else {
+      // Default sort: Put invites first; then owner, employee, freelancer. Tie-break by title.
+      const priority: Record<(typeof filtered)[number]['kind'], number> = {
+        invite: 0,
+        owner: 1,
+        employee: 2,
+        freelancer: 3,
+      }
+      sorted.sort((a, b) => {
+        const kindComparison = priority[a.kind] - priority[b.kind]
+        return kindComparison !== 0
+          ? kindComparison
+          : a.title.localeCompare(b.title)
+      })
     }
 
-    return filtered.slice().sort((a, b) => priority[a.kind] - priority[b.kind])
+    return sorted
   }, [
     employees,
     freelancers,
@@ -154,7 +195,18 @@ export default function CrewTable({
     showFreelancers,
     showMyPending,
     search,
+    sortColumn,
+    sortDirection,
   ])
+
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortColumn(column)
+      setSortDirection('asc')
+    }
+  }
 
   const [addOpen, setAddOpen] = React.useState(false)
 
@@ -216,9 +268,37 @@ export default function CrewTable({
       <Table.Root variant="surface" style={{ marginTop: 16 }}>
         <Table.Header>
           <Table.Row>
-            <Table.ColumnHeaderCell>Name / Email</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell style={{ width: 120 }} />
+            <Table.ColumnHeaderCell
+              style={{ cursor: 'pointer', userSelect: 'none' }}
+              onClick={() => handleSort('name')}
+            >
+              <Flex align="center" gap="1">
+                <Text>Name / Email</Text>
+                {sortColumn === 'name' &&
+                  (sortDirection === 'asc' ? (
+                    <ArrowUp width={12} height={12} />
+                  ) : (
+                    <ArrowDown width={12} height={12} />
+                  ))}
+              </Flex>
+            </Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell
+              style={{ cursor: 'pointer', userSelect: 'none' }}
+              onClick={() => handleSort('status')}
+            >
+              <Flex align="center" gap="1">
+                <Text>Status</Text>
+                {sortColumn === 'status' &&
+                  (sortDirection === 'asc' ? (
+                    <ArrowUp width={12} height={12} />
+                  ) : (
+                    <ArrowDown width={12} height={12} />
+                  ))}
+              </Flex>
+            </Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell
+              style={{ width: 120, textAlign: 'right' }}
+            />
           </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -269,7 +349,7 @@ export default function CrewTable({
                       </Badge>
                     )}
                   </Table.Cell>
-                  <Table.Cell>
+                  <Table.Cell style={{ textAlign: 'right' }}>
                     {r.kind === 'invite' && (
                       <Button
                         variant="soft"
@@ -281,7 +361,7 @@ export default function CrewTable({
                         }}
                         disabled={delInvite.isPending}
                       >
-                        {delInvite.isPending ? 'Deleting…' : 'Delete'}
+                        <Trash width={14} height={14} />
                       </Button>
                     )}
                   </Table.Cell>

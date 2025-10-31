@@ -51,6 +51,7 @@ export function customersIndexQuery({
           'id, company_id, name, email, phone, vat_number, address, is_partner, created_at',
         )
         .eq('company_id', companyId)
+        .or('deleted.is.null,deleted.eq.false')
         .order('name', { ascending: true })
       if (search) q = q.ilike('name', `%${search}%`)
       if (showRegular && !showPartner) q = q.eq('is_partner', false)
@@ -84,6 +85,7 @@ export function customerDetailQuery({
         )
         .eq('company_id', companyId)
         .eq('id', id)
+        .or('deleted.is.null,deleted.eq.false')
         .maybeSingle()
       if (error) throw error
       if (!c) throw new Error('Not found')
@@ -173,5 +175,18 @@ export async function deleteContact(payload: { id: string }) {
     .from('contacts')
     .delete()
     .eq('id', payload.id)
+  if (error) throw error
+}
+
+/* ---------- delete customer ---------- */
+export async function deleteCustomer(payload: {
+  companyId: string
+  id: string
+}) {
+  const { error } = await supabase
+    .from('customers')
+    .update({ deleted: true })
+    .eq('id', payload.id)
+    .eq('company_id', payload.companyId)
   if (error) throw error
 }
