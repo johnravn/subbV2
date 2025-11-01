@@ -88,6 +88,13 @@ export default function CompanyCalendarPro({
     }
   }, [initialListMode, onListModeChange])
 
+  // When hideCreateButton is true, sync kinds with defaultKinds since user can't control it
+  React.useEffect(() => {
+    if (hideCreateButton) {
+      setKinds(defaultKinds)
+    }
+  }, [hideCreateButton, defaultKinds])
+
   // turn scopeKind + scopeId into a scope object
   const scope = React.useMemo(() => {
     if (initialScope) return initialScope
@@ -100,10 +107,14 @@ export default function CompanyCalendarPro({
     }
   }, [initialScope, scopeKind, scopeId])
 
-  const filtered = React.useMemo(
-    () => applyCalendarFilter(events, { kinds, scope, text: query }),
-    [events, kinds, scope, query],
-  )
+  const filtered = React.useMemo(() => {
+    // When hideCreateButton is true, events are already filtered by parent
+    // Only apply additional filters if controls are visible
+    if (hideCreateButton) {
+      return events
+    }
+    return applyCalendarFilter(events, { kinds, scope, text: query })
+  }, [events, kinds, scope, query, hideCreateButton])
 
   // Removed handleSelect and handleEventClick - no prompts needed
 

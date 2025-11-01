@@ -27,6 +27,27 @@ export async function setCompanyUserRole({
   return data
 }
 
+export async function removeCompanyUser({
+  companyId,
+  userId,
+}: {
+  companyId: string
+  userId: string
+}) {
+  const { data: auth, error: authErr } = await supabase.auth.getUser()
+  if (authErr) throw authErr
+  const actorId = auth.user.id
+  if (!actorId) throw new Error('Not authenticated')
+
+  const { error } = await supabase
+    .from('company_users')
+    .delete()
+    .eq('company_id', companyId)
+    .eq('user_id', userId)
+
+  if (error) throw error
+}
+
 export function companyDetailQuery({ companyId }: { companyId: string }) {
   return {
     queryKey: ['company', companyId, 'company-detail'] as const,

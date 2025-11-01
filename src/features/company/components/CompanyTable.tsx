@@ -20,8 +20,10 @@ import {
   myPendingInvitesQuery,
 } from '../../crew/api/queries'
 import AddFreelancerDialog from '../../crew/components/dialogs/AddFreelancerDialog'
-import { setCompanyUserRole } from '../api/queries'
+import { removeCompanyUser, setCompanyUserRole, type CompanyRole } from '../api/queries'
 import AddEmployeeDialog from './dialogs/AddEmployeeDialog'
+import ChangeRoleConfirmDialog from './dialogs/ChangeRoleConfirmDialog'
+import RemoveUserConfirmDialog from './dialogs/RemoveUserConfirmDialog'
 import type { PendingInvite } from '../../crew/api/queries'
 
 type Row = {
@@ -30,6 +32,7 @@ type Row = {
   title: string
   subtitle?: string
   role?: 'owner' | 'employee' | 'freelancer' | 'super_user'
+  email?: string
 }
 
 export default function CompanyTable({
@@ -89,6 +92,7 @@ export default function CompanyTable({
         id: u.user_id,
         title: u.display_name ?? u.email,
         subtitle: `${u.email} · owner`,
+        email: u.email,
       }),
     )
 
@@ -99,6 +103,7 @@ export default function CompanyTable({
           id: u.user_id,
           title: u.display_name ?? u.email,
           subtitle: `${u.email} · employee`,
+          email: u.email,
         }),
       )
     }
@@ -110,6 +115,7 @@ export default function CompanyTable({
           id: u.user_id,
           title: u.display_name ?? u.email,
           subtitle: `${u.email} · freelancer`,
+          email: u.email,
         }),
       )
     }
@@ -122,6 +128,7 @@ export default function CompanyTable({
           title: i.email,
           subtitle: `${i.role} · expires ${new Date(i.expires_at).toLocaleDateString()}`,
           role: i.role as Row['role'],
+          email: i.email,
         }),
       )
     }
@@ -155,6 +162,21 @@ export default function CompanyTable({
 
   const [addEmployeeOpen, setAddEmployeeOpen] = React.useState(false)
   const [addFreelancerOpen, setAddFreelancerOpen] = React.useState(false)
+  const [removeUserOpen, setRemoveUserOpen] = React.useState(false)
+  const [userToRemove, setUserToRemove] = React.useState<{
+    id: string
+    name: string
+    email: string
+    kind: 'employee' | 'freelancer'
+  } | null>(null)
+  const [changeRoleOpen, setChangeRoleOpen] = React.useState(false)
+  const [roleChangeInfo, setRoleChangeInfo] = React.useState<{
+    userId: string
+    userName: string
+    userEmail: string
+    currentRole: CompanyRole
+    newRole: CompanyRole
+  } | null>(null)
 
   const delInvite = useMutation({
     mutationFn: (inviteId: string) => deleteInvite({ inviteId }),
@@ -182,30 +204,6 @@ export default function CompanyTable({
 
   // We can guard last owner in UI using owners.length, server will enforce too
   const isLastOwner = (r: Row) => r.kind === 'owner' && owners.length <= 1
-
-  const changeRole = useMutation({
-    mutationFn: async ({
-      userId,
-      role,
-    }: {
-      userId: string
-      role: Row['role']
-    }) => setCompanyUserRole({ companyId: companyId!, userId, role: role! }),
-    onSuccess: () => {
-      // Refresh all crew-index lists since role might move the person between buckets
-      qc.invalidateQueries({
-        predicate: (q) =>
-          Array.isArray(q.queryKey) &&
-          q.queryKey[0] === 'company' &&
-          q.queryKey[1] === companyId &&
-          q.queryKey[2] === 'crew-index',
-      })
-      success('Updated', 'Permissions updated')
-    },
-    onError: (e: any) => {
-      error('Failed to update', e?.hint || e?.message || 'Please try again.')
-    },
-  })
 
   return (
     <div style={{ height: '100%', minHeight: 0 }}>
@@ -271,12 +269,32 @@ export default function CompanyTable({
           }}
         />
       </Flex>
+
+      <ChangeRoleConfirmDialog
+        open={changeRoleOpen}
+        onOpenChange={setChangeRoleOpen}
+        onChanged={() => {}}
+        userName={roleChangeInfo?.userName ?? ''}
+        userEmail={roleChangeInfo?.userEmail ?? ''}
+        currentRole={roleChangeInfo?.currentRole ?? 'employee'}
+        newRole={roleChangeInfo?.newRole ?? 'employee'}
+        userId={roleChangeInfo?.userId ?? ''}
+      />
+      <RemoveUserConfirmDialog
+        open={removeUserOpen}
+        onOpenChange={setRemoveUserOpen}
+        onRemoved={() => {}}
+        userName={userToRemove?.name ?? ''}
+        userEmail={userToRemove?.email ?? ''}
+        userKind={userToRemove?.kind ?? 'employee'}
+        userId={userToRemove?.id ?? ''}
+      />
       <Table.Root variant="surface" style={{ marginTop: 16 }}>
         <Table.Header>
           <Table.Row>
             <Table.ColumnHeaderCell>Name / Email</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell style={{ width: 120 }} />
+            <Table.ColumnHeaderCell style={{ width: 120, textAlign: 'right' }} />
           </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -338,7 +356,7 @@ export default function CompanyTable({
                           color={roleColor(r.kind)}
                           style={{ cursor: 'pointer' }}
                         >
-                          {changeRole.isPending ? 'Updating…' : r.kind}
+                          {r.kind}
                         </Badge>
                         <DropdownMenu.Root>
                           <DropdownMenu.Trigger>
@@ -348,35 +366,50 @@ export default function CompanyTable({
                             <DropdownMenu.Label>Set role</DropdownMenu.Label>
                             <DropdownMenu.Item
                               disabled={r.kind === 'owner' || isLastOwner(r)}
-                              onSelect={() =>
-                                changeRole.mutate({
+                              onSelect={(e) => {
+                                e.preventDefault()
+                                setRoleChangeInfo({
                                   userId: r.id,
-                                  role: 'freelancer',
+                                  userName: r.title,
+                                  userEmail: r.email ?? '',
+                                  currentRole: r.kind as CompanyRole,
+                                  newRole: 'freelancer',
                                 })
-                              }
+                                setChangeRoleOpen(true)
+                              }}
                             >
                               Freelancer
                             </DropdownMenu.Item>
                             <DropdownMenu.Item
                               disabled={r.kind === 'employee'}
-                              onSelect={() =>
-                                changeRole.mutate({
+                              onSelect={(e) => {
+                                e.preventDefault()
+                                setRoleChangeInfo({
                                   userId: r.id,
-                                  role: 'employee',
+                                  userName: r.title,
+                                  userEmail: r.email ?? '',
+                                  currentRole: r.kind as CompanyRole,
+                                  newRole: 'employee',
                                 })
-                              }
+                                setChangeRoleOpen(true)
+                              }}
                             >
                               Employee
                             </DropdownMenu.Item>
                             <DropdownMenu.Separator />
                             <DropdownMenu.Item
                               disabled={r.kind === 'owner'}
-                              onSelect={() =>
-                                changeRole.mutate({
+                              onSelect={(e) => {
+                                e.preventDefault()
+                                setRoleChangeInfo({
                                   userId: r.id,
-                                  role: 'owner',
+                                  userName: r.title,
+                                  userEmail: r.email ?? '',
+                                  currentRole: r.kind as CompanyRole,
+                                  newRole: 'owner',
                                 })
-                              }
+                                setChangeRoleOpen(true)
+                              }}
                             >
                               Owner
                             </DropdownMenu.Item>
@@ -384,7 +417,7 @@ export default function CompanyTable({
                               <>
                                 <DropdownMenu.Separator />
                                 <DropdownMenu.Item disabled>
-                                  Can’t demote last owner
+                                  Can't demote last owner
                                 </DropdownMenu.Item>
                               </>
                             )}
@@ -393,7 +426,7 @@ export default function CompanyTable({
                       </Flex>
                     )}
                   </Table.Cell>
-                  <Table.Cell>
+                  <Table.Cell style={{ textAlign: 'right' }}>
                     {r.kind === 'invite' && (
                       <Button
                         variant="soft"
@@ -404,6 +437,24 @@ export default function CompanyTable({
                           delInvite.mutate(id)
                         }}
                         disabled={delInvite.isPending}
+                      >
+                        <Trash width={14} height={14} />
+                      </Button>
+                    )}
+                    {(r.kind === 'employee' || r.kind === 'freelancer') && (
+                      <Button
+                        variant="soft"
+                        color="red"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setUserToRemove({
+                            id: r.id,
+                            name: r.title,
+                            email: r.email ?? '',
+                            kind: r.kind,
+                          })
+                          setRemoveUserOpen(true)
+                        }}
                       >
                         <Trash width={14} height={14} />
                       </Button>

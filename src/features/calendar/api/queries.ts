@@ -63,8 +63,35 @@ export function vehicleCalendarQuery({
 
       if (error) throw error
 
-      return (data || []).map(
-        (tp: any): CalendarRecord => ({
+      if (!data || data.length === 0) return []
+
+      // Get unique job IDs for fetching job titles
+      const jobIds = Array.from(
+        new Set(data.map((tp) => tp.job_id).filter(Boolean)),
+      )
+
+      // Fetch job titles
+      const jobTitles = new Map<string, string>()
+      if (jobIds.length > 0) {
+        const { data: jobsData, error: jobsError } = await supabase
+          .from('jobs')
+          .select('id, title')
+          .in('id', jobIds)
+
+        if (jobsError) throw jobsError
+        ;(jobsData || []).forEach((job: any) => {
+          if (job.id && job.title) {
+            jobTitles.set(job.id, job.title)
+          }
+        })
+      }
+
+      return data.map((tp: any): CalendarRecord => {
+        const jobTitle = tp.job_id
+          ? jobTitles.get(tp.job_id) || undefined
+          : undefined
+
+        return {
           id: tp.id,
           title: tp.title || 'Transport',
           start: tp.start_at,
@@ -75,8 +102,9 @@ export function vehicleCalendarQuery({
             jobId: tp.job_id || undefined,
           },
           notes: undefined,
-        }),
-      )
+          jobTitle: jobTitle || undefined,
+        }
+      })
     },
   })
 }
@@ -332,16 +360,23 @@ export function companyCalendarQuery({
           jobId: tp.job_id || undefined,
         }
 
-        if (tp.category === 'transport' && vehicleMap.has(tp.id)) {
+        if (tp.category === 'transport') {
           kind = 'vehicle'
-          ref.vehicleId = vehicleMap.get(tp.id)!
-        } else if (tp.category === 'equipment' && itemMap.has(tp.id)) {
+          if (vehicleMap.has(tp.id)) {
+            ref.vehicleId = vehicleMap.get(tp.id)!
+          }
+        } else if (tp.category === 'equipment') {
           kind = 'item'
-          ref.itemId = itemMap.get(tp.id)!
-        } else if (tp.category === 'crew' && crewMap.has(tp.id)) {
+          if (itemMap.has(tp.id)) {
+            ref.itemId = itemMap.get(tp.id)!
+          }
+        } else if (tp.category === 'crew') {
           kind = 'crew'
-          ref.userId = crewMap.get(tp.id)!
+          if (crewMap.has(tp.id)) {
+            ref.userId = crewMap.get(tp.id)!
+          }
         } else {
+          // For 'program' category, it's a job event
           kind = 'job'
         }
 

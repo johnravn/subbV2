@@ -39,13 +39,11 @@ export default function VehicleInspector({ id }: { id: string | null }) {
     enabled,
   })
 
-  // Get current date in ISO format for filtering future events
-  const now = React.useMemo(() => new Date().toISOString(), [])
-
   // Track the last processed offset to prevent duplicate processing
   const lastProcessedOffsetRef = React.useRef<number>(-1)
 
   // Fetch calendar events for this vehicle with pagination
+  // Note: Not filtering by fromDate to show all reservations (past and future)
   const { data: calendarRecords = [], isLoading: isLoadingCalendar } = useQuery(
     {
       ...vehicleCalendarQuery({
@@ -53,7 +51,7 @@ export default function VehicleInspector({ id }: { id: string | null }) {
         vehicleId: id ?? '',
         limit: 5,
         offset: calendarOffset,
-        fromDate: now, // Only future events
+        // No fromDate - show all reservations
       }),
       enabled: enabled && !!id,
     },

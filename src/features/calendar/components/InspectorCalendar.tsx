@@ -17,6 +17,7 @@ import interactionPlugin from '@fullcalendar/interaction'
 import type {
   DateSelectArg,
   EventClickArg,
+  EventContentArg,
   EventInput,
 } from '@fullcalendar/core'
 
@@ -37,6 +38,8 @@ type Props = {
   showPagination?: boolean // whether to show pagination controls
 }
 
+type ListPeriod = 'day' | 'week' | 'month'
+
 export default function InspectorCalendar({
   events,
   calendarHref,
@@ -48,6 +51,8 @@ export default function InspectorCalendar({
   showPagination = false,
 }: Props) {
   const [listMode, setListMode] = React.useState(false)
+  const [listPeriod, setListPeriod] = React.useState<ListPeriod>('month')
+  const calendarRef = React.useRef<any>(null)
 
   function handleSelect(sel: DateSelectArg) {
     const title = window.prompt('New booking title?')
@@ -66,6 +71,16 @@ export default function InspectorCalendar({
     if (!action) return
     if (action.toLowerCase() === 'delete') onDelete?.(id)
     else onUpdate?.(id, { title: action })
+  }
+
+  // Render event in list mode to show job name instead of time period name
+  function renderListEvent(arg: EventContentArg) {
+    const jobTitle = (arg.event.extendedProps as any)?.jobTitle as
+      | string
+      | undefined
+    // Use job title if available, otherwise fall back to event title
+    const displayTitle = jobTitle || arg.event.title || 'Event'
+    return <span>{displayTitle}</span>
   }
 
   return (
@@ -95,6 +110,43 @@ export default function InspectorCalendar({
           >
             <List />
           </IconButton>
+          {listMode && (
+            <Flex gap="1" align="center" style={{ marginLeft: '8px' }}>
+              <Button
+                type="button"
+                size="1"
+                variant={listPeriod === 'day' ? 'solid' : 'soft'}
+                onClick={() => {
+                  setListPeriod('day')
+                  calendarRef.current?.getApi()?.changeView('listDay')
+                }}
+              >
+                Day
+              </Button>
+              <Button
+                type="button"
+                size="1"
+                variant={listPeriod === 'week' ? 'solid' : 'soft'}
+                onClick={() => {
+                  setListPeriod('week')
+                  calendarRef.current?.getApi()?.changeView('listWeek')
+                }}
+              >
+                Week
+              </Button>
+              <Button
+                type="button"
+                size="1"
+                variant={listPeriod === 'month' ? 'solid' : 'soft'}
+                onClick={() => {
+                  setListPeriod('month')
+                  calendarRef.current?.getApi()?.changeView('listMonth')
+                }}
+              >
+                Month
+              </Button>
+            </Flex>
+          )}
           <RLink href={calendarHref}>
             <Flex align="center" gap="1">
               <Text>Open calendar</Text>
@@ -133,18 +185,24 @@ export default function InspectorCalendar({
       ) : (
         <>
           <FullCalendar
-            key="list"
+            ref={calendarRef}
+            key={`list-${listPeriod}`}
             plugins={[listPlugin]}
-            initialView="listMonth"
+            initialView={
+              listPeriod === 'day'
+                ? 'listDay'
+                : listPeriod === 'week'
+                  ? 'listWeek'
+                  : 'listMonth'
+            }
             initialDate={new Date()}
             headerToolbar={false}
             timeZone="Europe/Oslo"
             locale={nbLocale}
             events={events}
             height="auto"
-            validRange={{
-              start: new Date().toISOString().split('T')[0],
-            }}
+            eventContent={renderListEvent}
+            // Removed validRange to allow viewing past reservations
             listDayFormat={{ weekday: 'short', day: '2-digit', month: 'short' }}
             listDaySideFormat={false}
             noEventsContent="No bookings"

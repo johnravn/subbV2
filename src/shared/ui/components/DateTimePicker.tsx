@@ -42,6 +42,8 @@ export default function DateTimePicker({
     }
     return new Date(new Date().getFullYear(), new Date().getMonth(), 1)
   })
+  const [showYearPicker, setShowYearPicker] = React.useState(false)
+  const yearPickerRef = React.useRef<HTMLDivElement>(null)
 
   // Parse ISO string to local date/time components
   const dateValue = value ? toLocalDate(value) : ''
@@ -142,41 +144,73 @@ export default function DateTimePicker({
   const formatDisplayValue = () => {
     if (!value) return finalPlaceholder
     const d = new Date(value)
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
     const monthNames = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
+      'jan',
+      'feb',
+      'mar',
+      'apr',
+      'may',
+      'jun',
+      'jul',
+      'aug',
+      'sep',
+      'oct',
+      'nov',
+      'dec',
     ]
-    const isToday = toLocalDate(value) === toLocalDate(new Date().toISOString())
-    const dayLabel = isToday
-      ? 'Today'
-      : `${dayNames[d.getDay()]}, ${monthNames[d.getMonth()]} ${d.getDate()}`
+    const day = d.getDate()
+    const month = monthNames[d.getMonth()]
+    const year = d.getFullYear()
+    const dateLabel = `${day}. ${month} ${year}`
 
     if (dateOnly) {
-      return dayLabel
+      return dateLabel
     }
 
     const h = d.getHours()
     const m = d.getMinutes()
     const displayHour = String(h).padStart(2, '0')
     const displayMin = String(m).padStart(2, '0')
-    return `${dayLabel}, ${displayHour}:${displayMin}`
+    return `${dateLabel}, ${displayHour}:${displayMin}`
   }
 
   const monthName = currentMonth.toLocaleDateString('en-US', {
     month: 'long',
     year: 'numeric',
   })
+  const currentYear = currentMonth.getFullYear()
+  const currentMonthIndex = currentMonth.getMonth()
+  const monthNameOnly = currentMonth.toLocaleDateString('en-US', {
+    month: 'long',
+  })
+  
+  // Generate years for year picker (1930 to current year + 10 years)
+  const yearRange = React.useMemo(() => {
+    const currentYearNum = new Date().getFullYear()
+    const years: number[] = []
+    for (let i = 1930; i <= currentYearNum + 10; i++) {
+      years.push(i)
+    }
+    return years
+  }, [])
+  
+  const handleYearSelect = (year: number) => {
+    setCurrentMonth(new Date(year, currentMonthIndex, 1))
+    setShowYearPicker(false)
+  }
+
+  // Auto-scroll to current year when year picker opens
+  React.useEffect(() => {
+    if (showYearPicker && yearPickerRef.current) {
+      const currentYearButton = yearPickerRef.current.querySelector(
+        `[data-year="${new Date().getFullYear()}"]`,
+      ) as HTMLElement
+      if (currentYearButton) {
+        currentYearButton.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      }
+    }
+  }, [showYearPicker])
+  
   const isToday = (date: Date) =>
     toLocalDate(date.toISOString()) === toLocalDate(new Date().toISOString())
   const isSelected = (date: Date) =>
@@ -227,7 +261,16 @@ export default function DateTimePicker({
         </Text>
       )}
 
-      <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Root
+        open={open}
+        onOpenChange={(newOpen) => {
+          setOpen(newOpen)
+          if (!newOpen) {
+            // Reset year picker when popover closes
+            setShowYearPicker(false)
+          }
+        }}
+      >
         <Popover.Trigger>{triggerButton}</Popover.Trigger>
         <Popover.Content
           side="bottom"
@@ -254,7 +297,10 @@ export default function DateTimePicker({
               >
                 <button
                   type="button"
-                  onClick={() => setActiveTab('date')}
+                  onClick={() => {
+                    setActiveTab('date')
+                    setShowYearPicker(false)
+                  }}
                   style={{
                     padding: '6px 16px',
                     borderRadius: 4,
@@ -272,7 +318,10 @@ export default function DateTimePicker({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setActiveTab('time')}
+                  onClick={() => {
+                    setActiveTab('time')
+                    setShowYearPicker(false)
+                  }}
                   style={{
                     padding: '6px 16px',
                     borderRadius: 4,
@@ -302,7 +351,7 @@ export default function DateTimePicker({
           </Flex>
 
           {/* Date picker */}
-          {(dateOnly || activeTab === 'date') && (
+          {(dateOnly || activeTab === 'date') && !showYearPicker && (
             <Box>
               {/* Month navigation */}
               <Flex align="center" justify="between" mb="3">
@@ -327,9 +376,34 @@ export default function DateTimePicker({
                 >
                   ←
                 </button>
-                <Text size="2" weight="medium">
-                  {monthName}
-                </Text>
+                <Flex align="center" gap="2">
+                  <Text size="2" weight="medium">
+                    {monthNameOnly}
+                  </Text>
+                  <button
+                    type="button"
+                    onClick={() => setShowYearPicker(true)}
+                    style={{
+                      padding: '2px 8px',
+                      border: 'none',
+                      borderRadius: 4,
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      color: 'var(--gray-11)',
+                      fontSize: 'var(--font-size-2)',
+                      fontWeight: 500,
+                      transition: 'background-color 0.15s',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'var(--gray-3)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent'
+                    }}
+                  >
+                    {currentYear}
+                  </button>
+                </Flex>
                 <button
                   type="button"
                   onClick={() => {
@@ -420,6 +494,80 @@ export default function DateTimePicker({
                       }}
                     >
                       {day}
+                    </button>
+                  )
+                })}
+              </Box>
+            </Box>
+          )}
+
+          {/* Year picker */}
+          {(dateOnly || activeTab === 'date') && showYearPicker && (
+            <Box>
+              <Flex align="center" justify="between" mb="3">
+                <button
+                  type="button"
+                  onClick={() => setShowYearPicker(false)}
+                  style={{
+                    padding: '4px 8px',
+                    border: '1px solid var(--gray-6)',
+                    borderRadius: 4,
+                    background: 'var(--gray-2)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  ← Back
+                </button>
+                <Text size="2" weight="medium">
+                  Select Year
+                </Text>
+                <Box style={{ width: 60 }} /> {/* Spacer for alignment */}
+              </Flex>
+              
+              {/* Year grid */}
+              <Box
+                ref={yearPickerRef}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(4, 1fr)',
+                  gap: 8,
+                  maxHeight: '400px',
+                  overflowY: 'auto',
+                }}
+              >
+                {yearRange.map((year) => {
+                  const yearSelected = year === currentYear
+                  const isCurrentYear = year === new Date().getFullYear()
+                  return (
+                    <button
+                      key={year}
+                      type="button"
+                      data-year={year}
+                      onClick={() => handleYearSelect(year)}
+                      style={{
+                        padding: '12px 8px',
+                        borderRadius: 6,
+                        border: `${
+                          yearSelected
+                            ? '2px solid var(--blue-7)'
+                            : '1px solid var(--gray-6)'
+                        }`,
+                        background: yearSelected
+                          ? 'transparent'
+                          : isCurrentYear
+                            ? 'var(--gray-3)'
+                            : 'var(--gray-2)',
+                        color: yearSelected
+                          ? 'var(--blue-10)'
+                          : 'var(--gray-12)',
+                        cursor: 'pointer',
+                        fontSize: 'var(--font-size-2)',
+                        fontWeight: yearSelected ? 500 : 400,
+                        transition: 'all 0.15s',
+                        textAlign: 'center',
+                      }}
+                    >
+                      {year}
                     </button>
                   )
                 })}
