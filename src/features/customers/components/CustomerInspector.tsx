@@ -404,6 +404,7 @@ export default function CustomerInspector({
       <AddContactDialog
         open={addOpen}
         onOpenChange={setAddOpen}
+        companyId={c.company_id}
         customerId={c.id}
         onSaved={() =>
           qc.invalidateQueries({

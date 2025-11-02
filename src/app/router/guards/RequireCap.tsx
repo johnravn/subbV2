@@ -19,7 +19,7 @@ export default function RequireCap({
     if (!loading) {
       if (!caps.has(need)) {
         // Navigate to a safe page (home) if blocked
-        navigate({ to: '/' })
+        navigate({ to: '/dashboard' })
       }
     }
   }, [loading, caps, need, navigate])

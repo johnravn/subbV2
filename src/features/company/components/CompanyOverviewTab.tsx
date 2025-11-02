@@ -98,7 +98,10 @@ export default function CompanyOverviewTab() {
     .join(', ')
 
   return (
-    <Card size="4" style={{ minHeight: 0, overflow: 'auto' }}>
+    <Card
+      size="4"
+      style={{ minHeight: 0, overflow: 'auto' }}
+    >
       {/* Header */}
       <Flex align="center" justify="between" wrap="wrap" gap="3" mb="4">
         <Heading size="4">{data.name}</Heading>

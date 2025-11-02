@@ -139,6 +139,7 @@ export async function upsertCustomer(payload: {
 
 /* ---------- contacts CRUD ---------- */
 export async function addContact(payload: {
+  company_id: string
   customer_id: string
   name: string
   email?: string | null
@@ -147,6 +148,7 @@ export async function addContact(payload: {
   notes?: string | null
 }) {
   const { error } = await supabase.from('contacts').insert({
+    company_id: payload.company_id,
     customer_id: payload.customer_id,
     name: payload.name.trim(),
     email: payload.email ?? null,

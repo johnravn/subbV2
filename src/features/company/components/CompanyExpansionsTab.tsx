@@ -119,7 +119,10 @@ export default function CompanyExpansionsTab() {
   }
 
   return (
-    <Card size="4" style={{ minHeight: 0, overflow: 'auto' }}>
+    <Card
+      size="4"
+      style={{ minHeight: 0, overflow: 'auto' }}
+    >
       <Box p="4">
         <Heading size="4" mb="4">
           Expansions

@@ -69,7 +69,6 @@ export default function AddEmployeeDialog({
     },
     onError: (e: any) => {
       error('Failed', e?.message ?? 'Please try again.')
-      console.log(e?.message)
     },
   })
 

@@ -271,6 +271,7 @@ function InternalEquipmentTable({
             jobId={jobId}
             companyId={companyId}
             timePeriodId={undefined}
+            externalOnlyInitial={false}
           />
         )}
       </Box>
@@ -637,6 +638,7 @@ function ExternalEquipmentTable({
             jobId={jobId}
             companyId={companyId}
             timePeriodId={timePeriodId}
+            externalOnlyInitial={true}
           />
         )}
       </Box>

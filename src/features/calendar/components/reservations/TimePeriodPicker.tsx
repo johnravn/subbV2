@@ -15,13 +15,27 @@ type Props = {
   jobId: string
   value: string | null
   onChange: (timePeriodId: string | null) => void
+  categoryFilter?: 'program' | 'equipment' | 'crew' | 'transport'
+  defaultCategory?: 'program' | 'equipment' | 'crew' | 'transport'
 }
 
-export default function TimePeriodPicker({ jobId, value, onChange }: Props) {
+export default function TimePeriodPicker({
+  jobId,
+  value,
+  onChange,
+  categoryFilter,
+  defaultCategory,
+}: Props) {
   const qc = useQueryClient()
   const { companyId } = useCompany()
-  const { data: timePeriods = [] } = useQuery(jobTimePeriodsQuery({ jobId }))
+  const { data: allTimePeriods = [] } = useQuery(jobTimePeriodsQuery({ jobId }))
   const { success, error } = useToast()
+
+  // Filter time periods by category if categoryFilter is provided
+  const timePeriods = React.useMemo(() => {
+    if (!categoryFilter) return allTimePeriods
+    return allTimePeriods.filter((tp) => tp.category === categoryFilter)
+  }, [allTimePeriods, categoryFilter])
 
   const [editing, setEditing] = React.useState<TimePeriodLite | null>(null)
 
@@ -40,6 +54,7 @@ export default function TimePeriodPicker({ jobId, value, onChange }: Props) {
         title: p.title,
         start_at: p.start_at,
         end_at: p.end_at,
+        category: p.id ? undefined : defaultCategory, // Only set category when creating new
       })
       return id
     },
@@ -108,7 +123,14 @@ export default function TimePeriodPicker({ jobId, value, onChange }: Props) {
                 id: '' as any,
                 job_id: jobId,
                 company_id: companyId!,
-                title: '',
+                title:
+                  defaultCategory === 'equipment'
+                    ? 'Equipment period'
+                    : defaultCategory === 'crew'
+                      ? 'Crew period'
+                      : defaultCategory === 'transport'
+                        ? 'Transport period'
+                        : '',
                 start_at: isoLocalStart(), // see util below
                 end_at: isoLocalEnd(),
               } as TimePeriodLite)

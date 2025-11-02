@@ -4,6 +4,7 @@ import {
   Badge,
   Button,
   Flex,
+  Select,
   Spinner,
   Table,
   Text,
@@ -15,6 +16,8 @@ import { InfoCircle, Search } from 'iconoir-react'
 import { fmtVAT } from '@shared/lib/generalFunctions'
 import { customersIndexQuery } from '../api/queries'
 import AddCustomerDialog from './dialogs/AddCustomerDialog'
+
+type CustomerTypeFilter = 'all' | 'customer' | 'partner'
 
 export default function CustomerTable({
   selectedId,
@@ -31,6 +34,18 @@ export default function CustomerTable({
   const qc = useQueryClient()
   const [search, setSearch] = React.useState('')
   const [addOpen, setAddOpen] = React.useState(false)
+  
+  // Initialize filter state based on props
+  const [customerTypeFilter, setCustomerTypeFilter] = React.useState<CustomerTypeFilter>(() => {
+    if (showRegular && showPartner) return 'all'
+    if (showRegular && !showPartner) return 'customer'
+    if (!showRegular && showPartner) return 'partner'
+    return 'all'
+  })
+
+  // Derive showRegular/showPartner from filter state
+  const derivedShowRegular = customerTypeFilter === 'all' || customerTypeFilter === 'customer'
+  const derivedShowPartner = customerTypeFilter === 'all' || customerTypeFilter === 'partner'
 
   const {
     data: rows = [],
@@ -40,8 +55,8 @@ export default function CustomerTable({
     ...customersIndexQuery({
       companyId: companyId ?? '__none__',
       search,
-      showRegular,
-      showPartner,
+      showRegular: derivedShowRegular,
+      showPartner: derivedShowPartner,
     }),
     enabled: !!companyId,
     staleTime: 10_000,
@@ -69,6 +84,22 @@ export default function CustomerTable({
             )}
           </TextField.Slot>
         </TextField.Root>
+
+        <Select.Root
+          value={customerTypeFilter}
+          size="3"
+          onValueChange={(val) => setCustomerTypeFilter(val as CustomerTypeFilter)}
+        >
+          <Select.Trigger
+            placeholder="Filter type…"
+            style={{ minHeight: 'var(--space-7)' }}
+          />
+          <Select.Content>
+            <Select.Item value="all">All</Select.Item>
+            <Select.Item value="customer">Customer</Select.Item>
+            <Select.Item value="partner">Partner</Select.Item>
+          </Select.Content>
+        </Select.Root>
 
         <Button variant="classic" onClick={() => setAddOpen(true)}>
           Add customer

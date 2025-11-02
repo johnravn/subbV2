@@ -37,7 +37,7 @@ export default function AuthCallback() {
           }
         }
 
-        if (!cancelled) navigate({ to: '/' })
+        if (!cancelled) navigate({ to: '/dashboard' })
       } catch (e: any) {
         if (!cancelled) setError(e?.message ?? 'Could not complete sign-in')
       }
@@ -52,7 +52,7 @@ export default function AuthCallback() {
   if (error) {
     return (
       <Flex align="center" justify="center" style={{ minHeight: '100dvh' }}>
-        <Card size="3" style={{ width: 420 }}>
+        <Card size="3" style={{ width: 420, background: 'var(--gray-a2)' }}>
           <Heading size="5" mb="2">
             Sign-in error
           </Heading>
@@ -64,7 +64,7 @@ export default function AuthCallback() {
 
   return (
     <Flex align="center" justify="center" style={{ minHeight: '100dvh' }}>
-      <Card size="3" style={{ width: 420 }}>
+      <Card size="3" style={{ width: 420, background: 'var(--gray-a2)' }}>
         <Heading size="5">Completing sign-in…</Heading>
         <Text color="gray">Please wait.</Text>
       </Card>

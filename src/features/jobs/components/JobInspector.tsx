@@ -29,6 +29,7 @@ import CalendarTab from './tabs/CalendarTab'
 import FilesTab from './tabs/FilesTab'
 import JobDialog from './dialogs/JobDialog'
 import type { JobDetail, JobStatus } from '../types'
+import type { OverviewTabHandle } from './tabs/OverviewTab'
 
 // Helper function to mask status for freelancers
 function getDisplayStatus(
@@ -74,6 +75,7 @@ export default function JobInspector({
   const [activeTab, setActiveTab] = React.useState<string>(
     initialTab || 'overview',
   )
+  const overviewTabRef = React.useRef<OverviewTabHandle>(null)
 
   // Update activeTab when initialTab changes
   React.useEffect(() => {
@@ -194,7 +196,20 @@ export default function JobInspector({
       <Tabs.Root
         defaultValue="overview"
         value={activeTab}
-        onValueChange={setActiveTab}
+        onValueChange={(newTab) => {
+          // If switching away from overview tab, check for unsaved changes
+          if (
+            activeTab === 'overview' &&
+            newTab !== 'overview' &&
+            overviewTabRef.current
+          ) {
+            overviewTabRef.current.checkUnsavedChanges(() => {
+              setActiveTab(newTab)
+            })
+          } else {
+            setActiveTab(newTab)
+          }
+        }}
       >
         <Tabs.List wrap="wrap" mb="2">
           <Tabs.Trigger value="overview">Overview</Tabs.Trigger>
@@ -208,7 +223,7 @@ export default function JobInspector({
         </Tabs.List>
 
         <Tabs.Content value="overview" mt={'10px'}>
-          <OverviewTab job={job} />
+          <OverviewTab ref={overviewTabRef} job={job} />
         </Tabs.Content>
         <Tabs.Content value="timeline" mt={'10px'}>
           <TimelineTab jobId={job.id} />

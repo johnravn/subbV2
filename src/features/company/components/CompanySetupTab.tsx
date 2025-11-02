@@ -276,7 +276,10 @@ export default function CompanySetupTab() {
         companyId={companyId}
       />
 
-      <Card size="4" style={{ minHeight: 0, overflow: 'auto' }}>
+      <Card
+        size="4"
+        style={{ minHeight: 0, overflow: 'auto' }}
+      >
         <Box p="4">
           {/* Inventory Setup Section */}
           <Heading size="4" mb="4">

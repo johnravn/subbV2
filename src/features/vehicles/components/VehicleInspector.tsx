@@ -265,9 +265,9 @@ export default function VehicleInspector({ id }: { id: string | null }) {
       <InspectorCalendar
         events={accumulatedEvents}
         calendarHref={`/calendar?vehicleId=${id}`}
-        onCreate={(e) => console.log('create in inspector', e)}
-        onUpdate={(eventId, patch) => console.log('update', eventId, patch)}
-        onDelete={(eventId) => console.log('delete', eventId)}
+        onCreate={(e) => {}}
+        onUpdate={(eventId, patch) => {}}
+        onDelete={(eventId) => {}}
         hasMore={hasMoreEvents}
         onLoadNext={handleLoadNext}
         showPagination={true}

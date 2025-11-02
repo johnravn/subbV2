@@ -43,12 +43,12 @@ type PickerRow =
       id: UUID
       name: string
       category_name: string | null
-      // groups don’t have brand/price/on_hand per se; keep nulls to align columns
+      // groups don't have brand/price/on_hand per se; keep nulls to align columns
       brand_name: null
       on_hand: null
       current_price: null
-      internally_owned: true // groups are internal kits by definition
-      external_owner_name: null
+      internally_owned: boolean // groups can be internal or external
+      external_owner_name: string | null
       active: boolean
       is_group: true
       unique: boolean | null
@@ -77,6 +77,7 @@ export default function BookItemsDialog({
   jobId,
   companyId,
   timePeriodId: initialTimePeriodId,
+  externalOnlyInitial = false,
   onSaved,
 }: {
   open: boolean
@@ -84,6 +85,7 @@ export default function BookItemsDialog({
   jobId: UUID
   companyId: UUID
   timePeriodId?: UUID | null
+  externalOnlyInitial?: boolean
   onSaved?: () => void
 }) {
   const qc = useQueryClient()
@@ -104,40 +106,55 @@ export default function BookItemsDialog({
     enabled: open,
   })
 
-  // Set default time period when dialog opens
+  // Set default time period when dialog opens - only use equipment periods
   React.useEffect(() => {
     if (!open || initialTimePeriodId || selectedTimePeriodId) return
 
-    // Find "Equipment period" or "Job duration"
-    const equipmentPeriod = timePeriods.find((tp) =>
-      tp.title?.toLowerCase().includes('equipment period'),
-    )
-    const jobDuration = timePeriods.find((tp) =>
-      tp.title?.toLowerCase().includes('job duration'),
+    // Find "Equipment period" (must be equipment category)
+    const equipmentPeriod = timePeriods.find(
+      (tp) =>
+        tp.category === 'equipment' &&
+        tp.title?.toLowerCase().includes('equipment period'),
     )
 
-    const defaultPeriod = equipmentPeriod || jobDuration
-    if (defaultPeriod) {
-      setSelectedTimePeriodId(defaultPeriod.id)
+    if (equipmentPeriod) {
+      setSelectedTimePeriodId(equipmentPeriod.id)
     }
   }, [open, timePeriods, initialTimePeriodId, selectedTimePeriodId])
 
-  // Update local state when prop changes
+  // Update local state when prop changes, but only if it's an equipment period
   React.useEffect(() => {
     if (initialTimePeriodId) {
-      setSelectedTimePeriodId(initialTimePeriodId)
+      const period = timePeriods.find((tp) => tp.id === initialTimePeriodId)
+      // Only use initialTimePeriodId if it's an equipment period
+      if (period && period.category === 'equipment') {
+        setSelectedTimePeriodId(initialTimePeriodId)
+      } else if (period && period.category !== 'equipment') {
+        // If a non-equipment period is provided, reset to null
+        setSelectedTimePeriodId(null)
+      }
     }
-  }, [initialTimePeriodId])
+  }, [initialTimePeriodId, timePeriods])
 
-  // Clear message when dialog closes
+  // Clear message and reset filters when dialog closes
   React.useEffect(() => {
     if (!open) {
       setMessage(null)
+      setExternalOnly(externalOnlyInitial)
+      setSearch('')
+      setCategoryFilter(null)
     }
-  }, [open])
+  }, [open, externalOnlyInitial])
 
   // "External only" filter (items whose external_owner_id is set)
-  const [externalOnly, setExternalOnly] = React.useState(false)
+  const [externalOnly, setExternalOnly] = React.useState(externalOnlyInitial)
+
+  // Reset externalOnly when prop changes (e.g., when opening from different views)
+  React.useEffect(() => {
+    if (open) {
+      setExternalOnly(externalOnlyInitial)
+    }
+  }, [open, externalOnlyInitial])
 
   // Category filter
   const [categoryFilter, setCategoryFilter] = React.useState<string | null>(
@@ -162,14 +179,22 @@ export default function BookItemsDialog({
         .or('deleted.is.null,deleted.eq.false')
         .limit(100)
 
-      // For items, filter by allow_individual_booking
-      // For groups, always include them
-      // Combined: (is_group=true) OR (allow_individual_booking=true)
-      q = q.or('is_group.eq.true,allow_individual_booking.eq.true')
+      if (externalOnly) {
+        // When external only is enabled, show externally owned items and groups
+        // Filter: internally_owned=false AND (is_group=true OR allow_individual_booking=true)
+        // Since we filter by internally_owned=false first, the OR will only match external groups
+        // or external items that allow individual booking
+        q = q.eq('internally_owned', false)
+        q = q.or('is_group.eq.true,allow_individual_booking.eq.true')
+      } else {
+        // For items, filter by allow_individual_booking
+        // For groups, always include them
+        // Combined: (is_group=true) OR (allow_individual_booking=true)
+        q = q.or('is_group.eq.true,allow_individual_booking.eq.true')
+      }
 
       if (search) q = q.ilike('name', `%${search}%`)
       if (categoryFilter) q = q.eq('category_name', categoryFilter)
-      if (externalOnly) q = q.eq('internally_owned', false)
 
       const { data, error: fetchError } = await q
       if (fetchError) throw fetchError
@@ -185,8 +210,8 @@ export default function BookItemsDialog({
             brand_name: null,
             on_hand: r.on_hand ?? null,
             current_price: r.current_price ?? null,
-            internally_owned: true,
-            external_owner_name: null,
+            internally_owned: !!r.internally_owned,
+            external_owner_name: r.external_owner_name ?? null,
             active: !!r.active,
             is_group: true,
             unique: r.unique ?? null,
@@ -364,17 +389,15 @@ export default function BookItemsDialog({
           .in('id', itemIds)
         if (itemErr) throw itemErr
 
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-        for (const item of itemDetails || []) {
+        for (const item of itemDetails) {
           let ownerName: string | null = null
           if (item.external_owner_id) {
             const ownerData = Array.isArray(item.external_owner)
               ? item.external_owner[0]
               : item.external_owner
             // Handle case where owner might be deleted (returns null)
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
             if (ownerData && typeof ownerData === 'object') {
-              ownerName = (ownerData as any)?.name ?? null
+              ownerName = ownerData?.name ?? null
             }
           }
           itemOwnerMap.set(item.id, {
@@ -405,7 +428,7 @@ export default function BookItemsDialog({
               start_at: job.start_at,
               end_at: job.end_at,
               category: 'equipment',
-            })
+            } as any)
             .select('id, title')
             .single()
           if (createErr) throw createErr
@@ -416,10 +439,49 @@ export default function BookItemsDialog({
         ownerTimePeriodMap.set(ownerInfo.owner_id, tp.id)
       }
 
+      // Create or find "Equipment period" for internal items and groups
+      const equipmentPeriodTitle = 'Equipment period'
+      let internalEquipmentPeriod = existingTimePeriods.find(
+        (t) => t.title === equipmentPeriodTitle,
+      )
+
+      // Check if we have any internal items or groups that need this period
+      const hasInternalItems =
+        itemRows.some((r) => {
+          const ownerInfo = itemOwnerMap.get(r.item_id)
+          return !ownerInfo?.owner_id || !ownerInfo.owner_name
+        }) || groupRows.length > 0
+
+      if (!internalEquipmentPeriod && hasInternalItems) {
+        // Create the equipment period for internal items
+        const { data: newTp, error: createErr } = await supabase
+          .from('time_periods')
+          .insert({
+            job_id: jobId,
+            company_id: companyId,
+            title: equipmentPeriodTitle,
+            start_at: job.start_at,
+            end_at: job.end_at,
+            category: 'equipment',
+          } as any)
+          .select('id, title')
+          .single()
+        if (createErr) throw createErr
+        internalEquipmentPeriod = newTp
+        existingTimePeriods.push(newTp)
+      }
+
       // Collect all time period IDs we'll be using
-      const allTimePeriodIds = new Set<string>([selectedTimePeriodId])
+      const allTimePeriodIds = new Set<string>()
+      if (internalEquipmentPeriod) {
+        allTimePeriodIds.add(internalEquipmentPeriod.id)
+      }
       for (const tpId of ownerTimePeriodMap.values()) {
         allTimePeriodIds.add(tpId)
+      }
+      // Also include selectedTimePeriodId in case it's used for edge cases
+      if (selectedTimePeriodId) {
+        allTimePeriodIds.add(selectedTimePeriodId)
       }
 
       // 1) Fetch existing reserved_items for all relevant time periods
@@ -441,6 +503,7 @@ export default function BookItemsDialog({
       }
 
       // 2) build payload for items - use owner-specific time periods for external items
+      // Use "Equipment period" for internal items
       const itemPayload = itemRows.map((r) => {
         const ownerInfo = itemOwnerMap.get(r.item_id)
         // Only treat as external if owner_id exists AND owner_name exists (owner not deleted)
@@ -448,7 +511,7 @@ export default function BookItemsDialog({
         const tpId = isExternal
           ? (ownerTimePeriodMap.get(ownerInfo.owner_id!) ??
             selectedTimePeriodId)
-          : selectedTimePeriodId
+          : (internalEquipmentPeriod?.id ?? selectedTimePeriodId)
 
         return {
           time_period_id: tpId,
@@ -484,7 +547,8 @@ export default function BookItemsDialog({
           const groupItems = byGroup.get(g.group_id) ?? []
           for (const m of groupItems) {
             groupPayload.push({
-              time_period_id: selectedTimePeriodId, // Groups are always internal
+              time_period_id:
+                internalEquipmentPeriod?.id ?? selectedTimePeriodId, // Groups are always internal, use Equipment period
               item_id: m.item_id,
               quantity: m.quantity * g.quantity, // scale
               source_kind: 'group' as const,
@@ -526,6 +590,85 @@ export default function BookItemsDialog({
         if (updateErr) throw updateErr
       }
 
+      // Check availability before saving
+      // Fetch current on_hand for all items being booked from inventory_index
+      const allItemIds = new Set<string>()
+      for (const item of payload) {
+        allItemIds.add(item.item_id)
+      }
+
+      const { data: itemDetails, error: itemDetailsErr } = await supabase
+        .from('inventory_index')
+        .select('id, name, on_hand')
+        .eq('company_id', companyId)
+        .eq('is_group', false)
+        .in('id', Array.from(allItemIds))
+
+      if (itemDetailsErr) throw itemDetailsErr
+
+      // Create maps for lookup
+      const itemOnHandMap = new Map<string, number>()
+      const itemNameMap = new Map<string, string>()
+      for (const item of itemDetails) {
+        if (item.id && typeof item.id === 'string') {
+          itemOnHandMap.set(item.id, item.on_hand ?? 0)
+          itemNameMap.set(item.id, item.name || 'Item')
+        }
+      }
+
+      // Get ALL existing reservations for these items (across all time periods)
+      // to check global availability
+      const { data: allExistingReservations, error: allResErr } = await supabase
+        .from('reserved_items')
+        .select('item_id, quantity')
+        .in('item_id', Array.from(allItemIds))
+
+      if (allResErr) throw allResErr
+
+      // Calculate total reserved per item (existing across all time periods)
+      const existingReservedMap = new Map<string, number>()
+      for (const res of allExistingReservations) {
+        const current = existingReservedMap.get(res.item_id) ?? 0
+        existingReservedMap.set(res.item_id, current + res.quantity)
+      }
+
+      // Calculate new bookings per item
+      const newBookingMap = new Map<string, number>()
+      for (const item of payload) {
+        const current = newBookingMap.get(item.item_id) ?? 0
+        newBookingMap.set(item.item_id, current + item.quantity)
+      }
+
+      // Check for availability issues
+      const availabilityErrors: Array<string> = []
+      for (const itemId of allItemIds) {
+        const onHand = itemOnHandMap.get(itemId) ?? 0
+        if (onHand > 0) {
+          // Only check availability for items with on_hand set
+          const existingQty = existingReservedMap.get(itemId) ?? 0
+          const newQty = newBookingMap.get(itemId) ?? 0
+          const finalTotal = existingQty + newQty
+
+          if (finalTotal > onHand) {
+            const itemName = itemNameMap.get(itemId) ?? 'Item'
+            const existingPart =
+              existingQty > 0 ? ` (${existingQty} already booked)` : ''
+            availabilityErrors.push(
+              `${itemName}: Trying to book ${newQty}${existingPart}, but only ${onHand} available`,
+            )
+          }
+        }
+      }
+
+      if (availabilityErrors.length > 0) {
+        // Throw a special error that we'll catch in onError to show in message area
+        // This prevents onSuccess from being called
+        const availabilityError = new Error('Availability issues')
+        ;(availabilityError as any).isAvailabilityError = true
+        ;(availabilityError as any).availabilityErrors = availabilityErrors
+        throw availabilityError
+      }
+
       // 5) Execute inserts
       if (toInsert.length > 0) {
         const { error: insErr } = await supabase
@@ -543,6 +686,16 @@ export default function BookItemsDialog({
       success('Success', 'Items are reserved')
     },
     onError: (e: any) => {
+      // Check if this is an availability error
+      if (e?.isAvailabilityError) {
+        // Show availability errors in message area, don't show toast, keep dialog open
+        setMessage({
+          type: 'error',
+          text: `Availability issues:\n${e.availabilityErrors.join('\n')}`,
+        })
+        return
+      }
+      // For other errors, show toast
       error('Failed to update', e?.hint || e?.message || 'Please try again.')
     },
   })
@@ -570,6 +723,8 @@ export default function BookItemsDialog({
             jobId={jobId}
             value={selectedTimePeriodId}
             onChange={setSelectedTimePeriodId}
+            categoryFilter="equipment"
+            defaultCategory="equipment"
           />
 
           {/* RIGHT: Message Area */}
@@ -608,7 +763,11 @@ export default function BookItemsDialog({
                       ? 'amber'
                       : 'blue'
                 }
-                style={{ textAlign: 'center' }}
+                style={{
+                  textAlign: 'center',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                }}
               >
                 {message.text}
               </Text>
@@ -748,19 +907,13 @@ export default function BookItemsDialog({
 
                       {/* Owner */}
                       <Table.Cell>
-                        {r.kind === 'item' ? (
-                          r.internally_owned ? (
-                            <Badge size="1" variant="soft" color="indigo">
-                              Internal
-                            </Badge>
-                          ) : (
-                            <Badge size="1" variant="soft" color="amber">
-                              {r.external_owner_name ?? 'External'}
-                            </Badge>
-                          )
-                        ) : (
+                        {r.internally_owned ? (
                           <Badge size="1" variant="soft" color="indigo">
                             Internal
+                          </Badge>
+                        ) : (
+                          <Badge size="1" variant="soft" color="amber">
+                            {r.external_owner_name ?? 'External'}
                           </Badge>
                         )}
                       </Table.Cell>

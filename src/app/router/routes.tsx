@@ -13,6 +13,7 @@ import JobsPage from '@features/jobs/pages/JobsPage'
 import CrewPage from '@features/crew/pages/CrewPage'
 import InventoryPage from '@features/inventory/pages/InventoryPage'
 import HomePage from '@features/home/pages/HomePage'
+import LandingPage from '@features/home/pages/LandingPage'
 import LoginPage from '@features/login/pages/LoginPage'
 import SignupPage from '@features/login/pages/SignupPage'
 import AuthCallback from '@features/login/pages/AuthCallback'
@@ -44,6 +45,13 @@ const guarded = (need: Capability, Page: React.ComponentType) => () => (
   </RequireCap>
 )
 
+// --- PUBLIC: Landing page route ----------------------------------------------
+const landingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/',
+  component: LandingPage,
+})
+
 // --- PUBLIC: Login route -----------------------------------------------------
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -57,7 +65,7 @@ const signupRoute = createRoute({
   component: SignupPage,
   beforeLoad: async () => {
     const { data } = await supabase.auth.getSession()
-    if (data.session) throw redirect({ to: '/' })
+    if (data.session) throw redirect({ to: '/dashboard' })
   },
 })
 
@@ -95,7 +103,7 @@ const authedRoute = createRoute({
 // --- Your existing pages, now nested under authedRoute -----------------------
 const homeRoute = createRoute({
   getParentRoute: () => authedRoute,
-  path: '/',
+  path: '/dashboard',
   component: guarded('visit:home', HomePage),
 })
 
@@ -180,6 +188,7 @@ const notFoundRoute = createRoute({
 })
 
 const routeTree = rootRoute.addChildren([
+  landingRoute,
   loginRoute,
   signupRoute,
   authCallbackRoute,

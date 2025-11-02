@@ -65,7 +65,7 @@ export default function TimelineTab({ jobId }: { jobId: string }) {
     <Box>
       {/* Job Status Timeline - Hidden for freelancers */}
       {!isReadOnly && (
-        <Card mb="4">
+        <Card mb="4" style={{ background: 'var(--gray-a2)' }}>
           <Heading size="3" mb="3">
             Job Status
           </Heading>
@@ -74,11 +74,15 @@ export default function TimelineTab({ jobId }: { jobId: string }) {
       )}
 
       {/* Time Periods Management */}
-      <Card>
+      <Card style={{ background: 'var(--gray-a2)' }}>
         <Heading size="3" mb="3">
           Time Periods
         </Heading>
-        <TimePeriodsManager jobId={jobId} />
+        <TimePeriodsManager
+          jobId={jobId}
+          jobStartAt={job.start_at}
+          jobEndAt={job.end_at}
+        />
       </Card>
     </Box>
   )
@@ -323,7 +327,15 @@ function JobStatusTimeline({
   )
 }
 
-function TimePeriodsManager({ jobId }: { jobId: string }) {
+function TimePeriodsManager({
+  jobId,
+  jobStartAt,
+  jobEndAt,
+}: {
+  jobId: string
+  jobStartAt: string | null
+  jobEndAt: string | null
+}) {
   const qc = useQueryClient()
   const { companyId } = useCompany()
   const { data: timePeriods = [] } = useQuery(jobTimePeriodsQuery({ jobId }))
@@ -348,6 +360,43 @@ function TimePeriodsManager({ jobId }: { jobId: string }) {
       otherPeriods: others,
     }
   }, [timePeriods])
+
+  // Auto-create "Job duration" if missing
+  const createJobDuration = useMutation({
+    mutationFn: async () => {
+      if (!companyId) throw new Error('No companyId')
+      const periodStart = jobStartAt || new Date().toISOString()
+      const periodEnd =
+        jobEndAt || new Date(Date.now() + 86400000).toISOString() // +1 day
+
+      await upsertTimePeriod({
+        job_id: jobId,
+        company_id: companyId,
+        title: 'Job duration',
+        start_at: periodStart,
+        end_at: periodEnd,
+        category: 'program',
+      })
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['jobs', jobId, 'time_periods'] })
+      success('Created', 'Job duration time period created automatically')
+    },
+    onError: (e: any) => {
+      error('Failed to create Job duration', e?.message || 'Please try again.')
+    },
+  })
+
+  // Auto-create "Job duration" when component mounts if it's missing
+  React.useEffect(() => {
+    if (
+      !jobDuration &&
+      timePeriods.length > 0 && // Only create if we've loaded time periods (avoid race condition)
+      !createJobDuration.isPending
+    ) {
+      createJobDuration.mutate()
+    }
+  }, [jobDuration, timePeriods.length, createJobDuration.isPending])
 
   // Group other time periods by category
   const groupedPeriods = React.useMemo(() => {
@@ -467,7 +516,7 @@ function TimePeriodsManager({ jobId }: { jobId: string }) {
       await qc.invalidateQueries({ queryKey: ['jobs', jobId, 'time_periods'] })
       await qc.invalidateQueries({ queryKey: ['jobs.equipment', jobId] })
       await qc.invalidateQueries({ queryKey: ['jobs.crew', jobId] })
-      await qc.invalidateQueries({ queryKey: ['jobs.vehicles', jobId] })
+      await qc.invalidateQueries({ queryKey: ['jobs.transport', jobId] })
       setDeleting(null)
       success(
         'Deleted',
@@ -628,8 +677,12 @@ function TimePeriodsManager({ jobId }: { jobId: string }) {
       {/* Delete Confirmation Dialog */}
       {deleting && (
         <Dialog.Root
-          open={!!deleting}
-          onOpenChange={(open) => !open && setDeleting(null)}
+          open={true}
+          onOpenChange={(open) => {
+            if (!open && !deleteTimePeriod.isPending) {
+              setDeleting(null)
+            }
+          }}
         >
           <Dialog.Content maxWidth="450px">
             <Dialog.Title>Delete Time Period?</Dialog.Title>
@@ -639,7 +692,11 @@ function TimePeriodsManager({ jobId }: { jobId: string }) {
               duration".
             </Dialog.Description>
             <Flex gap="3" justify="end">
-              <Button variant="soft" onClick={() => setDeleting(null)}>
+              <Button
+                variant="soft"
+                onClick={() => setDeleting(null)}
+                disabled={deleteTimePeriod.isPending}
+              >
                 Cancel
               </Button>
               <Button

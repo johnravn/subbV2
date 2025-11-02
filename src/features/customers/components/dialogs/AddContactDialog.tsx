@@ -15,6 +15,7 @@ import { addContact } from '../../api/queries'
 type Props = {
   open: boolean
   onOpenChange: (v: boolean) => void
+  companyId: string
   customerId: string
   onSaved?: () => void
 }
@@ -22,6 +23,7 @@ type Props = {
 export default function AddContactDialog({
   open,
   onOpenChange,
+  companyId,
   customerId,
   onSaved,
 }: Props) {
@@ -41,6 +43,7 @@ export default function AddContactDialog({
   const mut = useMutation({
     mutationFn: async () =>
       addContact({
+        company_id: companyId,
         customer_id: customerId,
         name: form.name.trim(),
         email: form.email.trim() || null,

@@ -70,6 +70,7 @@ function VehicleCard({
       onClick={onClick}
       style={{
         cursor: 'pointer',
+        background: 'var(--gray-a2)',
         border: active
           ? '2px solid var(--accent-9)'
           : '1px solid var(--gray-5)',
@@ -79,7 +80,6 @@ function VehicleCard({
         style={{
           borderRadius: 8,
           overflow: 'hidden',
-          background: 'var(--gray-3)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -93,7 +93,7 @@ function VehicleCard({
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
         ) : (
-          <Car width={48} height={48} />
+          <Car style={{ width: '80%', height: '80%' }} />
         )}
       </div>
 

@@ -5,8 +5,6 @@ import {
   Flex,
   Heading,
   Separator,
-  Switch,
-  Text,
 } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import CustomerTable from '../components/CustomerTable'
@@ -15,10 +13,6 @@ import CustomerInspector from '../components/CustomerInspector'
 export default function CustomerPage() {
   const { companyId } = useCompany()
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
-
-  // filters
-  const [showRegular, setShowRegular] = React.useState(true)
-  const [showPartner, setShowPartner] = React.useState(true)
 
   // responsive (>= 1024px)
   const [isLarge, setIsLarge] = React.useState<boolean>(() =>
@@ -63,18 +57,6 @@ export default function CustomerPage() {
         >
           <Flex align="center" justify="between" mb="3">
             <Heading size="5">Customers</Heading>
-            <Flex align="center" gap="3">
-              <LabelledSwitch
-                label="Regular"
-                checked={showRegular}
-                onChange={setShowRegular}
-              />
-              <LabelledSwitch
-                label="Partner"
-                checked={showPartner}
-                onChange={setShowPartner}
-              />
-            </Flex>
           </Flex>
           <Separator size="4" mb="3" />
           <Box
@@ -87,8 +69,8 @@ export default function CustomerPage() {
             <CustomerTable
               selectedId={selectedId}
               onSelect={setSelectedId}
-              showRegular={showRegular}
-              showPartner={showPartner}
+              showRegular={true}
+              showPartner={true}
             />
           </Box>
         </Card>
@@ -124,24 +106,5 @@ export default function CustomerPage() {
         </Card>
       </div>
     </section>
-  )
-}
-
-function LabelledSwitch({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string
-  checked: boolean
-  onChange: (v: boolean) => void
-}) {
-  return (
-    <Flex align="center" gap="1">
-      <Text size="2" color="gray">
-        {label}
-      </Text>
-      <Switch checked={checked} onCheckedChange={(v) => onChange(!!v)} />
-    </Flex>
   )
 }

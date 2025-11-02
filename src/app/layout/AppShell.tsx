@@ -62,6 +62,31 @@ export default function AppShell() {
 
   const displayName = myProfile?.display_name || myProfile?.email || ''
 
+  // Check user preference for animated background (defaults to false)
+  const { data: backgroundPrefs } = useQuery({
+    queryKey: ['profile', authUser?.id, 'animated-background-preference'],
+    enabled: !!authUser?.id,
+    queryFn: async () => {
+      if (!authUser?.id) return { enabled: false, intensity: 1.0 }
+      const { data } = await supabase
+        .from('profiles')
+        .select('preferences')
+        .eq('user_id', authUser.id)
+        .maybeSingle()
+      const prefs = data?.preferences as any
+      // Default to false if not set
+      return {
+        enabled: prefs?.animated_background_enabled ?? false,
+        intensity: prefs?.animated_background_intensity ?? 1.0,
+      }
+    },
+    staleTime: 0, // Always refetch when invalidated
+    refetchOnWindowFocus: true, // Refetch when window gains focus
+  })
+
+  const backgroundEnabled = backgroundPrefs?.enabled ?? false
+  const backgroundIntensity = backgroundPrefs?.intensity ?? 1.0
+
   React.useEffect(() => {
     if (isMobile) setOpen(false)
   }, [isMobile])
@@ -72,19 +97,25 @@ export default function AppShell() {
   }
 
   const title = getPageTitle(currentPath)
-  const isLogin =
+  const isPublic =
     currentPath === '/login' ||
     currentPath === '/signup' ||
-    currentPath === '/legal'
+    currentPath === '/legal' ||
+    currentPath === '/'
 
   return (
     <Flex
-      height="100svh" // was 100dvh
+      height={isPublic ? 'auto' : '100svh'} // was 100dvh
       width="100%"
       direction="row"
       style={{ position: 'relative', minHeight: 0 }} // allow children to shrink
     >
-      {!isLogin && (
+      {/* Animated background - only on authenticated pages and if enabled */}
+      {!isPublic && backgroundEnabled === true && (
+        <AnimatedBackground intensity={backgroundIntensity} />
+      )}
+
+      {!isPublic && (
         <Sidebar
           open={open}
           onToggle={(next) => setOpen(next ?? !open)}
@@ -97,11 +128,22 @@ export default function AppShell() {
         />
       )}
 
-      <Box style={{ flex: 1, minWidth: 0 }}>
-        <Flex direction="column" style={{ height: '100%', minHeight: 0 }}>
+      <Box
+        style={{
+          flex: 1,
+          minWidth: 0,
+          position: 'relative',
+          zIndex: 1,
+          backgroundColor: isPublic ? undefined : 'transparent',
+        }}
+      >
+        <Flex
+          direction="column"
+          style={{ height: isPublic ? 'auto' : '100%', minHeight: 0 }}
+        >
           {/* Top bar */}
           <Flex align="center" justify="between" px="4" py="3">
-            {!isLogin && isMobile && (
+            {!isPublic && isMobile && (
               <IconButton
                 size="2"
                 variant="ghost"
@@ -111,12 +153,12 @@ export default function AppShell() {
                 <Menu />
               </IconButton>
             )}
-            {!isLogin && (
+            {!isPublic && (
               <Text size="8" weight="light">
                 {title}
               </Text>
             )}
-            {!isLogin && !isMobile && (
+            {!isPublic && !isMobile && (
               <Flex align="center" gap="3">
                 <Link to="/profile" style={{ textDecoration: 'none' }}>
                   <Flex
@@ -156,11 +198,11 @@ export default function AppShell() {
 
           {/* Content area should be the ONLY scroller */}
           <Box
-            p="4"
+            p={isPublic ? undefined : '4'}
             style={{
               flex: 1, // <-- grow to fill
               minHeight: 0, // <-- allow scrolling area to shrink
-              overflow: 'auto', // <-- scroll here
+              overflow: isPublic ? 'visible' : 'auto', // <-- scroll here
             }}
           >
             {/* <AnimatePresence mode="wait">
@@ -179,6 +221,108 @@ export default function AppShell() {
         </Flex>
       </Box>
     </Flex>
+  )
+}
+
+/* ------- Animated Background Component ------- */
+function AnimatedBackground({ intensity = 1.0 }: { intensity?: number }) {
+  // Clamp intensity between 0 and 1
+  const clampedIntensity = Math.max(0, Math.min(1, intensity))
+
+  return (
+    <Box
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 0,
+        pointerEvents: 'none',
+        overflow: 'hidden',
+      }}
+    >
+      <style>{`
+        @keyframes slideSlow {
+          0% {
+            transform: translateX(-100%);
+          }
+          100% {
+            transform: translateX(calc(100vw + 100%));
+          }
+        }
+        
+        @keyframes slideSlowReverse {
+          0% {
+            transform: translateX(calc(100vw + 100%));
+          }
+          100% {
+            transform: translateX(-100%);
+          }
+        }
+        
+        .bg-shape {
+          position: absolute;
+          opacity: ${clampedIntensity};
+          mix-blend-mode: normal;
+        }
+        
+        .bg-shape-1 {
+          width: 800px;
+          height: 800px;
+          border-radius: 50%;
+          background: var(--accent-a3);
+          top: -200px;
+          left: 0;
+          animation: slideSlow 120s linear infinite;
+        }
+        
+        .bg-shape-2 {
+          width: 600px;
+          height: 600px;
+          border-radius: 50%;
+          background: var(--accent-a2);
+          top: 20%;
+          left: 0;
+          animation: slideSlowReverse 150s linear infinite;
+        }
+        
+        .bg-shape-3 {
+          width: 1000px;
+          height: 1000px;
+          border-radius: 50%;
+          background: var(--accent-a3);
+          bottom: -300px;
+          left: 0;
+          animation: slideSlow 180s linear infinite;
+        }
+        
+        .bg-shape-4 {
+          width: 400px;
+          height: 400px;
+          border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%;
+          background: var(--accent-a2);
+          top: 50%;
+          left: 0;
+          animation: slideSlowReverse 100s linear infinite;
+        }
+        
+        .bg-shape-5 {
+          width: 700px;
+          height: 700px;
+          border-radius: 40% 60% 60% 40% / 60% 30% 70% 40%;
+          background: var(--accent-a3);
+          top: 10%;
+          left: 0;
+          animation: slideSlow 200s linear infinite;
+        }
+      `}</style>
+      <div className="bg-shape bg-shape-1" />
+      <div className="bg-shape bg-shape-2" />
+      <div className="bg-shape bg-shape-3" />
+      <div className="bg-shape bg-shape-4" />
+      <div className="bg-shape bg-shape-5" />
+    </Box>
   )
 }
 

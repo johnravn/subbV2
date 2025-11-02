@@ -121,7 +121,7 @@ export default function SignupPage() {
     const { data: sessionData } = await supabase.auth.getSession()
     if (sessionData.session?.user) {
       setLoading(false)
-      navigate({ to: '/' })
+      navigate({ to: '/dashboard' })
       return
     }
 
@@ -138,7 +138,10 @@ export default function SignupPage() {
       justify="center"
       style={{ minHeight: '100%', padding: '24px' }}
     >
-      <Card size="4" style={{ width: '100%', maxWidth: 520 }}>
+      <Card
+        size="4"
+        style={{ width: '100%', maxWidth: 520, background: 'var(--gray-a2)' }}
+      >
         <Flex direction="column" gap="4">
           <Box>
             <Heading size="7" mb="1">

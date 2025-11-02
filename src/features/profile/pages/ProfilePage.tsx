@@ -7,9 +7,12 @@ import {
   Flex,
   Grid,
   Heading,
+  HoverCard,
   Progress,
   Avatar as RadixAvatar,
   Separator,
+  Slider,
+  Switch,
   Text,
   TextArea,
   TextField,
@@ -51,6 +54,7 @@ type OptionalFields = {
   licenses?: Array<string> | null
   certificates?: Array<string> | null
   notes?: string | null
+  animated_background_intensity?: number | null
 }
 
 type AddressForm = {
@@ -132,6 +136,8 @@ export default function ProfilePage() {
     licensesCsv: '',
     certificatesCsv: '',
     notes: '',
+    animatedBackground: false,
+    backgroundIntensity: 1.0,
   })
 
   const [addr, setAddr] = React.useState<AddressForm>({
@@ -165,6 +171,12 @@ export default function ProfilePage() {
       licensesCsv,
       certificatesCsv,
       notes: prefs.notes ?? '',
+      animatedBackground:
+        (data.preferences as Record<string, any> | null)
+          ?.animated_background_enabled ?? false,
+      backgroundIntensity:
+        (data.preferences as Record<string, any> | null)
+          ?.animated_background_intensity ?? 1.0,
     }))
 
     const a = data.addresses
@@ -259,6 +271,8 @@ export default function ProfilePage() {
         licenses: licenses.length ? licenses : null,
         certificates: certificates.length ? certificates : null,
         notes: form.notes || null,
+        animated_background_enabled: form.animatedBackground,
+        animated_background_intensity: form.backgroundIntensity,
       }
 
       const { error: rpcErr } = await supabase.rpc('update_my_profile', {
@@ -272,8 +286,19 @@ export default function ProfilePage() {
       })
       if (rpcErr) throw rpcErr
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['profile', authUser?.id] })
+    onSuccess: async () => {
+      // Invalidate and refetch profile data
+      await qc.invalidateQueries({ queryKey: ['profile', authUser?.id] })
+      // Force refetch the background preference query immediately
+      await qc.refetchQueries({
+        queryKey: ['profile', authUser?.id, 'animated-background-preference'],
+        exact: false,
+      })
+      // Also invalidate any queries that might use this preference
+      await qc.invalidateQueries({
+        queryKey: ['profile', authUser?.id],
+        exact: false,
+      })
       success('Saved', 'Your profile has been updated.')
     },
     onError: (e: any) => {
@@ -324,7 +349,10 @@ export default function ProfilePage() {
   }
 
   return (
-    <Card size="4" style={{ minHeight: 0, overflow: 'auto' }}>
+    <Card
+      size="4"
+      style={{ minHeight: 0, overflow: 'auto' }}
+    >
       {/* Header */}
       <Flex align="center" justify="between" wrap="wrap" gap="3">
         <Flex align="center" wrap="wrap" gap="3">
@@ -390,7 +418,110 @@ export default function ProfilePage() {
             )}
           </Flex>
         </Flex>
-        <ThemeToggle />
+        <Flex align="center" gap="4" wrap="wrap">
+          <HoverCard.Root>
+            <HoverCard.Trigger>
+              <Button size="2" variant="soft">
+                Styling
+              </Button>
+            </HoverCard.Trigger>
+            <HoverCard.Content size="2" style={{ maxWidth: 400 }}>
+              <Flex direction="column" gap="4">
+                <Box>
+                  <Text size="2" weight="bold" mb="3" style={{ display: 'block' }}>
+                    Theme
+                  </Text>
+                  <ThemeToggle />
+                </Box>
+
+                <Separator />
+
+                <Box>
+                  <Text size="2" weight="bold" mb="3" style={{ display: 'block' }}>
+                    Background style
+                  </Text>
+                  <Flex gap="3" align="center" mb="3">
+                    <BackgroundOption
+                      label="Animated"
+                      isAnimated={true}
+                      selected={form.animatedBackground}
+                      onSelect={async () => {
+                        if (mut.isPending) return
+                        set('animatedBackground', true)
+                        // Save immediately
+                        try {
+                          await mut.mutateAsync()
+                        } catch (error) {
+                          // Error is handled by mutation's onError
+                          // Revert on error
+                          set('animatedBackground', false)
+                        }
+                      }}
+                      disabled={mut.isPending}
+                    />
+                    <BackgroundOption
+                      label="Solid"
+                      isAnimated={false}
+                      selected={!form.animatedBackground}
+                      onSelect={async () => {
+                        if (mut.isPending) return
+                        set('animatedBackground', false)
+                        // Save immediately
+                        try {
+                          await mut.mutateAsync()
+                        } catch (error) {
+                          // Error is handled by mutation's onError
+                          // Revert on error
+                          set('animatedBackground', true)
+                        }
+                      }}
+                      disabled={mut.isPending}
+                    />
+                  </Flex>
+                  <Flex direction="column" gap="2">
+                    <Text size="2" weight="medium">
+                      Background intensity
+                    </Text>
+                    <Flex gap="3" align="center">
+                      <Slider
+                        value={[form.backgroundIntensity]}
+                        onValueChange={([value]) => {
+                          set('backgroundIntensity', value)
+                        }}
+                        onValueCommit={async () => {
+                          // Save when user finishes dragging
+                          if (!mut.isPending && form.animatedBackground) {
+                            try {
+                              await mut.mutateAsync()
+                            } catch (error) {
+                              // Error is handled by mutation's onError
+                            }
+                          }
+                        }}
+                        min={0}
+                        max={1}
+                        step={0.1}
+                        disabled={!form.animatedBackground || mut.isPending}
+                        style={{ flex: 1 }}
+                      />
+                      <Text
+                        size="2"
+                        color={!form.animatedBackground ? 'gray' : undefined}
+                        style={{
+                          minWidth: 40,
+                          textAlign: 'right',
+                          opacity: !form.animatedBackground ? 0.5 : 1,
+                        }}
+                      >
+                        {Math.round(form.backgroundIntensity * 100)}%
+                      </Text>
+                    </Flex>
+                  </Flex>
+                </Box>
+              </Flex>
+            </HoverCard.Content>
+          </HoverCard.Root>
+        </Flex>
       </Flex>
 
       {/* Three columns: personal (left), address (middle), optional (right) */}
@@ -630,4 +761,145 @@ function initials(displayOrEmail: string) {
   if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
   if (base.includes('@')) return base[0].toUpperCase()
   return base.slice(0, 2).toUpperCase()
+}
+
+function BackgroundOption({
+  label,
+  isAnimated,
+  selected,
+  onSelect,
+  disabled,
+}: {
+  label: string
+  isAnimated: boolean
+  selected: boolean
+  onSelect: () => void
+  disabled?: boolean
+}) {
+  return (
+    <Box
+      style={{
+        position: 'relative',
+        width: 120,
+        height: 80,
+        borderRadius: 8,
+        overflow: 'hidden',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.5 : 1,
+        border: selected
+          ? '2px solid var(--accent-9)'
+          : '2px solid var(--gray-6)',
+        transition: 'border-color 0.2s',
+      }}
+      onClick={disabled ? undefined : onSelect}
+    >
+      {/* Background preview */}
+      {isAnimated ? (
+        <AnimatedBackgroundPreview />
+      ) : (
+        <Box
+          style={{
+            width: '100%',
+            height: '100%',
+            backgroundColor: 'var(--gray-1)',
+          }}
+        />
+      )}
+      {/* Label overlay */}
+      <Box
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          padding: '6px 8px',
+          backgroundColor: selected
+            ? 'var(--accent-9)'
+            : 'rgba(0, 0, 0, 0.6)',
+          backdropFilter: 'blur(4px)',
+          transition: 'background-color 0.2s',
+        }}
+      >
+        <Text
+          size="1"
+          weight="medium"
+          style={{
+            color: selected ? 'var(--accent-contrast)' : 'var(--gray-12)',
+            textAlign: 'center',
+            display: 'block',
+          }}
+        >
+          {label}
+        </Text>
+      </Box>
+    </Box>
+  )
+}
+
+function AnimatedBackgroundPreview() {
+  return (
+    <Box
+      style={{
+        width: '100%',
+        height: '100%',
+        position: 'relative',
+        overflow: 'hidden',
+        backgroundColor: 'var(--gray-1)',
+      }}
+    >
+      <style>{`
+        @keyframes previewSlide {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(calc(120px + 100%)); }
+        }
+        
+        .preview-shape {
+          position: absolute;
+          opacity: 0.4;
+          border-radius: 50%;
+        }
+        
+        .preview-shape-1 {
+          width: 70px;
+          height: 70px;
+          background: var(--accent-a3);
+          top: -15px;
+          left: 0;
+          animation: previewSlide 6s linear infinite;
+        }
+        
+        .preview-shape-2 {
+          width: 55px;
+          height: 55px;
+          background: var(--accent-a2);
+          top: 15px;
+          left: 0;
+          animation: previewSlide 8s linear infinite reverse;
+        }
+        
+        .preview-shape-3 {
+          width: 65px;
+          height: 65px;
+          background: var(--accent-a3);
+          bottom: -10px;
+          left: 0;
+          animation: previewSlide 10s linear infinite;
+        }
+        
+        .preview-shape-4 {
+          width: 45px;
+          height: 45px;
+          background: var(--accent-a2);
+          top: 50%;
+          left: 0;
+          transform: translateY(-50%);
+          animation: previewSlide 7s linear infinite reverse;
+        }
+      `}</style>
+      <div className="preview-shape preview-shape-1" />
+      <div className="preview-shape preview-shape-2" />
+      <div className="preview-shape preview-shape-3" />
+      <div className="preview-shape preview-shape-4" />
+    </Box>
+  )
 }

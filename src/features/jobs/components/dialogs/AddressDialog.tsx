@@ -69,8 +69,6 @@ export default function AddressDialog({
     enabled: !!companyId && open,
   })
 
-  console.log(rows)
-
   // ── Selection + panel mode
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
   const [panelMode, setPanelMode] = React.useState<PanelMode>('view')

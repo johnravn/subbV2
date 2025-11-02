@@ -362,9 +362,9 @@ export default function InventoryInspector({ id }: { id: string | null }) {
           <InspectorCalendar
             events={events}
             calendarHref={`/calendar?itemId=${id}`}
-            onCreate={(e) => console.log('create in inspector', e)}
-            onUpdate={(id, patch) => console.log('update', id, patch)}
-            onDelete={(id) => console.log('delete', id)}
+            onCreate={(e) => {}}
+            onUpdate={(id, patch) => {}}
+            onDelete={(id) => {}}
           />
         </Flex>
       ) : null}

@@ -329,9 +329,9 @@ export default function CrewInspector({ userId }: { userId: string | null }) {
       <InspectorCalendar
         events={events}
         calendarHref={`/calendar?userId=${userId}`}
-        onCreate={(e) => console.log('create in inspector', e)}
-        onUpdate={(id, patch) => console.log('update', id, patch)}
-        onDelete={(id) => console.log('delete', id)}
+        onCreate={(e) => {}}
+        onUpdate={(id, patch) => {}}
+        onDelete={(id) => {}}
       />
     </Box>
   )

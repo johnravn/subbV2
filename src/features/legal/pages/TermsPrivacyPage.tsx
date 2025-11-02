@@ -24,7 +24,10 @@ export default function TermsPrivacyPage() {
       justify="center"
       style={{ minHeight: '100dvh', padding: 24 }}
     >
-      <Card size="4" style={{ width: '100%', maxWidth: 860 }}>
+      <Card
+        size="4"
+        style={{ width: '100%', maxWidth: 860, background: 'var(--gray-a2)' }}
+      >
         <Flex direction="column" gap="4">
           {/* Header */}
           <Flex align="center" justify="between" wrap="wrap" gap="3">

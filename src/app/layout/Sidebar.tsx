@@ -44,7 +44,7 @@ type NavItem = { to: string; label: string; icon: React.ReactNode }
 
 export const NAV: Array<Array<NavItem>> = [
   [
-    { to: '/', label: 'Home', icon: <HomeAlt /> },
+    { to: '/dashboard', label: 'Home', icon: <HomeAlt /> },
     { to: '/latest', label: 'Latest', icon: <RssFeed strokeWidth={2} /> },
     { to: '/inventory', label: 'Inventory', icon: <BoxIso /> },
     { to: '/vehicles', label: 'Vehicles', icon: <Car /> },

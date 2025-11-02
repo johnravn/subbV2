@@ -278,7 +278,6 @@ export default function InventoryTable({
     getSortedRowModel: getSortedRowModel(),
     manualSorting: true,
   })
-  console.log('data.rows.length:', data?.rows.length ?? 0)
 
   return (
     <div ref={containerRef} style={{ height: '100%', minHeight: 0 }}>

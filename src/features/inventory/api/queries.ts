@@ -386,11 +386,6 @@ export const inventoryDetailQuery = ({
             hint: res.error?.hint,
             message: res.error?.message,
           })
-        } else {
-          const d: any = res.data
-          Array.isArray(d)
-            ? console.log(t(`${label} OK`), { rows: d.length, sample: d[0] })
-            : console.log(t(`${label} OK`), { row: d })
         }
       }
 
@@ -483,13 +478,6 @@ export const inventoryDetailQuery = ({
             external_owner_name: base.external_owner_name,
           }
 
-          console.log(t('RETURN item'), {
-            id: result.id,
-            name: result.name,
-            current_price: result.current_price,
-            on_hand: result.on_hand,
-            price_history_len: result.price_history.length,
-          })
           safeEnd()
           return result
         } else {
@@ -575,14 +563,6 @@ export const inventoryDetailQuery = ({
             external_owner_name: base.external_owner_name,
           }
 
-          console.log(t('RETURN group'), {
-            id: result.id,
-            name: result.name,
-            current_price: result.current_price,
-            on_hand: result.on_hand,
-            parts_len: result.parts.length,
-            price_history_len: result.price_history.length,
-          })
           safeEnd()
           return result
         }

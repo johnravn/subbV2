@@ -186,7 +186,10 @@ export default function JobDialog({
           })
         } catch (e: any) {
           // Don't fail the whole job create if time period fails
-          console.warn('Failed to create Job duration time period', e)
+          // But show a warning to the user so they're aware
+          console.error('Failed to create Job duration time period', e)
+          // Note: We don't show a toast here because success() will fire from onSuccess
+          // and we don't want to confuse the user with an error after showing success
         }
 
         return data.id

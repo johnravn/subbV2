@@ -17,7 +17,10 @@ export default function CompanyPersonalizationTab() {
   const [welcomeMatterOpen, setWelcomeMatterOpen] = React.useState(false)
 
   return (
-    <Card size="4" style={{ minHeight: 0, overflow: 'auto' }}>
+    <Card
+      size="4"
+      style={{ minHeight: 0, overflow: 'auto' }}
+    >
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         <Flex direction="column" gap="4" p="4">
           <Heading size="4" mb="2">

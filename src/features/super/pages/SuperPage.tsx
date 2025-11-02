@@ -11,6 +11,7 @@ import {
   Heading,
   Separator,
   Tabs,
+  Text,
 } from '@radix-ui/themes'
 import { Plus } from 'iconoir-react'
 import { useToast } from '@shared/ui/toast/ToastProvider'
@@ -37,6 +38,9 @@ export default function SuperPage() {
   // User-specific state
   const [userDialogOpen, setUserDialogOpen] = React.useState(false)
   const [editingUser, setEditingUser] = React.useState<UserIndexRow | null>(
+    null,
+  )
+  const [deletingUser, setDeletingUser] = React.useState<UserIndexRow | null>(
     null,
   )
 
@@ -81,8 +85,7 @@ export default function SuperPage() {
   }
 
   const handleDeleteUser = (user: UserIndexRow) => {
-    setEditingUser(user)
-    setUserDialogOpen(true)
+    setDeletingUser(user)
   }
 
   const deleteMutation = useMutation({
@@ -105,6 +108,119 @@ export default function SuperPage() {
     },
     onError: (e: any) => {
       toastError('Failed to delete company', e?.message ?? 'Please try again.')
+    },
+  })
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      // Delete related records first to avoid foreign key constraint violations
+      // Order matters: delete child records before parent records
+
+      // 1. Delete reserved_crew records (non-nullable foreign key)
+      const { error: rcError } = await supabase
+        .from('reserved_crew')
+        .delete()
+        .eq('user_id', userId)
+      if (rcError) throw rcError
+
+      // 2. Delete company_users records (user's company memberships)
+      const { error: cuError } = await supabase
+        .from('company_users')
+        .delete()
+        .eq('user_id', userId)
+      if (cuError) throw cuError
+
+      // 3. Delete matters created by the user first (created_by_user_id is NOT NULL)
+      // This should cascade delete related records (matter_files, matter_messages, etc.)
+      // if foreign keys are set up with CASCADE
+      const { error: matError } = await supabase
+        .from('matters')
+        .delete()
+        .eq('created_by_user_id', userId)
+      if (matError) throw matError
+
+      // 3b. Delete other matter-related records that reference the user
+      // (These might not be cascade-deleted if the user is not the creator)
+      const { error: mfError } = await supabase
+        .from('matter_files')
+        .delete()
+        .eq('uploaded_by_user_id', userId)
+      if (mfError) throw mfError
+
+      const { error: mmError } = await supabase
+        .from('matter_messages')
+        .delete()
+        .eq('user_id', userId)
+      if (mmError) throw mmError
+
+      const { error: mrError } = await supabase
+        .from('matter_recipients')
+        .delete()
+        .eq('user_id', userId)
+      if (mrError) throw mrError
+
+      const { error: mrespError } = await supabase
+        .from('matter_responses')
+        .delete()
+        .eq('user_id', userId)
+      if (mrespError) throw mrespError
+
+      // 4. Delete job_notes records
+      const { error: jnError } = await supabase
+        .from('job_notes')
+        .delete()
+        .eq('author_user_id', userId)
+      if (jnError) throw jnError
+
+      // 5. Set nullable foreign keys to null
+      // These won't prevent deletion but should be cleaned up
+      await supabase
+        .from('job_files')
+        .update({ uploaded_by_user_id: null })
+        .eq('uploaded_by_user_id', userId)
+
+      await supabase
+        .from('jobs')
+        .update({ project_lead_user_id: null })
+        .eq('project_lead_user_id', userId)
+
+      await supabase
+        .from('companies')
+        .update({ contact_person_id: null })
+        .eq('contact_person_id', userId)
+
+      await supabase
+        .from('time_periods')
+        .update({ reserved_by_user_id: null })
+        .eq('reserved_by_user_id', userId)
+
+      await supabase
+        .from('time_periods')
+        .update({ updated_by_user_id: null })
+        .eq('updated_by_user_id', userId)
+
+      // 6. Finally, delete from profiles table
+      // Note: In production, you may want to also delete from auth.users via Admin API
+      const { error } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('user_id', userId)
+
+      if (error) throw error
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['users'] })
+      await qc.invalidateQueries({ queryKey: ['users', 'detail'] })
+      await qc.invalidateQueries({ queryKey: ['companies'] })
+      await qc.invalidateQueries({ queryKey: ['company'] })
+      setDeletingUser(null)
+      if (selectedId === deletingUser?.user_id) {
+        setSelectedId(null)
+      }
+      success('Success!', 'User was deleted')
+    },
+    onError: (e: any) => {
+      toastError('Failed to delete user', e?.message ?? 'Please try again.')
     },
   })
 
@@ -358,8 +474,7 @@ export default function SuperPage() {
                           (u) => u.user_id === selectedId,
                         )
                         if (user) {
-                          setEditingUser(user)
-                          setUserDialogOpen(true)
+                          setDeletingUser(user)
                         }
                       }
                     }}
@@ -464,6 +579,61 @@ export default function SuperPage() {
           qc.invalidateQueries({ queryKey: ['users'] })
         }}
       />
+
+      {/* Delete User Confirmation Dialog */}
+      <AlertDialog.Root
+        open={!!deletingUser}
+        onOpenChange={(open) => {
+          if (!open) setDeletingUser(null)
+        }}
+      >
+        <AlertDialog.Content maxWidth="480px">
+          <AlertDialog.Title>Delete User?</AlertDialog.Title>
+          <AlertDialog.Description size="2">
+            <Text as="div" mb="3">
+              This will permanently delete the user{' '}
+              <b>{deletingUser?.display_name || deletingUser?.email}</b>. This
+              action cannot be undone.
+            </Text>
+            <Text as="div" color="red" weight="bold" size="2">
+              Warning: Deleting a user will remove all their data including:
+            </Text>
+            <Box mt="2" ml="3">
+              <Text as="div" size="2" color="gray">
+                • Their profile and personal information
+              </Text>
+              <Text as="div" size="2" color="gray">
+                • Company memberships and roles
+              </Text>
+              <Text as="div" size="2" color="gray">
+                • Associated jobs, assignments, and work history
+              </Text>
+              <Text as="div" size="2" color="gray">
+                • All other user-related data
+              </Text>
+            </Box>
+          </AlertDialog.Description>
+          <Flex gap="3" justify="end" mt="4">
+            <AlertDialog.Cancel>
+              <Button variant="soft">Cancel</Button>
+            </AlertDialog.Cancel>
+            <AlertDialog.Action>
+              <Button
+                variant="solid"
+                color="red"
+                onClick={() => {
+                  if (deletingUser) {
+                    deleteUserMutation.mutate(deletingUser.user_id)
+                  }
+                }}
+                disabled={deleteUserMutation.isPending}
+              >
+                {deleteUserMutation.isPending ? 'Deleting…' : 'Yes, delete'}
+              </Button>
+            </AlertDialog.Action>
+          </Flex>
+        </AlertDialog.Content>
+      </AlertDialog.Root>
     </section>
   )
 }

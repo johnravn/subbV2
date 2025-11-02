@@ -29,7 +29,7 @@ export default function LoginPage() {
     })
     setLoading(false)
     if (error) return setError(error.message)
-    navigate({ to: '/' })
+    navigate({ to: '/dashboard' })
   }
 
   return (
@@ -46,6 +46,7 @@ export default function LoginPage() {
         style={{
           width: '100%',
           maxWidth: 480, // responsive cap on larger screens
+          background: 'var(--gray-a2)',
         }}
       >
         <Flex direction="column" gap="4">

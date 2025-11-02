@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import {
   Avatar,
   Badge,
+  Box,
   Button,
   Flex,
   IconButton,
@@ -16,7 +17,7 @@ import {
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { useAuthz } from '@shared/auth/useAuthz'
 import DateTimePicker from '@shared/ui/components/DateTimePicker'
-import { ArrowDown, ArrowUp, CalendarXmark, Plus, Search } from 'iconoir-react'
+import { ArrowDown, ArrowUp, CalendarXmark, Plus, Search, Xmark } from 'iconoir-react'
 import { makeWordPresentable } from '@shared/lib/generalFunctions'
 import { supabase } from '@shared/api/supabase'
 import { customersForFilterQuery, jobsIndexQuery } from '../api/queries'
@@ -63,6 +64,10 @@ export default function JobsTable({
   const [customerIdFilter, setCustomerIdFilter] = React.useState<string | null>(
     null,
   )
+  const [customerSearchQuery, setCustomerSearchQuery] = React.useState('')
+  const [showCustomerDropdown, setShowCustomerDropdown] = React.useState(false)
+  const [customerInputFocused, setCustomerInputFocused] = React.useState(false)
+  const customerSearchRef = React.useRef<HTMLDivElement>(null)
   const [statusFilter, setStatusFilter] = React.useState<string | null>(null)
   const [sortBy, setSortBy] = React.useState<SortBy>('start_at')
   const [sortDir, setSortDir] = React.useState<SortDir>('desc')
@@ -97,6 +102,40 @@ export default function JobsTable({
       setSortDir('asc')
     }
   }
+
+  // Filter customers based on search query
+  const filteredCustomers = React.useMemo(() => {
+    if (!customers) return []
+    if (!customerSearchQuery.trim()) return customers
+    const query = customerSearchQuery.toLowerCase().trim()
+    return customers.filter((c) =>
+      c.name.toLowerCase().includes(query),
+    )
+  }, [customers, customerSearchQuery])
+
+  // Get selected customer name
+  const selectedCustomerName = React.useMemo(() => {
+    if (!customerIdFilter || !customers) return ''
+    const customer = customers.find((c) => c.id === customerIdFilter)
+    return customer?.name || ''
+  }, [customerIdFilter, customers])
+
+  // Close dropdown when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        customerSearchRef.current &&
+        !customerSearchRef.current.contains(event.target as Node)
+      ) {
+        setShowCustomerDropdown(false)
+        setCustomerInputFocused(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
 
   return (
     <>
@@ -159,26 +198,157 @@ export default function JobsTable({
             </Text>
           )}
 
-          <Select.Root
-            value={customerIdFilter ?? 'all'}
-            size="3"
-            onValueChange={(val) => {
-              setCustomerIdFilter(val === 'all' ? null : val)
-            }}
+          <div
+            ref={customerSearchRef}
+            style={{ position: 'relative', flex: 1 }}
           >
-            <Select.Trigger
+            <TextField.Root
+              value={
+                customerIdFilter && selectedCustomerName && !customerInputFocused
+                  ? selectedCustomerName
+                  : customerSearchQuery
+              }
+              onChange={(e) => {
+                const value = e.target.value
+                setCustomerSearchQuery(value)
+                setShowCustomerDropdown(true)
+                if (customerIdFilter && value !== selectedCustomerName) {
+                  setCustomerIdFilter(null)
+                }
+              }}
+              onFocus={() => {
+                setCustomerInputFocused(true)
+                setShowCustomerDropdown(true)
+                if (customerIdFilter && selectedCustomerName) {
+                  setCustomerSearchQuery(selectedCustomerName)
+                }
+              }}
+              onBlur={() => {
+                // Delay to allow click on dropdown items
+                setTimeout(() => {
+                  setCustomerInputFocused(false)
+                }, 200)
+              }}
               placeholder="Filter customer…"
+              size="3"
               style={{ minHeight: 'var(--space-7)', flex: 1 }}
-            />
-            <Select.Content>
-              <Select.Item value="all">All customers</Select.Item>
-              {(customers ?? []).map((customer) => (
-                <Select.Item key={customer.id} value={customer.id}>
-                  {customer.name}
-                </Select.Item>
-              ))}
-            </Select.Content>
-          </Select.Root>
+            >
+              <TextField.Slot side="left">
+                <Search />
+              </TextField.Slot>
+              {customerIdFilter && (
+                <TextField.Slot side="right">
+                  <IconButton
+                    size="1"
+                    variant="ghost"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setCustomerIdFilter(null)
+                      setCustomerSearchQuery('')
+                      setShowCustomerDropdown(false)
+                      setCustomerInputFocused(false)
+                    }}
+                  >
+                    <Xmark width={12} height={12} />
+                  </IconButton>
+                </TextField.Slot>
+              )}
+            </TextField.Root>
+            {showCustomerDropdown && (
+              <Box
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  right: 0,
+                  zIndex: 1000,
+                  marginTop: 4,
+                  border: '1px solid var(--gray-a6)',
+                  borderRadius: 8,
+                  backgroundColor: 'var(--color-panel-solid)',
+                  maxHeight: 200,
+                  overflowY: 'auto',
+                  boxShadow: 'var(--shadow-4)',
+                }}
+              >
+                {!customerSearchQuery.trim() && (
+                  <Box
+                    p="3"
+                    style={{
+                      cursor: 'pointer',
+                      backgroundColor:
+                        customerIdFilter === null
+                          ? 'var(--accent-a3)'
+                          : 'transparent',
+                    }}
+                    onClick={() => {
+                      setCustomerIdFilter(null)
+                      setCustomerSearchQuery('')
+                      setShowCustomerDropdown(false)
+                      setCustomerInputFocused(false)
+                    }}
+                    onMouseEnter={(e) => {
+                      if (customerIdFilter !== null) {
+                        e.currentTarget.style.backgroundColor = 'var(--gray-a3)'
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (customerIdFilter !== null) {
+                        e.currentTarget.style.backgroundColor = 'transparent'
+                      }
+                    }}
+                  >
+                    <Text size="2" weight={customerIdFilter === null ? 'medium' : 'regular'}>
+                      All customers
+                    </Text>
+                  </Box>
+                )}
+                {filteredCustomers.map((customer) => (
+                  <Box
+                    key={customer.id}
+                    p="3"
+                    style={{
+                      cursor: 'pointer',
+                      backgroundColor:
+                        customerIdFilter === customer.id
+                          ? 'var(--accent-a3)'
+                          : 'transparent',
+                    }}
+                    onClick={() => {
+                      setCustomerIdFilter(customer.id)
+                      setCustomerSearchQuery('')
+                      setShowCustomerDropdown(false)
+                      setCustomerInputFocused(false)
+                    }}
+                    onMouseEnter={(e) => {
+                      if (customerIdFilter !== customer.id) {
+                        e.currentTarget.style.backgroundColor = 'var(--gray-a3)'
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (customerIdFilter !== customer.id) {
+                        e.currentTarget.style.backgroundColor = 'transparent'
+                      }
+                    }}
+                  >
+                    <Text
+                      size="2"
+                      weight={customerIdFilter === customer.id ? 'medium' : 'regular'}
+                    >
+                      {customer.name}
+                    </Text>
+                  </Box>
+                ))}
+                {customerSearchQuery.trim() && filteredCustomers.length === 0 && (
+                  <Box p="3">
+                    <Text size="2" color="gray">
+                      No customers found
+                    </Text>
+                  </Box>
+                )}
+              </Box>
+            )}
+          </div>
 
           <Select.Root
             value={statusFilter ?? 'all'}
