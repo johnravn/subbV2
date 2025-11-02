@@ -6,6 +6,7 @@ import {
   Button,
   Flex,
   IconButton,
+  Select,
   Spinner,
   Table,
   Text,
@@ -17,9 +18,9 @@ import DateTimePicker from '@shared/ui/components/DateTimePicker'
 import { ArrowDown, ArrowUp, CalendarXmark, Plus, Search } from 'iconoir-react'
 import { makeWordPresentable } from '@shared/lib/generalFunctions'
 import { supabase } from '@shared/api/supabase'
-import { jobsIndexQuery } from '../api/queries'
+import { customersForFilterQuery, jobsIndexQuery } from '../api/queries'
 import JobDialog from './dialogs/JobDialog'
-import type { JobListRow } from '../types'
+import type { JobListRow, JobStatus } from '../types'
 
 type SortBy = 'title' | 'start_at' | 'status' | 'customer_name'
 type SortDir = 'asc' | 'desc'
@@ -43,16 +44,27 @@ export default function JobsTable({
   const { companyId } = useCompany()
   const [search, setSearch] = React.useState('')
   const [selectedDate, setSelectedDate] = React.useState<string>('')
+  const [customerIdFilter, setCustomerIdFilter] = React.useState<string | null>(
+    null,
+  )
+  const [statusFilter, setStatusFilter] = React.useState<string | null>(null)
   const [sortBy, setSortBy] = React.useState<SortBy>('start_at')
   const [sortDir, setSortDir] = React.useState<SortDir>('desc')
 
   const [createOpen, setCreateOpen] = React.useState(false)
+
+  const { data: customers } = useQuery({
+    ...customersForFilterQuery(companyId ?? '__none__'),
+    enabled: !!companyId,
+  })
 
   const { data, isFetching, refetch } = useQuery({
     ...jobsIndexQuery({
       companyId: companyId ?? '__none__',
       search,
       selectedDate,
+      customerId: customerIdFilter,
+      status: statusFilter,
       sortBy,
       sortDir,
     }),
@@ -70,8 +82,8 @@ export default function JobsTable({
 
   return (
     <>
-      <Flex gap="2" align="center" wrap="wrap" mb="3">
-        <Flex gap="2" align="center" style={{ flex: '1 1 240px' }}>
+      <Flex direction="column" gap="2" mb="3">
+        <Flex gap="2" align="center">
           <TextField.Root
             placeholder="Search title, customer, project lead, or date…"
             value={search}
@@ -87,6 +99,16 @@ export default function JobsTable({
             </TextField.Slot>
           </TextField.Root>
 
+          <Button
+            size="2"
+            variant="classic"
+            onClick={() => setCreateOpen(true)}
+          >
+            <Plus width={16} height={16} /> New job
+          </Button>
+        </Flex>
+
+        <Flex gap="2" align="center" wrap="wrap">
           {selectedDate ? (
             <IconButton
               size="3"
@@ -116,24 +138,74 @@ export default function JobsTable({
               {new Date(selectedDate).toLocaleDateString()}
             </Text>
           )}
-        </Flex>
 
-        <Button size="2" variant="classic" onClick={() => setCreateOpen(true)}>
-          <Plus width={16} height={16} /> New job
-        </Button>
-        <JobDialog
-          open={createOpen}
-          onOpenChange={setCreateOpen}
-          companyId={companyId!}
-          mode="create"
-          onSaved={(id) => {
-            // optional: highlight the newly created job
-            onSelect(id)
-            // refresh the table so it shows up
-            refetch()
-          }}
-        />
+          <Select.Root
+            value={customerIdFilter ?? 'all'}
+            size="3"
+            onValueChange={(val) => {
+              setCustomerIdFilter(val === 'all' ? null : val)
+            }}
+          >
+            <Select.Trigger
+              placeholder="Filter customer…"
+              style={{ minHeight: 'var(--space-7)', flex: 1 }}
+            />
+            <Select.Content>
+              <Select.Item value="all">All customers</Select.Item>
+              {(customers ?? []).map((customer) => (
+                <Select.Item key={customer.id} value={customer.id}>
+                  {customer.name}
+                </Select.Item>
+              ))}
+            </Select.Content>
+          </Select.Root>
+
+          <Select.Root
+            value={statusFilter ?? 'all'}
+            size="3"
+            onValueChange={(val) => {
+              setStatusFilter(val === 'all' ? null : val)
+            }}
+          >
+            <Select.Trigger
+              placeholder="Filter status…"
+              style={{ minHeight: 'var(--space-7)', flex: 1 }}
+            />
+            <Select.Content>
+              <Select.Item value="all">All statuses</Select.Item>
+              {(
+                [
+                  'draft',
+                  'planned',
+                  'requested',
+                  'confirmed',
+                  'in_progress',
+                  'completed',
+                  'canceled',
+                  'invoiced',
+                  'paid',
+                ] as Array<JobStatus>
+              ).map((status) => (
+                <Select.Item key={status} value={status}>
+                  {makeWordPresentable(status)}
+                </Select.Item>
+              ))}
+            </Select.Content>
+          </Select.Root>
+        </Flex>
       </Flex>
+      <JobDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        companyId={companyId!}
+        mode="create"
+        onSaved={(id) => {
+          // optional: highlight the newly created job
+          onSelect(id)
+          // refresh the table so it shows up
+          refetch()
+        }}
+      />
 
       <Table.Root variant="surface">
         <Table.Header>
@@ -257,17 +329,34 @@ export default function JobsTable({
                 <Table.Cell>{j.customer?.name ?? '—'}</Table.Cell>
                 <Table.Cell>
                   {j.start_at
-                    ? new Date(j.start_at).toLocaleString(undefined, {
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })
+                    ? (() => {
+                        const d = new Date(j.start_at)
+                        const hours = String(d.getHours()).padStart(2, '0')
+                        const minutes = String(d.getMinutes()).padStart(2, '0')
+                        return (
+                          d.toLocaleString(undefined, {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                          }) + ` ${hours}:${minutes}`
+                        )
+                      })()
                     : '—'}
                 </Table.Cell>
                 <Table.Cell>
-                  <Badge radius="full" highContrast>
+                  <Badge
+                    color={
+                      j.status === 'canceled'
+                        ? 'red'
+                        : j.status === 'paid'
+                          ? 'green'
+                          : j.status === 'in_progress'
+                            ? 'amber'
+                            : 'blue'
+                    }
+                    radius="full"
+                    highContrast
+                  >
                     {makeWordPresentable(j.status)}
                   </Badge>
                 </Table.Cell>

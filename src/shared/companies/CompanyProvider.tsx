@@ -35,7 +35,7 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
 
   // 1) Who am I?
   const userQ = useQuery({
-    queryKey: ['auth-user'],
+    queryKey: ['auth', 'user'],
     queryFn: async () => (await supabase.auth.getUser()).data.user ?? null,
     staleTime: 60_000,
   })
@@ -76,7 +76,7 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
       const { data, error } = await supabase
         .from('company_users')
         .select('companies ( id, name )')
-        .eq('user_id', userId)
+        .eq('user_id', userId!)
       if (error) throw error
       return (data as Array<any>).map((r) => r.companies).filter(Boolean)
     },
@@ -141,7 +141,7 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
       const { error } = await supabase
         .from('profiles')
         .update({ selected_company_id: id })
-        .eq('user_id', userId)
+        .eq('user_id', userId!)
       if (error) throw error
 
       // (Optional) Clean up legacy preferences key if you want:

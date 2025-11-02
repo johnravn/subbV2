@@ -1,12 +1,28 @@
 import * as React from 'react'
 import { Box, Card, Grid, Heading, Separator } from '@radix-ui/themes'
+import { useLocation } from '@tanstack/react-router'
 import { useCompany } from '@shared/companies/CompanyProvider'
+import PageSkeleton from '@shared/ui/components/PageSkeleton'
 import JobsTable from '../components/JobsTable'
 import JobInspector from '../components/JobInspector'
 
 export default function JobsPage() {
   const { companyId } = useCompany()
-  const [selectedId, setSelectedId] = React.useState<string | null>(null)
+  const location = useLocation()
+  const search = location.search as { jobId?: string; tab?: string }
+  const jobId = search?.jobId
+  const tab = search?.tab
+
+  const [selectedId, setSelectedId] = React.useState<string | null>(
+    jobId || null,
+  )
+
+  // Update selectedId when jobId from URL changes
+  React.useEffect(() => {
+    if (jobId) {
+      setSelectedId(jobId)
+    }
+  }, [jobId])
 
   // match InventoryPage behavior
   const [isLarge, setIsLarge] = React.useState<boolean>(() =>
@@ -26,7 +42,7 @@ export default function JobsPage() {
     }
   }, [])
 
-  if (!companyId) return <div>No company selected.</div>
+  if (!companyId) return <PageSkeleton columns="2fr 3fr" />
 
   return (
     <section
@@ -96,6 +112,7 @@ export default function JobsPage() {
             <JobInspector
               id={selectedId}
               onDeleted={() => setSelectedId(null)}
+              initialTab={tab}
             />
           </Box>
         </Card>

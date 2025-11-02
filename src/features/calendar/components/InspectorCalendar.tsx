@@ -38,8 +38,6 @@ type Props = {
   showPagination?: boolean // whether to show pagination controls
 }
 
-type ListPeriod = 'day' | 'week' | 'month'
-
 export default function InspectorCalendar({
   events,
   calendarHref,
@@ -51,7 +49,7 @@ export default function InspectorCalendar({
   showPagination = false,
 }: Props) {
   const [listMode, setListMode] = React.useState(false)
-  const [listPeriod, setListPeriod] = React.useState<ListPeriod>('month')
+  const [currentDate, setCurrentDate] = React.useState<Date>(new Date())
   const calendarRef = React.useRef<any>(null)
 
   function handleSelect(sel: DateSelectArg) {
@@ -90,7 +88,16 @@ export default function InspectorCalendar({
       style={{ background: 'transparent' }}
     >
       <Flex align="center" justify="between" mb="2">
-        <Text weight="bold">Schedule</Text>
+        <Text weight="bold">
+          {listMode ? (
+            currentDate.toLocaleDateString('en-US', {
+              month: 'long',
+              year: 'numeric',
+            })
+          ) : (
+            'Schedule'
+          )}
+        </Text>
         <Flex gap="2" align="center">
           <IconButton
             type="button"
@@ -110,43 +117,6 @@ export default function InspectorCalendar({
           >
             <List />
           </IconButton>
-          {listMode && (
-            <Flex gap="1" align="center" style={{ marginLeft: '8px' }}>
-              <Button
-                type="button"
-                size="1"
-                variant={listPeriod === 'day' ? 'solid' : 'soft'}
-                onClick={() => {
-                  setListPeriod('day')
-                  calendarRef.current?.getApi()?.changeView('listDay')
-                }}
-              >
-                Day
-              </Button>
-              <Button
-                type="button"
-                size="1"
-                variant={listPeriod === 'week' ? 'solid' : 'soft'}
-                onClick={() => {
-                  setListPeriod('week')
-                  calendarRef.current?.getApi()?.changeView('listWeek')
-                }}
-              >
-                Week
-              </Button>
-              <Button
-                type="button"
-                size="1"
-                variant={listPeriod === 'month' ? 'solid' : 'soft'}
-                onClick={() => {
-                  setListPeriod('month')
-                  calendarRef.current?.getApi()?.changeView('listMonth')
-                }}
-              >
-                Month
-              </Button>
-            </Flex>
-          )}
           <RLink href={calendarHref}>
             <Flex align="center" gap="1">
               <Text>Open calendar</Text>
@@ -186,17 +156,19 @@ export default function InspectorCalendar({
         <>
           <FullCalendar
             ref={calendarRef}
-            key={`list-${listPeriod}`}
+            key="list-month"
             plugins={[listPlugin]}
-            initialView={
-              listPeriod === 'day'
-                ? 'listDay'
-                : listPeriod === 'week'
-                  ? 'listWeek'
-                  : 'listMonth'
-            }
-            initialDate={new Date()}
-            headerToolbar={false}
+            initialView="listMonth"
+            headerToolbar={{
+              start: 'prev',
+              center: 'title',
+              end: 'next',
+            }}
+            datesSet={(dateInfo) => {
+              if (dateInfo.view.type === 'listMonth' && dateInfo.start) {
+                setCurrentDate(dateInfo.start)
+              }
+            }}
             timeZone="Europe/Oslo"
             locale={nbLocale}
             events={events}

@@ -31,10 +31,10 @@ const JOB_STATUS_ORDER: Array<JobStatus> = [
   'draft',
   'planned',
   'requested',
+  'canceled',
   'confirmed',
   'in_progress',
   'completed',
-  'canceled',
   'invoiced',
   'paid',
 ]
@@ -80,6 +80,7 @@ function JobStatusTimeline({
   const { success, error } = useToast()
   const currentIndex = JOB_STATUS_ORDER.indexOf(currentStatus)
   const isCanceled = currentStatus === 'canceled'
+  const canceledIndex = JOB_STATUS_ORDER.indexOf('canceled')
 
   const updateStatus = useMutation({
     mutationFn: async (newStatus: JobStatus) => {
@@ -107,31 +108,41 @@ function JobStatusTimeline({
       {/* Progress Bar */}
       <Flex direction="column" gap="2" mb="4">
         <Flex align="center" justify="between">
-          {JOB_STATUS_ORDER.filter((s) => s !== 'canceled').map(
-            (status, idx) => {
-              const isActive = status === currentStatus
-              const isPast = idx < currentIndex && !isCanceled
-              const isFuture = idx > currentIndex || isCanceled
+          {JOB_STATUS_ORDER.map((status, idx) => {
+            const isActive = status === currentStatus
+            const isCanceledStatus = status === 'canceled'
+            const isPaidStatus = status === 'paid'
+            const isInProgressStatus = status === 'in_progress'
 
-              return (
-                <Flex
-                  key={status}
-                  direction="column"
-                  align="center"
-                  style={{
-                    flex: 1,
-                    position: 'relative',
-                    cursor: 'pointer',
-                    opacity: updateStatus.isPending ? 0.6 : 1,
-                  }}
-                  onClick={() => {
-                    if (!updateStatus.isPending && status !== currentStatus) {
-                      updateStatus.mutate(status)
-                    }
-                  }}
-                >
-                  {/* Connector line */}
-                  {idx < JOB_STATUS_ORDER.length - 2 && (
+            // For non-canceled statuses: past if before current (unless current is canceled)
+            // For canceled status: active only when current is canceled
+            const isPast =
+              !isCanceledStatus && idx < currentIndex && !isCanceled
+            const isFuture = isCanceledStatus
+              ? !isActive
+              : idx > currentIndex || (isCanceled && idx > canceledIndex)
+
+            return (
+              <Flex
+                key={status}
+                direction="column"
+                align="center"
+                style={{
+                  flex: 1,
+                  position: 'relative',
+                  cursor: 'pointer',
+                  opacity: updateStatus.isPending ? 0.6 : 1,
+                }}
+                onClick={() => {
+                  if (!updateStatus.isPending && status !== currentStatus) {
+                    updateStatus.mutate(status)
+                  }
+                }}
+              >
+                {/* Connector line - skip before canceled to avoid breaking the flow */}
+                {idx < JOB_STATUS_ORDER.length - 1 &&
+                  !isCanceledStatus &&
+                  JOB_STATUS_ORDER[idx + 1] !== 'canceled' && (
                     <div
                       style={{
                         position: 'absolute',
@@ -147,55 +158,102 @@ function JobStatusTimeline({
                     />
                   )}
 
-                  {/* Status dot */}
-                  <Box
-                    style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '50%',
-                      background: isActive
-                        ? 'var(--accent-9)'
-                        : isPast
-                          ? 'var(--accent-9)'
-                          : 'var(--gray-a5)',
-                      border: isActive
-                        ? '3px solid var(--accent-a9)'
-                        : '2px solid transparent',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      zIndex: 1,
-                      position: 'relative',
-                      transition: 'transform 0.2s, box-shadow 0.2s',
-                    }}
-                    className="status-dot"
-                  >
-                    {isPast && (
-                      <Text size="1" style={{ color: 'white' }}>
-                        ✓
-                      </Text>
-                    )}
-                  </Box>
+                {/* Status dot */}
+                <Box
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    background: isCanceledStatus
+                      ? isActive
+                        ? 'var(--red-9)'
+                        : 'var(--gray-a5)'
+                      : isPaidStatus
+                        ? isActive
+                          ? 'var(--green-9)'
+                          : isPast
+                            ? 'var(--green-9)'
+                            : 'var(--gray-a5)'
+                        : isInProgressStatus
+                          ? isActive
+                            ? 'var(--amber-9)'
+                            : isPast
+                              ? 'var(--amber-9)'
+                              : 'var(--gray-a5)'
+                          : isActive
+                            ? 'var(--accent-9)'
+                            : isPast
+                              ? 'var(--accent-9)'
+                              : 'var(--gray-a5)',
+                    border: isActive
+                      ? isCanceledStatus
+                        ? '3px solid var(--red-a9)'
+                        : isPaidStatus
+                          ? '3px solid var(--green-a9)'
+                          : isInProgressStatus
+                            ? '3px solid var(--amber-a9)'
+                            : '3px solid var(--accent-a9)'
+                      : '2px solid transparent',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1,
+                    position: 'relative',
+                    transition: 'transform 0.2s, box-shadow 0.2s',
+                  }}
+                  className="status-dot"
+                >
+                  {isPast && (
+                    <Text size="1" style={{ color: 'white' }}>
+                      ✓
+                    </Text>
+                  )}
+                  {isActive && isCanceledStatus && (
+                    <Text size="1" style={{ color: 'white' }}>
+                      ✕
+                    </Text>
+                  )}
+                  {isActive && isPaidStatus && (
+                    <Text size="1" style={{ color: 'white' }}>
+                      ✓
+                    </Text>
+                  )}
+                </Box>
 
-                  {/* Status label */}
-                  <Text
-                    size="1"
-                    mt="2"
-                    weight={isActive ? 'bold' : 'regular'}
-                    style={{
-                      color: isActive
-                        ? 'var(--accent-11)'
-                        : isFuture
-                          ? 'var(--gray-a9)'
-                          : 'inherit',
-                    }}
-                  >
-                    {makeWordPresentable(status)}
-                  </Text>
-                </Flex>
-              )
-            },
-          )}
+                {/* Status label */}
+                <Text
+                  size="1"
+                  mt="2"
+                  weight={isActive ? 'bold' : 'regular'}
+                  style={{
+                    color: isCanceledStatus
+                      ? isActive
+                        ? 'var(--red-11)'
+                        : 'var(--gray-a9)'
+                      : isPaidStatus
+                        ? isActive
+                          ? 'var(--green-11)'
+                          : isPast
+                            ? 'var(--green-11)'
+                            : 'var(--gray-a9)'
+                        : isInProgressStatus
+                          ? isActive
+                            ? 'var(--amber-11)'
+                            : isPast
+                              ? 'var(--amber-11)'
+                              : 'var(--gray-a9)'
+                          : isActive
+                            ? 'var(--accent-11)'
+                            : isFuture
+                              ? 'var(--gray-a9)'
+                              : 'inherit',
+                  }}
+                >
+                  {makeWordPresentable(status)}
+                </Text>
+              </Flex>
+            )
+          })}
         </Flex>
       </Flex>
 
@@ -204,7 +262,19 @@ function JobStatusTimeline({
         <Text size="2" weight="medium">
           Current:
         </Text>
-        <Badge size="2" variant="solid" color={isCanceled ? 'red' : 'blue'}>
+        <Badge
+          size="2"
+          variant="solid"
+          color={
+            isCanceled
+              ? 'red'
+              : currentStatus === 'paid'
+                ? 'green'
+                : currentStatus === 'in_progress'
+                  ? 'amber'
+                  : 'blue'
+          }
+        >
           {makeWordPresentable(currentStatus)}
         </Badge>
       </Flex>
@@ -680,11 +750,13 @@ function EditTimePeriodDialog({
 // Utility functions
 function formatDateTime(iso: string) {
   const d = new Date(iso)
-  return d.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  const hours = String(d.getHours()).padStart(2, '0')
+  const minutes = String(d.getMinutes()).padStart(2, '0')
+  return (
+    d.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    }) + `, ${hours}:${minutes}`
+  )
 }

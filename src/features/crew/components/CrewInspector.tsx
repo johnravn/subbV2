@@ -3,6 +3,7 @@ import {
   Badge,
   Box,
   Code,
+  DropdownMenu,
   Flex,
   Avatar as RadixAvatar,
   Separator,
@@ -10,17 +11,29 @@ import {
   Text,
 } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@shared/api/supabase'
 import { prettyPhone } from '@shared/phone/phone'
+import { EditPencil } from 'iconoir-react'
 import { toEventInputs } from '@features/calendar/components/domain'
 import InspectorCalendar from '@features/calendar/components/InspectorCalendar'
 import { crewCalendarQuery } from '@features/calendar/api/queries'
-import { crewDetailQuery } from '../api/queries'
+import { crewDetailQuery, crewIndexQuery } from '../api/queries'
 import type { CrewDetail } from '../api/queries'
+import ChangeRoleConfirmDialog from '@features/company/components/dialogs/ChangeRoleConfirmDialog'
+import type { CompanyRole } from '@features/company/api/queries'
 
 export default function CrewInspector({ userId }: { userId: string | null }) {
   const { companyId } = useCompany()
+  const qc = useQueryClient()
+  const [changeRoleOpen, setChangeRoleOpen] = React.useState(false)
+  const [roleChangeInfo, setRoleChangeInfo] = React.useState<{
+    userId: string
+    userName: string
+    userEmail: string
+    currentRole: CompanyRole
+    newRole: CompanyRole
+  } | null>(null)
 
   const { data, isLoading, isError, error } = useQuery<CrewDetail | null>({
     ...(companyId && userId
@@ -31,6 +44,16 @@ export default function CrewInspector({ userId }: { userId: string | null }) {
         }),
     enabled: !!companyId && !!userId,
   })
+
+  // Get owners count to check if this is the last owner
+  const { data: owners = [] } = useQuery({
+    ...(companyId && data?.role === 'owner'
+      ? crewIndexQuery({ companyId, kind: 'owner' })
+      : { queryKey: ['crew-index', 'none'], queryFn: async () => [] }),
+    enabled: !!companyId && !!data && data.role === 'owner',
+  })
+
+  const isLastOwner = data?.role === 'owner' && owners.length <= 1
 
   // Fetch calendar events for this crew member
   const { data: calendarRecords = [] } = useQuery({
@@ -110,10 +133,106 @@ export default function CrewInspector({ userId }: { userId: string | null }) {
           </div>
         </Flex>
 
-        <Badge variant="soft" color={roleColor}>
-          {data.role}
-        </Badge>
+        <Flex align="center" gap="2">
+          <Badge variant="soft" color={roleColor}>
+            {data.role}
+          </Badge>
+          {/* Only show role change for employees, freelancers, and owners (not super_user) */}
+          {data.role !== 'super_user' && (
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger>
+                <EditPencil
+                  style={{ color: 'var(--gray-9)', cursor: 'pointer' }}
+                />
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content align="start" side="bottom">
+                <DropdownMenu.Label>Set role</DropdownMenu.Label>
+                <DropdownMenu.Item
+                  disabled={data.role === 'owner' || isLastOwner}
+                  onSelect={(e) => {
+                    e.preventDefault()
+                    setRoleChangeInfo({
+                      userId: data.user_id,
+                      userName: fullName || data.email,
+                      userEmail: data.email,
+                      currentRole: data.role as CompanyRole,
+                      newRole: 'freelancer',
+                    })
+                    setChangeRoleOpen(true)
+                  }}
+                >
+                  Freelancer
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  disabled={data.role === 'employee'}
+                  onSelect={(e) => {
+                    e.preventDefault()
+                    setRoleChangeInfo({
+                      userId: data.user_id,
+                      userName: fullName || data.email,
+                      userEmail: data.email,
+                      currentRole: data.role as CompanyRole,
+                      newRole: 'employee',
+                    })
+                    setChangeRoleOpen(true)
+                  }}
+                >
+                  Employee
+                </DropdownMenu.Item>
+                <DropdownMenu.Separator />
+                <DropdownMenu.Item
+                  disabled={data.role === 'owner'}
+                  onSelect={(e) => {
+                    e.preventDefault()
+                    setRoleChangeInfo({
+                      userId: data.user_id,
+                      userName: fullName || data.email,
+                      userEmail: data.email,
+                      currentRole: data.role as CompanyRole,
+                      newRole: 'owner',
+                    })
+                    setChangeRoleOpen(true)
+                  }}
+                >
+                  Owner
+                </DropdownMenu.Item>
+                {isLastOwner && (
+                  <>
+                    <DropdownMenu.Separator />
+                    <DropdownMenu.Item disabled>
+                      Can't demote last owner
+                    </DropdownMenu.Item>
+                  </>
+                )}
+              </DropdownMenu.Content>
+            </DropdownMenu.Root>
+          )}
+        </Flex>
       </Flex>
+
+      <ChangeRoleConfirmDialog
+        open={changeRoleOpen}
+        onOpenChange={setChangeRoleOpen}
+        onChanged={() => {
+          // Refresh crew detail to get updated role
+          qc.invalidateQueries({
+            queryKey: ['company', companyId, 'crew-detail', userId],
+          })
+          // Also refresh crew index to update lists
+          qc.invalidateQueries({
+            predicate: (q) =>
+              Array.isArray(q.queryKey) &&
+              q.queryKey[0] === 'company' &&
+              q.queryKey[1] === companyId &&
+              q.queryKey[2] === 'crew-index',
+          })
+        }}
+        userName={roleChangeInfo?.userName ?? ''}
+        userEmail={roleChangeInfo?.userEmail ?? ''}
+        currentRole={roleChangeInfo?.currentRole ?? 'employee'}
+        newRole={roleChangeInfo?.newRole ?? 'employee'}
+        userId={roleChangeInfo?.userId ?? ''}
+      />
 
       <Separator my="2" />
 
@@ -153,12 +272,37 @@ export default function CrewInspector({ userId }: { userId: string | null }) {
 
       <Separator my="2" />
 
+      {/* Address */}
+      <SectionTitle>Address</SectionTitle>
+      <DefinitionList>
+        <DT>Label</DT>
+        <DD>{data.primary_address?.name || '—'}</DD>
+
+        <DT>Street</DT>
+        <DD>{data.primary_address?.address_line || '—'}</DD>
+
+        <DT>City</DT>
+        <DD>
+          {data.primary_address
+            ? `${data.primary_address.zip_code} ${data.primary_address.city}`
+            : '—'}
+        </DD>
+
+        <DT>Country</DT>
+        <DD>{data.primary_address?.country || '—'}</DD>
+      </DefinitionList>
+
+      {!data.primary_address && (
+        <Text size="2" color="gray" mb="3">
+          No address on file
+        </Text>
+      )}
+
+      <Separator my="2" />
+
       {/* Optional details (preferences) */}
       <SectionTitle>Optional details</SectionTitle>
       <DefinitionList>
-        <DT>Address</DT>
-        <DD>{data.preferences?.address || '—'}</DD>
-
         <DT>Date of birth</DT>
         <DD>{formatMonthYear(data.preferences?.date_of_birth)}</DD>
 

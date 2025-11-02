@@ -8,12 +8,47 @@ import {
   Box,
   Button,
   Card,
+  Checkbox,
   Flex,
   Heading,
   Separator,
   Text,
   TextField,
 } from '@radix-ui/themes'
+
+interface PasswordRequirement {
+  id: string
+  label: string
+  check: (password: string) => boolean
+}
+
+const PASSWORD_REQUIREMENTS: Array<PasswordRequirement> = [
+  {
+    id: 'length',
+    label: 'At least 12 characters',
+    check: (pwd) => pwd.length >= 12,
+  },
+  {
+    id: 'lowercase',
+    label: 'Contains lowercase letter',
+    check: (pwd) => /[a-z]/.test(pwd),
+  },
+  {
+    id: 'uppercase',
+    label: 'Contains uppercase letter',
+    check: (pwd) => /[A-Z]/.test(pwd),
+  },
+  {
+    id: 'number',
+    label: 'Contains number',
+    check: (pwd) => /[0-9]/.test(pwd),
+  },
+  {
+    id: 'special',
+    label: 'Contains special character (!@#$%^&*...)',
+    check: (pwd) => /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(pwd),
+  },
+]
 
 export default function SignupPage() {
   const navigate = useNavigate()
@@ -26,6 +61,18 @@ export default function SignupPage() {
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [info, setInfo] = React.useState<string | null>(null)
+
+  const passwordRequirements = React.useMemo(() => {
+    return PASSWORD_REQUIREMENTS.map((req) => ({
+      ...req,
+      satisfied: req.check(password),
+    }))
+  }, [password])
+
+  const passwordsMatch = React.useMemo(() => {
+    if (!password || !confirmPassword) return null
+    return password === confirmPassword
+  }, [password, confirmPassword])
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -44,30 +91,28 @@ export default function SignupPage() {
 
     setLoading(true)
     try {
-      const { data: signUpData, error: signUpErr } = await supabase.auth.signUp(
-        {
-          email,
-          password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/auth/callback`,
-            data: {
-              full_name: `${firstName} ${lastName}`.trim(),
-              first_name: firstName,
-              last_name: lastName,
-              phone,
-            },
+      const { error: signUpErr } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          data: {
+            full_name: `${firstName} ${lastName}`.trim(),
+            first_name: firstName,
+            last_name: lastName,
+            phone,
           },
         },
-      )
+      })
       if (signUpErr) throw signUpErr
-    } catch (e: any) {
+    } catch (err: any) {
       console.error('signUp failed:', {
-        message: e?.message,
-        status: e?.status,
-        name: e?.name,
+        message: err?.message,
+        status: err?.status,
+        name: err?.name,
       })
       setLoading(false)
-      setError(e?.message ?? 'Sign up failed')
+      setError(err?.message ?? 'Sign up failed')
       return
     }
 
@@ -205,6 +250,45 @@ export default function SignupPage() {
                   required
                   size="3"
                 />
+                {password && (
+                  <Box
+                    mt="2"
+                    style={{
+                      padding: '12px',
+                      background: 'var(--gray-2)',
+                      borderRadius: '6px',
+                    }}
+                  >
+                    <Text
+                      size="2"
+                      weight="medium"
+                      mb="2"
+                      style={{ display: 'block' }}
+                    >
+                      Password requirements:
+                    </Text>
+                    <Flex direction="column" gap="1">
+                      {passwordRequirements.map((req) => (
+                        <Flex key={req.id} align="center" gap="2">
+                          <Checkbox checked={req.satisfied} disabled />
+                          <Text
+                            size="2"
+                            style={{
+                              color: req.satisfied
+                                ? 'var(--green-11)'
+                                : 'var(--gray-11)',
+                              textDecoration: req.satisfied
+                                ? 'line-through'
+                                : 'none',
+                            }}
+                          >
+                            {req.label}
+                          </Text>
+                        </Flex>
+                      ))}
+                    </Flex>
+                  </Box>
+                )}
               </Box>
 
               <Box>
@@ -226,6 +310,19 @@ export default function SignupPage() {
                   required
                   size="3"
                 />
+                {passwordsMatch !== null && (
+                  <Box mt="2">
+                    {passwordsMatch ? (
+                      <Text size="2" color="green">
+                        ✓ Passwords match
+                      </Text>
+                    ) : (
+                      <Text size="2" color="red">
+                        ✗ Passwords do not match
+                      </Text>
+                    )}
+                  </Box>
+                )}
               </Box>
 
               {error && <Text color="red">{error}</Text>}

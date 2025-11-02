@@ -306,10 +306,10 @@ export default function JobDialog({
                         'draft',
                         'planned',
                         'requested',
+                        'canceled',
                         'confirmed',
                         'in_progress',
                         'completed',
-                        'canceled',
                         'invoiced',
                         'paid',
                       ] as Array<JobStatus>

@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Badge,
   Button,
-  DropdownMenu,
   Flex,
   Spinner,
   Table,
@@ -13,16 +12,15 @@ import {
 } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { useToast } from '@shared/ui/toast/ToastProvider'
-import { EditPencil, Search, Trash } from 'iconoir-react'
+import { Search, Trash } from 'iconoir-react'
 import {
   crewIndexQuery,
   deleteInvite,
   myPendingInvitesQuery,
 } from '../../crew/api/queries'
 import AddFreelancerDialog from '../../crew/components/dialogs/AddFreelancerDialog'
-import { removeCompanyUser, setCompanyUserRole, type CompanyRole } from '../api/queries'
+import { removeCompanyUser } from '../api/queries'
 import AddEmployeeDialog from './dialogs/AddEmployeeDialog'
-import ChangeRoleConfirmDialog from './dialogs/ChangeRoleConfirmDialog'
 import RemoveUserConfirmDialog from './dialogs/RemoveUserConfirmDialog'
 import type { PendingInvite } from '../../crew/api/queries'
 
@@ -169,14 +167,6 @@ export default function CompanyTable({
     email: string
     kind: 'employee' | 'freelancer'
   } | null>(null)
-  const [changeRoleOpen, setChangeRoleOpen] = React.useState(false)
-  const [roleChangeInfo, setRoleChangeInfo] = React.useState<{
-    userId: string
-    userName: string
-    userEmail: string
-    currentRole: CompanyRole
-    newRole: CompanyRole
-  } | null>(null)
 
   const delInvite = useMutation({
     mutationFn: (inviteId: string) => deleteInvite({ inviteId }),
@@ -270,16 +260,6 @@ export default function CompanyTable({
         />
       </Flex>
 
-      <ChangeRoleConfirmDialog
-        open={changeRoleOpen}
-        onOpenChange={setChangeRoleOpen}
-        onChanged={() => {}}
-        userName={roleChangeInfo?.userName ?? ''}
-        userEmail={roleChangeInfo?.userEmail ?? ''}
-        currentRole={roleChangeInfo?.currentRole ?? 'employee'}
-        newRole={roleChangeInfo?.newRole ?? 'employee'}
-        userId={roleChangeInfo?.userId ?? ''}
-      />
       <RemoveUserConfirmDialog
         open={removeUserOpen}
         onOpenChange={setRemoveUserOpen}
@@ -294,7 +274,9 @@ export default function CompanyTable({
           <Table.Row>
             <Table.ColumnHeaderCell>Name / Email</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell style={{ width: 120, textAlign: 'right' }} />
+            <Table.ColumnHeaderCell
+              style={{ width: 120, textAlign: 'right' }}
+            />
           </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -349,81 +331,13 @@ export default function CompanyTable({
                         )}
                       </Flex>
                     ) : (
-                      <Flex gap={'1'}>
-                        <Badge
-                          asChild={false}
-                          variant="soft"
-                          color={roleColor(r.kind)}
-                          style={{ cursor: 'pointer' }}
-                        >
-                          {r.kind}
-                        </Badge>
-                        <DropdownMenu.Root>
-                          <DropdownMenu.Trigger>
-                            <EditPencil style={{ color: 'var(--gray-9)' }} />
-                          </DropdownMenu.Trigger>
-                          <DropdownMenu.Content align="start" side="bottom">
-                            <DropdownMenu.Label>Set role</DropdownMenu.Label>
-                            <DropdownMenu.Item
-                              disabled={r.kind === 'owner' || isLastOwner(r)}
-                              onSelect={(e) => {
-                                e.preventDefault()
-                                setRoleChangeInfo({
-                                  userId: r.id,
-                                  userName: r.title,
-                                  userEmail: r.email ?? '',
-                                  currentRole: r.kind as CompanyRole,
-                                  newRole: 'freelancer',
-                                })
-                                setChangeRoleOpen(true)
-                              }}
-                            >
-                              Freelancer
-                            </DropdownMenu.Item>
-                            <DropdownMenu.Item
-                              disabled={r.kind === 'employee'}
-                              onSelect={(e) => {
-                                e.preventDefault()
-                                setRoleChangeInfo({
-                                  userId: r.id,
-                                  userName: r.title,
-                                  userEmail: r.email ?? '',
-                                  currentRole: r.kind as CompanyRole,
-                                  newRole: 'employee',
-                                })
-                                setChangeRoleOpen(true)
-                              }}
-                            >
-                              Employee
-                            </DropdownMenu.Item>
-                            <DropdownMenu.Separator />
-                            <DropdownMenu.Item
-                              disabled={r.kind === 'owner'}
-                              onSelect={(e) => {
-                                e.preventDefault()
-                                setRoleChangeInfo({
-                                  userId: r.id,
-                                  userName: r.title,
-                                  userEmail: r.email ?? '',
-                                  currentRole: r.kind as CompanyRole,
-                                  newRole: 'owner',
-                                })
-                                setChangeRoleOpen(true)
-                              }}
-                            >
-                              Owner
-                            </DropdownMenu.Item>
-                            {isLastOwner(r) && (
-                              <>
-                                <DropdownMenu.Separator />
-                                <DropdownMenu.Item disabled>
-                                  Can't demote last owner
-                                </DropdownMenu.Item>
-                              </>
-                            )}
-                          </DropdownMenu.Content>
-                        </DropdownMenu.Root>
-                      </Flex>
+                      <Badge
+                        asChild={false}
+                        variant="soft"
+                        color={roleColor(r.kind)}
+                      >
+                        {r.kind}
+                      </Badge>
                     )}
                   </Table.Cell>
                   <Table.Cell style={{ textAlign: 'right' }}>

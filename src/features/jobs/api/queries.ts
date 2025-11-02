@@ -16,12 +16,16 @@ export function jobsIndexQuery({
   companyId,
   search,
   selectedDate,
+  customerId,
+  status,
   sortBy = 'start_at',
   sortDir = 'desc',
 }: {
   companyId: string
   search: string
   selectedDate?: string
+  customerId?: string | null
+  status?: string | null
   sortBy?: 'title' | 'start_at' | 'status' | 'customer_name'
   sortDir?: 'asc' | 'desc'
 }) {
@@ -32,6 +36,8 @@ export function jobsIndexQuery({
       'jobs-index',
       search,
       selectedDate,
+      customerId,
+      status,
       sortBy,
       sortDir,
     ],
@@ -46,6 +52,14 @@ export function jobsIndexQuery({
         `,
         )
         .eq('company_id', companyId)
+
+      // Server-side filters
+      if (customerId) {
+        q = q.eq('customer_id', customerId)
+      }
+      if (status) {
+        q = q.eq('status', status)
+      }
 
       // Note: We don't filter server-side when searching because we need to search
       // customer name (joined relation) which PostgREST doesn't support.
@@ -130,6 +144,24 @@ export function jobsIndexQuery({
       return results
     },
     staleTime: 10_000,
+  }
+}
+
+// Simple query to get customers for dropdown filter
+export function customersForFilterQuery(companyId: string) {
+  return {
+    queryKey: ['company', companyId, 'customers-for-filter'] as const,
+    queryFn: async (): Promise<Array<{ id: string; name: string }>> => {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('id, name')
+        .eq('company_id', companyId)
+        .or('deleted.is.null,deleted.eq.false')
+        .order('name', { ascending: true })
+      if (error) throw error
+      return (data || []) as Array<{ id: string; name: string }>
+    },
+    staleTime: 60_000,
   }
 }
 

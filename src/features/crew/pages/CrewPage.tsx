@@ -163,6 +163,7 @@ function StatusDropdown({
         <DropdownMenu.Item
           onSelect={(e) => {
             e.preventDefault()
+            onShowEmployeesChange(!showEmployees)
           }}
         >
           <Flex align="center" gap="2">
@@ -176,6 +177,7 @@ function StatusDropdown({
         <DropdownMenu.Item
           onSelect={(e) => {
             e.preventDefault()
+            onShowFreelancersChange(!showFreelancers)
           }}
         >
           <Flex align="center" gap="2">
@@ -189,6 +191,7 @@ function StatusDropdown({
         <DropdownMenu.Item
           onSelect={(e) => {
             e.preventDefault()
+            onShowMyPendingChange(!showMyPending)
           }}
         >
           <Flex align="center" gap="2">

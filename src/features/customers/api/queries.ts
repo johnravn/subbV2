@@ -190,3 +190,40 @@ export async function deleteCustomer(payload: {
     .eq('company_id', payload.companyId)
   if (error) throw error
 }
+
+/* ---------- recent jobs for customer ---------- */
+export function customerRecentJobsQuery({
+  companyId,
+  customerId,
+}: {
+  companyId: string
+  customerId: string
+}) {
+  return {
+    queryKey: [
+      'company',
+      companyId,
+      'customer-recent-jobs',
+      customerId,
+    ] as const,
+    queryFn: async (): Promise<
+      Array<{
+        id: string
+        title: string
+        status: string
+        start_at: string | null
+        end_at: string | null
+      }>
+    > => {
+      const { data, error } = await supabase
+        .from('jobs')
+        .select('id, title, status, start_at, end_at')
+        .eq('company_id', companyId)
+        .eq('customer_id', customerId)
+        .order('start_at', { ascending: false, nullsLast: true })
+        .limit(3)
+      if (error) throw error
+      return (data || []) as any
+    },
+  }
+}

@@ -23,7 +23,6 @@ export type PendingInvite = {
 }
 
 export type CrewOptionalFields = {
-  address?: string | null
   date_of_birth?: string | null
   drivers_license?: string | null
   licenses?: Array<string> | null
@@ -86,6 +85,14 @@ export type CrewDetail = {
   superuser: boolean
   primary_address_id: string | null
   selected_company_id: string | null
+  primary_address: {
+    id: string
+    name: string | null
+    address_line: string
+    zip_code: string
+    city: string
+    country: string
+  } | null
 }
 
 export function crewDetailQuery({
@@ -115,7 +122,23 @@ export function crewDetailQuery({
       const { data: prof, error: pErr } = await supabase
         .from('profiles')
         .select(
-          'bio, preferences, locale, timezone, superuser, primary_address_id, selected_company_id',
+          `
+          bio,
+          preferences,
+          locale,
+          timezone,
+          superuser,
+          primary_address_id,
+          selected_company_id,
+          primary_address:primary_address_id (
+            id,
+            name,
+            address_line,
+            zip_code,
+            city,
+            country
+          )
+        `,
         )
         .eq('user_id', userId)
         .maybeSingle()
@@ -132,6 +155,7 @@ export function crewDetailQuery({
           | 'superuser'
           | 'primary_address_id'
           | 'selected_company_id'
+          | 'primary_address'
         >),
         bio: prof?.bio ?? null,
         preferences: prof?.preferences ?? null,
@@ -140,6 +164,7 @@ export function crewDetailQuery({
         superuser: prof?.superuser ?? false,
         primary_address_id: prof?.primary_address_id ?? null,
         selected_company_id: prof?.selected_company_id ?? null,
+        primary_address: (prof as any)?.primary_address ?? null,
       }
     },
   }

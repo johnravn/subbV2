@@ -2,24 +2,31 @@
 import * as React from 'react'
 import {
   Box,
+  Button,
   Card,
+  Checkbox,
+  DropdownMenu,
   Flex,
   Grid,
   Heading,
   Separator,
-  Switch,
   Text,
 } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
+import { NavArrowDown } from 'iconoir-react'
+import PageSkeleton from '@shared/ui/components/PageSkeleton'
 import InventoryTable from '../components/InventoryTable'
 import InventoryInspector from '../components/InventoryInspector'
 
 export default function InventoryPage() {
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
-  const [activeOnly, setActiveOnly] = React.useState(true)
-  const [includeExternal, setIncludeExternal] = React.useState(true)
-  const [allow_individual_booking, setAllow_individual_booking] =
-    React.useState(true)
+  const [showActive, setShowActive] = React.useState(true)
+  const [showInactive, setShowInactive] = React.useState(false)
+  const [showInternal, setShowInternal] = React.useState(true)
+  const [showExternal, setShowExternal] = React.useState(true)
+  const [showGroupOnlyItems, setShowGroupOnlyItems] = React.useState(false)
+  const [showGroups, setShowGroups] = React.useState(true)
+  const [showItems, setShowItems] = React.useState(true)
   const { companyId } = useCompany()
 
   // Responsive toggle for >= 1024px (large screens)
@@ -42,7 +49,7 @@ export default function InventoryPage() {
     }
   }, [])
 
-  if (!companyId) return <div>No company selected.</div>
+  if (!companyId) return <PageSkeleton columns="2fr 1fr" />
 
   return (
     <section
@@ -74,37 +81,22 @@ export default function InventoryPage() {
         >
           <Flex align="center" justify="between" mb="3">
             <Heading size="5">Overview</Heading>
-            <Flex align="center" gap="3">
-              <Flex align="center" gap="1">
-                <Text size="2" color="gray">
-                  Active only
-                </Text>
-                <Switch
-                  checked={activeOnly}
-                  onCheckedChange={(v) => setActiveOnly(Boolean(v))}
-                />
-              </Flex>
-              <Flex align="center" gap="1">
-                <Text size="2" color="gray">
-                  Hide group-only items
-                </Text>
-                <Switch
-                  checked={allow_individual_booking}
-                  onCheckedChange={(v) =>
-                    setAllow_individual_booking(Boolean(v))
-                  }
-                />
-              </Flex>
-              <Flex align="center" gap="1">
-                <Text size="2" color="gray">
-                  Show external
-                </Text>
-                <Switch
-                  checked={includeExternal}
-                  onCheckedChange={(v) => setIncludeExternal(Boolean(v))}
-                />
-              </Flex>
-            </Flex>
+            <FiltersDropdown
+              showActive={showActive}
+              showInactive={showInactive}
+              showInternal={showInternal}
+              showExternal={showExternal}
+              showGroupOnlyItems={showGroupOnlyItems}
+              showGroups={showGroups}
+              showItems={showItems}
+              onShowActiveChange={setShowActive}
+              onShowInactiveChange={setShowInactive}
+              onShowInternalChange={setShowInternal}
+              onShowExternalChange={setShowExternal}
+              onShowGroupOnlyItemsChange={setShowGroupOnlyItems}
+              onShowGroupsChange={setShowGroups}
+              onShowItemsChange={setShowItems}
+            />
           </Flex>
 
           <Separator size="4" mb="3" />
@@ -120,10 +112,14 @@ export default function InventoryPage() {
             <InventoryTable
               selectedId={selectedId}
               onSelect={setSelectedId}
-              activeOnly={activeOnly}
-              allow_individual_booking={allow_individual_booking}
+              showActive={showActive}
+              showInactive={showInactive}
+              showInternal={showInternal}
+              showExternal={showExternal}
+              showGroupOnlyItems={showGroupOnlyItems}
+              showGroups={showGroups}
+              showItems={showItems}
               pageSizeOverride={!isLarge ? 12 : undefined}
-              includeExternal={includeExternal} // 👈 new
             />
           </Box>
         </Card>
@@ -159,5 +155,167 @@ export default function InventoryPage() {
         </Card>
       </Grid>
     </section>
+  )
+}
+
+function FiltersDropdown({
+  showActive,
+  showInactive,
+  showInternal,
+  showExternal,
+  showGroupOnlyItems,
+  showGroups,
+  showItems,
+  onShowActiveChange,
+  onShowInactiveChange,
+  onShowInternalChange,
+  onShowExternalChange,
+  onShowGroupOnlyItemsChange,
+  onShowGroupsChange,
+  onShowItemsChange,
+}: {
+  showActive: boolean
+  showInactive: boolean
+  showInternal: boolean
+  showExternal: boolean
+  showGroupOnlyItems: boolean
+  showGroups: boolean
+  showItems: boolean
+  onShowActiveChange: (v: boolean) => void
+  onShowInactiveChange: (v: boolean) => void
+  onShowInternalChange: (v: boolean) => void
+  onShowExternalChange: (v: boolean) => void
+  onShowGroupOnlyItemsChange: (v: boolean) => void
+  onShowGroupsChange: (v: boolean) => void
+  onShowItemsChange: (v: boolean) => void
+}) {
+  const selectedCount = [
+    showActive,
+    showInactive,
+    showInternal,
+    showExternal,
+    showGroupOnlyItems,
+    showGroups,
+    showItems,
+  ].filter(Boolean).length
+
+  const label =
+    selectedCount === 7
+      ? 'All filters'
+      : selectedCount === 0
+        ? 'No filters'
+        : `${selectedCount} selected`
+
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger>
+        <Button variant="soft" size="2">
+          <Text>{label}</Text>
+          <NavArrowDown width={14} height={14} />
+        </Button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content>
+        <DropdownMenu.Label>Status</DropdownMenu.Label>
+        <DropdownMenu.Item
+          onSelect={(e) => {
+            e.preventDefault()
+            onShowActiveChange(!showActive)
+          }}
+        >
+          <Flex align="center" gap="2">
+            <Checkbox
+              checked={showActive}
+              onCheckedChange={onShowActiveChange}
+            />
+            <Text>Active</Text>
+          </Flex>
+        </DropdownMenu.Item>
+        <DropdownMenu.Item
+          onSelect={(e) => {
+            e.preventDefault()
+            onShowInactiveChange(!showInactive)
+          }}
+        >
+          <Flex align="center" gap="2">
+            <Checkbox
+              checked={showInactive}
+              onCheckedChange={onShowInactiveChange}
+            />
+            <Text>Inactive</Text>
+          </Flex>
+        </DropdownMenu.Item>
+        <DropdownMenu.Separator />
+        <DropdownMenu.Label>Ownership</DropdownMenu.Label>
+        <DropdownMenu.Item
+          onSelect={(e) => {
+            e.preventDefault()
+            onShowInternalChange(!showInternal)
+          }}
+        >
+          <Flex align="center" gap="2">
+            <Checkbox
+              checked={showInternal}
+              onCheckedChange={onShowInternalChange}
+            />
+            <Text>Internal</Text>
+          </Flex>
+        </DropdownMenu.Item>
+        <DropdownMenu.Item
+          onSelect={(e) => {
+            e.preventDefault()
+            onShowExternalChange(!showExternal)
+          }}
+        >
+          <Flex align="center" gap="2">
+            <Checkbox
+              checked={showExternal}
+              onCheckedChange={onShowExternalChange}
+            />
+            <Text>External</Text>
+          </Flex>
+        </DropdownMenu.Item>
+        <DropdownMenu.Separator />
+        <DropdownMenu.Label>Type</DropdownMenu.Label>
+        <DropdownMenu.Item
+          onSelect={(e) => {
+            e.preventDefault()
+            onShowGroupOnlyItemsChange(!showGroupOnlyItems)
+          }}
+        >
+          <Flex align="center" gap="2">
+            <Checkbox
+              checked={showGroupOnlyItems}
+              onCheckedChange={onShowGroupOnlyItemsChange}
+            />
+            <Text>Group-only items</Text>
+          </Flex>
+        </DropdownMenu.Item>
+        <DropdownMenu.Item
+          onSelect={(e) => {
+            e.preventDefault()
+            onShowGroupsChange(!showGroups)
+          }}
+        >
+          <Flex align="center" gap="2">
+            <Checkbox
+              checked={showGroups}
+              onCheckedChange={onShowGroupsChange}
+            />
+            <Text>Groups</Text>
+          </Flex>
+        </DropdownMenu.Item>
+        <DropdownMenu.Item
+          onSelect={(e) => {
+            e.preventDefault()
+            onShowItemsChange(!showItems)
+          }}
+        >
+          <Flex align="center" gap="2">
+            <Checkbox checked={showItems} onCheckedChange={onShowItemsChange} />
+            <Text>Items</Text>
+          </Flex>
+        </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
   )
 }

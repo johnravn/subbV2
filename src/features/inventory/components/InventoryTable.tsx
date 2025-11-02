@@ -30,18 +30,26 @@ import type { InventoryIndexRow, SortBy, SortDir } from '../api/queries'
 type Props = {
   selectedId: string | null
   onSelect: (id: string) => void
-  activeOnly: boolean
-  allow_individual_booking: boolean
-  includeExternal: boolean // 👈 new
+  showActive: boolean
+  showInactive: boolean
+  showInternal: boolean
+  showExternal: boolean
+  showGroupOnlyItems: boolean
+  showGroups: boolean
+  showItems: boolean
   pageSizeOverride?: number
 }
 
 export default function InventoryTable({
   selectedId,
   onSelect,
-  activeOnly,
-  allow_individual_booking,
-  includeExternal,
+  showActive,
+  showInactive,
+  showInternal,
+  showExternal,
+  showGroupOnlyItems,
+  showGroups,
+  showItems,
   pageSizeOverride,
 }: Props) {
   const { companyId } = useCompany()
@@ -111,12 +119,16 @@ export default function InventoryTable({
       page,
       pageSize: effectivePageSize,
       search,
-      activeOnly,
-      allow_individual_booking,
+      showActive,
+      showInactive,
+      showInternal,
+      showExternal,
+      showGroupOnlyItems,
+      showGroups,
+      showItems,
       category: categoryFilter,
       sortBy,
       sortDir,
-      includeExternal, // 👈 new
     }),
     enabled: !!companyId,
   })
@@ -145,8 +157,13 @@ export default function InventoryTable({
     categoryFilter,
     sortBy,
     sortDir,
-    activeOnly,
-    allow_individual_booking,
+    showActive,
+    showInactive,
+    showInternal,
+    showExternal,
+    showGroupOnlyItems,
+    showGroups,
+    showItems,
     recomputePageSize,
   ])
 

@@ -168,6 +168,7 @@ export default function AddEditVehicleDialog({
               <TextField.Root
                 value={form.name}
                 onChange={(e) => set('name', e.target.value)}
+                placeholder="Enter vehicle name"
                 autoFocus
               />
             </Field>
@@ -175,6 +176,7 @@ export default function AddEditVehicleDialog({
               <TextField.Root
                 value={form.registration_no}
                 onChange={(e) => set('registration_no', e.target.value)}
+                placeholder="Enter registration number"
               />
             </Field>
           </Flex>
@@ -344,6 +346,7 @@ export default function AddEditVehicleDialog({
               rows={3}
               value={form.notes}
               onChange={(e) => set('notes', e.target.value)}
+              placeholder="Add notes about this vehicle..."
             />
           </Field>
         </Flex>

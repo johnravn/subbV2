@@ -136,15 +136,11 @@ export default function TimePeriodPicker({ jobId, value, onChange }: Props) {
             />
             <DateTimePicker
               value={editing.start_at}
-              onChange={(iso) =>
-                setEditing({ ...editing, start_at: iso })
-              }
+              onChange={(iso) => setEditing({ ...editing, start_at: iso })}
             />
             <DateTimePicker
               value={editing.end_at}
-              onChange={(iso) =>
-                setEditing({ ...editing, end_at: iso })
-              }
+              onChange={(iso) => setEditing({ ...editing, end_at: iso })}
             />
             <Flex gap="2" ml="auto">
               <Button size="1" variant="soft" onClick={() => setEditing(null)}>
@@ -174,13 +170,15 @@ export default function TimePeriodPicker({ jobId, value, onChange }: Props) {
 
 function fmt(iso: string) {
   const d = new Date(iso)
-  return d.toLocaleString(undefined, {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  const hours = String(d.getHours()).padStart(2, '0')
+  const minutes = String(d.getMinutes()).padStart(2, '0')
+  return (
+    d.toLocaleString(undefined, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }) + ` ${hours}:${minutes}`
+  )
 }
 
 function isoLocalStart() {
@@ -225,7 +223,8 @@ export function FixedTimePeriodEditor({
 
   const save = useMutation({
     mutationFn: async () => {
-      if (!companyId || !editData || !timePeriod) throw new Error('Missing data')
+      if (!companyId || !editData || !timePeriod)
+        throw new Error('Missing data')
       await upsertTimePeriod({
         id: timePeriodId,
         job_id: jobId,
@@ -282,11 +281,7 @@ export function FixedTimePeriodEditor({
             <strong>{timePeriod.title || '(untitled)'}</strong>
           </Flex>
           {!editing && (
-            <Button
-              size="1"
-              variant="soft"
-              onClick={() => setEditing(true)}
-            >
+            <Button size="1" variant="soft" onClick={() => setEditing(true)}>
               <Edit width={14} height={14} /> Edit
             </Button>
           )}
@@ -320,10 +315,7 @@ export function FixedTimePeriodEditor({
           </Flex>
         ) : (
           editData && (
-            <Box
-              p="2"
-              style={{ background: 'var(--gray-2)', borderRadius: 8 }}
-            >
+            <Box p="2" style={{ background: 'var(--gray-2)', borderRadius: 8 }}>
               <Flex gap="2" wrap="wrap" align="center">
                 <DateTimePicker
                   value={editData.start_at}

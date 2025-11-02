@@ -12,9 +12,12 @@ import {
   Text,
 } from '@radix-ui/themes'
 import { Edit, Trash } from 'iconoir-react'
-import { makeWordPresentable } from '@shared/lib/generalFunctions'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { makeWordPresentable } from '@shared/lib/generalFunctions'
+import { supabase } from '@shared/api/supabase'
+import { useToast } from '@shared/ui/toast/ToastProvider'
 import { jobDetailQuery } from '../api/queries'
+import { useAutoUpdateJobStatus } from '../hooks/useAutoUpdateJobStatus'
 import OverviewTab from './tabs/OverviewTab'
 import EquipmentTab from './tabs/EquipmentTab'
 import CrewTab from './tabs/CrewTab'
@@ -22,19 +25,18 @@ import TransportTab from './tabs/TransportTab'
 import TimelineTab from './tabs/TimelineTab'
 import ContactsTab from './tabs/ContactsTab'
 import CalendarTab from './tabs/CalendarTab'
+import FilesTab from './tabs/FilesTab'
 import JobDialog from './dialogs/JobDialog'
-import { supabase } from '@shared/api/supabase'
-import { useToast } from '@shared/ui/toast/ToastProvider'
 import type { JobDetail } from '../types'
 
 const ORDER: Array<JobDetail['status']> = [
   'draft',
   'planned',
   'requested',
+  'canceled',
   'confirmed',
   'in_progress',
   'completed',
-  'canceled',
   'invoiced',
   'paid',
 ]
@@ -42,16 +44,27 @@ const ORDER: Array<JobDetail['status']> = [
 export default function JobInspector({
   id,
   onDeleted,
+  initialTab,
 }: {
   id: string | null
   onDeleted?: () => void
+  initialTab?: string
 }) {
   // ✅ hooks first
   const [editOpen, setEditOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [statusTimelineOpen, setStatusTimelineOpen] = React.useState(false)
   const [crewView, setCrewView] = React.useState<'roles' | 'crew'>('roles')
-  const [activeTab, setActiveTab] = React.useState<string>('overview')
+  const [activeTab, setActiveTab] = React.useState<string>(
+    initialTab || 'overview',
+  )
+
+  // Update activeTab when initialTab changes
+  React.useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab)
+    }
+  }, [initialTab])
   const qc = useQueryClient()
   const { success, error } = useToast()
 
@@ -59,6 +72,9 @@ export default function JobInspector({
     ...jobDetailQuery({ jobId: id ?? '__none__' }),
     enabled: !!id, // won't run until we have an id, but the hook is still called every render
   })
+
+  // Auto-update job status based on timeframes
+  useAutoUpdateJobStatus(data)
 
   const deleteJob = useMutation({
     mutationFn: async (jobId: string) => {
@@ -107,7 +123,19 @@ export default function JobInspector({
       >
         <Heading size="4">{job.title}</Heading>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <Badge color="blue" radius="full" highContrast>
+          <Badge
+            color={
+              job.status === 'canceled'
+                ? 'red'
+                : job.status === 'paid'
+                  ? 'green'
+                  : job.status === 'in_progress'
+                    ? 'amber'
+                    : 'blue'
+            }
+            radius="full"
+            highContrast
+          >
             {job.status}
           </Badge>
           <Button size="2" variant="soft" onClick={() => setEditOpen(true)}>
@@ -151,6 +179,7 @@ export default function JobInspector({
           <Tabs.Trigger value="crew">Crew</Tabs.Trigger>
           <Tabs.Trigger value="transport">Transportation</Tabs.Trigger>
           <Tabs.Trigger value="contacts">Contacts</Tabs.Trigger>
+          <Tabs.Trigger value="files">Files</Tabs.Trigger>
         </Tabs.List>
 
         <Tabs.Content value="overview" mt={'10px'}>
@@ -178,6 +207,9 @@ export default function JobInspector({
         </Tabs.Content>
         <Tabs.Content value="contacts" mt={'10px'}>
           <ContactsTab jobId={job.id} companyId={job.company_id} />
+        </Tabs.Content>
+        <Tabs.Content value="files" mt={'10px'}>
+          <FilesTab jobId={job.id} />
         </Tabs.Content>
       </Tabs.Root>
     </Box>
@@ -208,9 +240,7 @@ function DeleteJobDialog({
             ⚠️ This action cannot be undone!
           </Text>
 
-          <Text size="2">
-            Deleting this job will permanently remove:
-          </Text>
+          <Text size="2">Deleting this job will permanently remove:</Text>
 
           <Box
             p="3"
@@ -264,11 +294,7 @@ function DeleteJobDialog({
           >
             Cancel
           </Button>
-          <Button
-            color="red"
-            onClick={onConfirm}
-            disabled={isDeleting}
-          >
+          <Button color="red" onClick={onConfirm} disabled={isDeleting}>
             {isDeleting ? 'Deleting...' : 'Delete Job'}
           </Button>
         </Flex>
@@ -277,7 +303,7 @@ function DeleteJobDialog({
   )
 }
 
-function StatusTimeline(job: JobDetail, open: boolean) {
+function StatusTimeline(job: JobDetail) {
   return (
     <Box mt="4">
       <Heading size="3" mb="2">
@@ -287,10 +313,33 @@ function StatusTimeline(job: JobDetail, open: boolean) {
         {ORDER.map((s, i) => {
           const active = s === job.status
           const past = ORDER.indexOf(s) <= ORDER.indexOf(job.status)
+          const isCanceledStatus = s === 'canceled'
+          const isPaidStatus = s === 'paid'
+          const isInProgressStatus = s === 'in_progress'
           return (
             <Flex key={s} align="center" gap="2">
               <Badge
-                color={active ? 'blue' : 'gray'}
+                color={
+                  isCanceledStatus
+                    ? active
+                      ? 'red'
+                      : 'gray'
+                    : isPaidStatus
+                      ? active
+                        ? 'green'
+                        : past
+                          ? 'green'
+                          : 'gray'
+                      : isInProgressStatus
+                        ? active
+                          ? 'amber'
+                          : past
+                            ? 'amber'
+                            : 'gray'
+                        : active
+                          ? 'blue'
+                          : 'gray'
+                }
                 variant={active ? 'solid' : 'soft'}
                 highContrast
               >

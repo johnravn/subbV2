@@ -1,10 +1,11 @@
 // src/app/layout/Sidebar.tsx
 import * as React from 'react'
 import { Link } from '@tanstack/react-router'
+import { useQuery } from '@tanstack/react-query'
 import logoWhite from '@shared/assets/subbLogo/svg/white/LogoWhite.svg'
-import { useCompany } from '@shared/companies/CompanyProvider'
 import {
   Avatar,
+  Badge,
   Box,
   Button,
   Flex,
@@ -32,6 +33,8 @@ import {
 } from 'iconoir-react'
 import { useAuthz } from '@shared/auth/useAuthz'
 import { canVisit } from '@shared/auth/permissions'
+import { useCompany } from '@shared/companies/CompanyProvider'
+import { unreadMattersCountQuery } from '@features/matters/api/queries'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 
 const SIDEBAR_EXPANDED = 200
@@ -189,7 +192,7 @@ function SidebarContent({
   userAvatarUrl?: string | null
   onLogout?: () => void
 }) {
-  const { companies, company, companyId, setCompanyId, loading } = useCompany()
+  const { companies, companyId, setCompanyId, loading } = useCompany()
   const { caps, loading: authzLoading } = useAuthz()
   const companiesSorted = React.useMemo(
     () => [...companies].sort((a, b) => a.name.localeCompare(b.name)),
@@ -351,6 +354,9 @@ function SidebarContent({
                     currentPath={currentPath}
                     isMobile={isMobile}
                     onCloseMobile={() => onToggle(false)}
+                    badge={
+                      n.label === 'Matters' ? <MattersUnreadBadge /> : undefined
+                    }
                   />
                 ))}
               {(() => {
@@ -419,6 +425,27 @@ function SidebarContent({
   )
 }
 
+function MattersUnreadBadge() {
+  const { companyId } = useCompany()
+  const { data: unreadCount = 0 } = useQuery({
+    ...unreadMattersCountQuery(companyId ?? ''),
+    enabled: !!companyId,
+  })
+
+  if (unreadCount === 0) return null
+
+  return (
+    <Badge
+      radius="full"
+      size="1"
+      color="blue"
+      style={{ minWidth: 18, height: 18, padding: '0 6px' }}
+    >
+      {unreadCount > 99 ? '99+' : unreadCount}
+    </Badge>
+  )
+}
+
 function NavItem({
   to,
   icon,
@@ -427,6 +454,7 @@ function NavItem({
   currentPath,
   isMobile,
   onCloseMobile,
+  badge,
 }: {
   to: string
   icon: React.ReactNode
@@ -435,6 +463,7 @@ function NavItem({
   currentPath: string
   isMobile: boolean
   onCloseMobile: () => void
+  badge?: React.ReactNode
 }) {
   const active =
     to === '/'
@@ -458,10 +487,31 @@ function NavItem({
       <Link
         to={to}
         onClick={handleClick}
-        style={{ justifyContent: open ? 'flex-start' : 'center', gap: 10 }}
+        style={{
+          justifyContent: open ? 'flex-start' : 'center',
+          gap: 10,
+          width: '100%',
+          position: 'relative',
+        }}
       >
         {icon}
-        {open && <span style={{ lineHeight: 1 }}>{label}</span>}
+        {open && (
+          <Flex align="center" justify="between" style={{ flex: 1 }}>
+            <span style={{ lineHeight: 1 }}>{label}</span>
+            {badge}
+          </Flex>
+        )}
+        {!open && badge && (
+          <Box
+            style={{
+              position: 'absolute',
+              top: -4,
+              right: -4,
+            }}
+          >
+            {badge}
+          </Box>
+        )}
       </Link>
     </Button>
   )

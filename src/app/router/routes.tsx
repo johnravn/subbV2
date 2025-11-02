@@ -120,6 +120,10 @@ const vehiclesRoute = createRoute({
 const jobsRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: 'jobs',
+  validateSearch: (search: Record<string, unknown>) => ({
+    jobId: (search.jobId as string | undefined) || undefined,
+    tab: (search.tab as string | undefined) || undefined,
+  }),
   component: guarded('visit:jobs', JobsPage),
 })
 

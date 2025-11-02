@@ -36,6 +36,23 @@
   border: 1px solid var(--fc-button-border-color);
   padding: 4px 10px;
 }
+/* Grouped buttons - connect them visually */
+.companyCalendar .fc .fc-button-group > .fc-button,
+.jobCalendar .fc .fc-button-group > .fc-button {
+  border-radius: 0;
+  margin-left: -1px;
+}
+.companyCalendar .fc .fc-button-group > .fc-button:first-child,
+.jobCalendar .fc .fc-button-group > .fc-button:first-child {
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+  margin-left: 0;
+}
+.companyCalendar .fc .fc-button-group > .fc-button:last-child,
+.jobCalendar .fc .fc-button-group > .fc-button:last-child {
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
 .companyCalendar .fc .fc-button-primary, .jobCalendar .fc .fc-button-primary {
   background: var(--fc-button-bg-color);
   color: var(--fc-button-text-color);

@@ -15,14 +15,17 @@ import {
   Text,
 } from '@radix-ui/themes'
 import { Edit, Trash } from 'iconoir-react'
+import { useNavigate } from '@tanstack/react-router'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { prettyPhone } from '@shared/phone/phone'
 import { useToast } from '@shared/ui/toast/ToastProvider'
+import InspectorSkeleton from '@shared/ui/components/InspectorSkeleton'
 import { fmtVAT } from '@shared/lib/generalFunctions'
 import { CopyIconButton } from '@shared/lib/CopyIconButton'
 import MapEmbed from '@shared/maps/MapEmbed'
 import {
   customerDetailQuery,
+  customerRecentJobsQuery,
   deleteContact,
   deleteCustomer,
 } from '../api/queries'
@@ -40,6 +43,7 @@ export default function CustomerInspector({
 }) {
   const { companyId } = useCompany()
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [editOpen, setEditOpen] = React.useState(false)
 
   // NEW: dialog state for contacts
@@ -59,6 +63,14 @@ export default function CustomerInspector({
     ...customerDetailQuery({
       companyId: companyId ?? '',
       id: id ?? '',
+    }),
+    enabled,
+  })
+
+  const { data: recentJobs } = useQuery({
+    ...customerRecentJobsQuery({
+      companyId: companyId ?? '',
+      customerId: id ?? '',
     }),
     enabled,
   })
@@ -109,13 +121,7 @@ export default function CustomerInspector({
 
   if (!id) return <Text color="gray">Select a customer.</Text>
   if (!enabled) return <Text color="gray">Preparing…</Text>
-  if (isLoading)
-    return (
-      <Flex align="center" gap="1">
-        <Text>Thinking</Text>
-        <Spinner size="2" />
-      </Flex>
-    )
+  if (isLoading) return <InspectorSkeleton />
   if (isError)
     return (
       <Text color="red">
@@ -317,6 +323,75 @@ export default function CustomerInspector({
                         <Trash width={14} height={14} />
                       </Button>
                     </Flex>
+                  </Table.Cell>
+                </Table.Row>
+              ))
+            )}
+          </Table.Body>
+        </Table.Root>
+      </Box>
+
+      {/* Recent Jobs */}
+      <Flex align="baseline" justify="between" mb="2" mt="4">
+        <Text as="div" size="2" color="gray">
+          Recent Jobs
+        </Text>
+      </Flex>
+
+      <Box
+        style={{
+          border: '1px solid var(--gray-a6)',
+          borderRadius: 8,
+          overflow: 'hidden',
+        }}
+      >
+        <Table.Root variant="surface">
+          <Table.Header>
+            <Table.Row>
+              <Table.ColumnHeaderCell>Title</Table.ColumnHeaderCell>
+              <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
+              <Table.ColumnHeaderCell>Start Date</Table.ColumnHeaderCell>
+              <Table.ColumnHeaderCell>End Date</Table.ColumnHeaderCell>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
+            {!recentJobs || recentJobs.length === 0 ? (
+              <Table.Row>
+                <Table.Cell colSpan={4}>No jobs yet.</Table.Cell>
+              </Table.Row>
+            ) : (
+              recentJobs.map((job) => (
+                <Table.Row
+                  key={job.id}
+                  onClick={() => {
+                    navigate({
+                      to: '/jobs',
+                      search: { jobId: job.id },
+                    })
+                  }}
+                  style={{
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Table.Cell>
+                    <Text size="2">{job.title}</Text>
+                  </Table.Cell>
+                  <Table.Cell>
+                    <Badge variant="soft">{job.status}</Badge>
+                  </Table.Cell>
+                  <Table.Cell>
+                    <Text size="2">
+                      {job.start_at
+                        ? new Date(job.start_at).toLocaleDateString()
+                        : '—'}
+                    </Text>
+                  </Table.Cell>
+                  <Table.Cell>
+                    <Text size="2">
+                      {job.end_at
+                        ? new Date(job.end_at).toLocaleDateString()
+                        : '—'}
+                    </Text>
                   </Table.Cell>
                 </Table.Row>
               ))

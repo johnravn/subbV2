@@ -6,12 +6,16 @@ export const inventoryIndexKey = (
   page: number,
   pageSize: number,
   search: string,
-  activeOnly: boolean,
-  allow_individual_booking: boolean,
+  showActive: boolean,
+  showInactive: boolean,
+  showInternal: boolean,
+  showExternal: boolean,
+  showGroupOnlyItems: boolean,
+  showGroups: boolean,
+  showItems: boolean,
   category: string | null,
   sortBy: SortBy,
   sortDir: SortDir,
-  includeExternal: boolean, // 👈 add
 ) =>
   [
     'company',
@@ -20,12 +24,16 @@ export const inventoryIndexKey = (
     page,
     pageSize,
     search,
-    activeOnly,
-    allow_individual_booking,
+    showActive,
+    showInactive,
+    showInternal,
+    showExternal,
+    showGroupOnlyItems,
+    showGroups,
+    showItems,
     category,
     sortBy,
     sortDir,
-    includeExternal,
   ] as const
 
 export const inventoryDetailKey = (companyId: string, id: string) =>
@@ -180,23 +188,31 @@ export const inventoryIndexQuery = ({
   page,
   pageSize,
   search,
-  activeOnly,
-  allow_individual_booking,
+  showActive,
+  showInactive,
+  showInternal,
+  showExternal,
+  showGroupOnlyItems,
+  showGroups,
+  showItems,
   category,
   sortBy,
   sortDir,
-  includeExternal,
 }: {
   companyId: string
   page: number
   pageSize: number
   search: string
-  activeOnly: boolean
-  allow_individual_booking: boolean
+  showActive: boolean
+  showInactive: boolean
+  showInternal: boolean
+  showExternal: boolean
+  showGroupOnlyItems: boolean
+  showGroups: boolean
+  showItems: boolean
   category: string | null
   sortBy: SortBy
   sortDir: SortDir
-  includeExternal: boolean
 }) =>
   queryOptions<
     { rows: Array<InventoryIndexRow>; count: number },
@@ -209,12 +225,16 @@ export const inventoryIndexQuery = ({
       page,
       pageSize,
       search,
-      activeOnly,
-      allow_individual_booking,
+      showActive,
+      showInactive,
+      showInternal,
+      showExternal,
+      showGroupOnlyItems,
+      showGroups,
+      showItems,
       category,
       sortBy,
       sortDir,
-      includeExternal,
     ),
     queryFn: async () => {
       const from = (page - 1) * pageSize
@@ -228,16 +248,58 @@ export const inventoryIndexQuery = ({
       // exclude deleted rows
       q = q.or('deleted.is.null,deleted.eq.false')
 
-      if (activeOnly) q = q.eq('active', true)
-
-      // Items must allow individual booking if the filter is on,
-      // but groups should still be included.
-      if (allow_individual_booking) {
-        // "include if (is_group) OR (allow_individual_booking)"
-        q = q.or('is_group.eq.true,allow_individual_booking.eq.true')
+      // Filter by active status
+      if (showActive && !showInactive) {
+        q = q.eq('active', true)
+      } else if (!showActive && showInactive) {
+        q = q.eq('active', false)
       }
+      // If both are selected or both are unselected, show all (no filter)
 
-      if (!includeExternal) q = q.eq('internally_owned', true) // 👈 NEW
+      // Filter by ownership
+      if (showInternal && !showExternal) {
+        q = q.eq('internally_owned', true)
+      } else if (!showInternal && showExternal) {
+        q = q.eq('internally_owned', false)
+      }
+      // If both are selected or both are unselected, show all (no filter)
+
+      // Build type filters: groups, items (bookable individually), group-only items
+      // PostgREST .or() limitation: commas mean OR, can't easily express AND within OR
+      // Strategy: Use patterns that work with PostgREST, filter client-side if needed
+
+      if (!showGroups && !showItems && !showGroupOnlyItems) {
+        // If no type filters are selected, return empty result
+        q = q.eq('id', '__never_match__')
+      } else if (showGroups && showItems && showGroupOnlyItems) {
+        // All types selected - no type filter needed
+      } else if (showGroups && !showItems && !showGroupOnlyItems) {
+        // Only groups
+        q = q.eq('is_group', true)
+      } else if (!showGroups && showItems && !showGroupOnlyItems) {
+        // Only items that allow individual booking
+        q = q.eq('is_group', false).eq('allow_individual_booking', true)
+      } else if (!showGroups && !showItems && showGroupOnlyItems) {
+        // Only group-only items
+        q = q.eq('is_group', false).eq('allow_individual_booking', false)
+      } else if (showGroups && showItems && !showGroupOnlyItems) {
+        // Groups + items (bookable individually)
+        // Pattern from BookItemsDialog: groups OR items with allow_individual_booking
+        q = q.or('is_group.eq.true,allow_individual_booking.eq.true')
+      } else if (showGroups && !showItems && showGroupOnlyItems) {
+        // Groups + group-only items
+        // Filter: groups OR (non-groups with allow_individual_booking=false)
+        // PostgREST limitation: can't easily express AND within OR
+        // Solution: fetch groups + all non-groups, filter client-side
+        q = q.or('is_group.eq.true,is_group.eq.false')
+        // Note: We'll filter client-side in the return to exclude items with allow_individual_booking=true
+      } else if (!showGroups && showItems && showGroupOnlyItems) {
+        // Items (bookable) + group-only items
+        // Both are non-groups, so just filter is_group=false
+        q = q.eq('is_group', false)
+      } else {
+        // Fallback: show all
+      }
 
       if (category && category !== 'all') q = q.eq('category_name', category)
 
@@ -259,8 +321,21 @@ export const inventoryIndexQuery = ({
 
       const { data, error, count } = await q.range(from, to)
       if (error) throw error
+
+      let filteredRows = (data ?? []) as Array<InventoryIndexRow>
+
+      // Client-side filtering for complex type combinations that PostgREST can't handle
+      if (showGroups && !showItems && showGroupOnlyItems) {
+        // Filter: keep groups OR items with allow_individual_booking=false
+        filteredRows = filteredRows.filter(
+          (row) =>
+            row.is_group === true ||
+            (row.is_group === false && row.allow_individual_booking === false),
+        )
+      }
+
       return {
-        rows: data as Array<InventoryIndexRow>,
+        rows: filteredRows,
         count: count ?? 0,
       }
     },

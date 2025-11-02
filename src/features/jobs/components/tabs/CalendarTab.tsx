@@ -138,41 +138,96 @@ export default function CalendarTab({ jobId }: { jobId: string }) {
           <Text size="2" weight="medium">
             Show:
           </Text>
-          <Flex align="center" gap="2">
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--space-2)',
+              cursor: 'pointer',
+            }}
+            onClick={(e) => {
+              e.preventDefault()
+              toggleFilter('jobDuration')
+            }}
+          >
             <Checkbox
               checked={selectedFilters.has('jobDuration')}
               onCheckedChange={() => toggleFilter('jobDuration')}
             />
-            <label>Job Duration</label>
-          </Flex>
-          <Flex align="center" gap="2">
+            <Text as="span">Job Duration</Text>
+          </label>
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--space-2)',
+              cursor: 'pointer',
+            }}
+            onClick={(e) => {
+              e.preventDefault()
+              toggleFilter('program')
+            }}
+          >
             <Checkbox
               checked={selectedFilters.has('program')}
               onCheckedChange={() => toggleFilter('program')}
             />
-            <label>Program</label>
-          </Flex>
-          <Flex align="center" gap="2">
+            <Text as="span">Program</Text>
+          </label>
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--space-2)',
+              cursor: 'pointer',
+            }}
+            onClick={(e) => {
+              e.preventDefault()
+              toggleFilter('equipment')
+            }}
+          >
             <Checkbox
               checked={selectedFilters.has('equipment')}
               onCheckedChange={() => toggleFilter('equipment')}
             />
-            <label>Equipment</label>
-          </Flex>
-          <Flex align="center" gap="2">
+            <Text as="span">Equipment</Text>
+          </label>
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--space-2)',
+              cursor: 'pointer',
+            }}
+            onClick={(e) => {
+              e.preventDefault()
+              toggleFilter('crew')
+            }}
+          >
             <Checkbox
               checked={selectedFilters.has('crew')}
               onCheckedChange={() => toggleFilter('crew')}
             />
-            <label>Crew</label>
-          </Flex>
-          <Flex align="center" gap="2">
+            <Text as="span">Crew</Text>
+          </label>
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--space-2)',
+              cursor: 'pointer',
+            }}
+            onClick={(e) => {
+              e.preventDefault()
+              toggleFilter('transport')
+            }}
+          >
             <Checkbox
               checked={selectedFilters.has('transport')}
               onCheckedChange={() => toggleFilter('transport')}
             />
-            <label>Transport</label>
-          </Flex>
+            <Text as="span">Transport</Text>
+          </label>
         </Flex>
       </Box>
 

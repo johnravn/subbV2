@@ -774,8 +774,10 @@ export type Database = {
           id: string
           job_id: string
           mime_type: string | null
+          note: string | null
           path: string
           size_bytes: number | null
+          title: string | null
           uploaded_by_user_id: string | null
         }
         Insert: {
@@ -784,8 +786,10 @@ export type Database = {
           id?: string
           job_id: string
           mime_type?: string | null
+          note?: string | null
           path: string
           size_bytes?: number | null
+          title?: string | null
           uploaded_by_user_id?: string | null
         }
         Update: {
@@ -794,8 +798,10 @@ export type Database = {
           id?: string
           job_id?: string
           mime_type?: string | null
+          note?: string | null
           path?: string
           size_bytes?: number | null
+          title?: string | null
           uploaded_by_user_id?: string | null
         }
         Relationships: [
@@ -970,6 +976,270 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      matter_files: {
+        Row: {
+          created_at: string
+          filename: string
+          id: string
+          matter_id: string
+          mime_type: string | null
+          note: string | null
+          path: string
+          size_bytes: number | null
+          title: string | null
+          uploaded_by_user_id: string
+        }
+        Insert: {
+          created_at?: string
+          filename: string
+          id?: string
+          matter_id: string
+          mime_type?: string | null
+          note?: string | null
+          path: string
+          size_bytes?: number | null
+          title?: string | null
+          uploaded_by_user_id: string
+        }
+        Update: {
+          created_at?: string
+          filename?: string
+          id?: string
+          matter_id?: string
+          mime_type?: string | null
+          note?: string | null
+          path?: string
+          size_bytes?: number | null
+          title?: string | null
+          uploaded_by_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "matter_files_matter_id_fkey"
+            columns: ["matter_id"]
+            isOneToOne: false
+            referencedRelation: "matters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matter_files_uploaded_by_user_id_fkey"
+            columns: ["uploaded_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      matter_messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          matter_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          matter_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          matter_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "matter_messages_matter_id_fkey"
+            columns: ["matter_id"]
+            isOneToOne: false
+            referencedRelation: "matters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matter_messages_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      matter_recipients: {
+        Row: {
+          created_at: string
+          id: string
+          matter_id: string
+          responded_at: string | null
+          status: Database["public"]["Enums"]["matter_recipient_status"]
+          user_id: string
+          viewed_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          matter_id: string
+          responded_at?: string | null
+          status?: Database["public"]["Enums"]["matter_recipient_status"]
+          user_id: string
+          viewed_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          matter_id?: string
+          responded_at?: string | null
+          status?: Database["public"]["Enums"]["matter_recipient_status"]
+          user_id?: string
+          viewed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "matter_recipients_matter_id_fkey"
+            columns: ["matter_id"]
+            isOneToOne: false
+            referencedRelation: "matters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matter_recipients_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      matter_responses: {
+        Row: {
+          created_at: string
+          id: string
+          matter_id: string
+          response: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          matter_id: string
+          response: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          matter_id?: string
+          response?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "matter_responses_matter_id_fkey"
+            columns: ["matter_id"]
+            isOneToOne: false
+            referencedRelation: "matters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matter_responses_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      matters: {
+        Row: {
+          allow_custom_responses: boolean
+          company_id: string
+          content: string | null
+          created_at: string
+          created_by_user_id: string
+          id: string
+          is_anonymous: boolean
+          job_id: string | null
+          matter_type: Database["public"]["Enums"]["matter_type"]
+          time_period_id: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          allow_custom_responses?: boolean
+          company_id: string
+          content?: string | null
+          created_at?: string
+          created_by_user_id: string
+          id?: string
+          is_anonymous?: boolean
+          job_id?: string | null
+          matter_type?: Database["public"]["Enums"]["matter_type"]
+          time_period_id?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          allow_custom_responses?: boolean
+          company_id?: string
+          content?: string | null
+          created_at?: string
+          created_by_user_id?: string
+          id?: string
+          is_anonymous?: boolean
+          job_id?: string | null
+          matter_type?: Database["public"]["Enums"]["matter_type"]
+          time_period_id?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "matters_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matters_created_by_user_id_fkey"
+            columns: ["created_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "matters_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matters_time_period_id_fkey"
+            columns: ["time_period_id"]
+            isOneToOne: false
+            referencedRelation: "time_periods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matters_time_period_id_fkey"
+            columns: ["time_period_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_detail"
+            referencedColumns: ["next_reservation_id"]
           },
         ]
       }
@@ -2074,6 +2344,14 @@ export type Database = {
         | "canceled"
         | "invoiced"
         | "paid"
+      matter_recipient_status:
+        | "pending"
+        | "sent"
+        | "viewed"
+        | "responded"
+        | "declined"
+        | "accepted"
+      matter_type: "crew_invite" | "vote" | "announcement" | "chat"
       reservation_source_kind: "direct" | "group"
       reservation_status:
         | "tentative"
@@ -2230,6 +2508,15 @@ export const Constants = {
         "invoiced",
         "paid",
       ],
+      matter_recipient_status: [
+        "pending",
+        "sent",
+        "viewed",
+        "responded",
+        "declined",
+        "accepted",
+      ],
+      matter_type: ["crew_invite", "vote", "announcement", "chat"],
       reservation_source_kind: ["direct", "group"],
       reservation_status: [
         "tentative",

@@ -1,79 +1,75 @@
 // src/shared/auth/useAuthz.ts
-import * as React from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@shared/api/supabase'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { capabilitiesFor } from './permissions'
 import type { CapabilitySet, CompanyRole } from './permissions'
 
-type State = {
-  loading: boolean
+type AuthzData = {
   isGlobalSuperuser: boolean
   companyRole: CompanyRole | null
   caps: CapabilitySet
   userId: string | null
 }
 
-export function useAuthz(): State {
+export function useAuthz() {
   const { companyId } = useCompany()
-  const [state, setState] = React.useState<State>({
-    loading: true,
-    isGlobalSuperuser: false,
-    companyRole: null,
-    caps: new Set(),
-    userId: null,
+
+  // Get user from shared query cache
+  const { data: user } = useQuery({
+    queryKey: ['auth', 'user'],
+    queryFn: async () => {
+      const { data } = await supabase.auth.getUser()
+      return data.user ?? null
+    },
   })
+  const userId = user?.id ?? null
 
-  React.useEffect(() => {
-    let mounted = true
-    ;(async () => {
-      const { data: userRes } = await supabase.auth.getUser()
-      const user = userRes.user ?? null
-      const userId = user?.id ?? null
-
+  // Fetch authorization data
+  const { data, isLoading } = useQuery<AuthzData>({
+    queryKey: ['authz', userId, companyId],
+    enabled: !!userId,
+    queryFn: async () => {
       let isGlobalSuperuser = false
       let companyRole: CompanyRole | null = null
 
-      if (userId) {
-        // profiles.superuser
-        const { data: prof, error: perr } = await supabase
-          .from('profiles')
-          .select('superuser')
-          .eq('user_id', userId)
+      // profiles.superuser
+      const { data: prof, error: perr } = await supabase
+        .from('profiles')
+        .select('superuser')
+        .eq('user_id', userId!)
+        .maybeSingle()
+
+      if (!perr && prof) isGlobalSuperuser = !!prof.superuser
+
+      // company role for current company
+      if (companyId) {
+        const { data: cu, error: cerr } = await supabase
+          .from('company_users')
+          .select('role')
+          .eq('user_id', userId!)
+          .eq('company_id', companyId)
           .maybeSingle()
 
-        if (!perr && prof) isGlobalSuperuser = !!prof.superuser
-
-        // company role for current company
-        if (companyId) {
-          const { data: cu, error: cerr } = await supabase
-            .from('company_users')
-            .select('role')
-            .eq('user_id', userId)
-            .eq('company_id', companyId)
-            .maybeSingle()
-
-          if (!cerr && cu?.role) companyRole = cu.role as CompanyRole
-        }
+        if (!cerr && cu?.role) companyRole = cu.role as CompanyRole
       }
 
       const caps = capabilitiesFor({ isGlobalSuperuser, companyRole })
 
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      if (mounted) {
-        setState({
-          loading: false,
-          isGlobalSuperuser,
-          companyRole,
-          caps,
-          userId,
-        })
+      return {
+        isGlobalSuperuser,
+        companyRole,
+        caps,
+        userId,
       }
-    })()
+    },
+  })
 
-    return () => {
-      mounted = false
-    }
-  }, [companyId])
-
-  return state
+  return {
+    loading: isLoading,
+    isGlobalSuperuser: data?.isGlobalSuperuser ?? false,
+    companyRole: data?.companyRole ?? null,
+    caps: data?.caps ?? new Set(),
+    userId: data?.userId ?? null,
+  }
 }

@@ -20,10 +20,15 @@ import timeGridPlugin from '@fullcalendar/timegrid'
 import listPlugin from '@fullcalendar/list'
 import interactionPlugin from '@fullcalendar/interaction'
 import { Calendar, List } from 'iconoir-react'
+import { useNavigate } from '@tanstack/react-router'
 import { supabase } from '@shared/api/supabase'
 import { applyCalendarFilter } from './domain'
 import type { CalendarFilter, CalendarKind } from './domain'
-import type { EventContentArg, EventInput } from '@fullcalendar/core'
+import type {
+  EventClickArg,
+  EventContentArg,
+  EventInput,
+} from '@fullcalendar/core'
 
 type Props = {
   events: Array<EventInput>
@@ -57,6 +62,7 @@ export default function CompanyCalendarPro({
   initialListMode = false,
   onListModeChange,
 }: Props) {
+  const navigate = useNavigate()
   // UI state
   const [kinds, setKinds] = React.useState<Array<CalendarKind>>(defaultKinds)
   const [scopeKind, setScopeKind] = React.useState<'none' | CalendarKind>(
@@ -117,6 +123,44 @@ export default function CompanyCalendarPro({
   }, [events, kinds, scope, query, hideCreateButton])
 
   // Removed handleSelect and handleEventClick - no prompts needed
+
+  // Map event category to job tab
+  function getTabForCategory(
+    category?: 'program' | 'equipment' | 'crew' | 'transport' | null,
+  ): string {
+    switch (category) {
+      case 'equipment':
+        return 'equipment'
+      case 'crew':
+        return 'crew'
+      case 'transport':
+        return 'transport'
+      case 'program':
+      default:
+        return 'calendar'
+    }
+  }
+
+  // Handle calendar event clicks - navigate to job with appropriate tab
+  function handleEventClick(arg: EventClickArg) {
+    const extendedProps = arg.event.extendedProps as any
+    const jobId = extendedProps?.ref?.jobId as string | undefined
+    const category = extendedProps?.category as
+      | 'program'
+      | 'equipment'
+      | 'crew'
+      | 'transport'
+      | null
+      | undefined
+
+    if (jobId) {
+      const tab = getTabForCategory(category)
+      navigate({
+        to: '/jobs',
+        search: { jobId, tab },
+      })
+    }
+  }
 
   // Helper function for initials
   function getInitials(displayOrEmail: string | null): string {
@@ -422,7 +466,7 @@ export default function CompanyCalendarPro({
           selectable={false}
           editable={false}
           select={undefined}
-          eventClick={undefined}
+          eventClick={handleEventClick}
           eventContent={renderEvent}
           events={filtered.map((event) => {
             const category = (event.extendedProps as any)?.category
@@ -449,10 +493,16 @@ export default function CompanyCalendarPro({
           headerToolbar={{
             start: 'prev,next today',
             center: 'title',
-            end: 'listDay,listWeek,listMonth',
+            end: 'listMonth,listWeek,listDay',
+          }}
+          buttonText={{
+            listMonth: 'month',
+            listWeek: 'week',
+            listDay: 'day',
           }}
           timeZone="Europe/Oslo"
           locale={enLocale}
+          eventClick={handleEventClick}
           eventContent={renderEvent}
           events={filtered.map((event) => {
             const eventCategory = (event.extendedProps as any)?.category
@@ -468,22 +518,6 @@ export default function CompanyCalendarPro({
           height="auto"
           noEventsContent="No bookings found"
         />
-      )}
-
-      {/* Optional create button for mobile-only flows */}
-      {!hideCreateButton && (
-        <Flex justify="end" mt="2">
-          <Button
-            onClick={() => {
-              const title = window.prompt('New booking title?')
-              if (!title) return
-              const start = new Date().toISOString().slice(0, 16)
-              onCreate?.({ title, start, allDay: false })
-            }}
-          >
-            Create booking
-          </Button>
-        </Flex>
       )}
     </Box>
   )

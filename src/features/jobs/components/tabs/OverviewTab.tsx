@@ -214,15 +214,17 @@ function KV({ label, children }: { label: string; children: React.ReactNode }) {
 }
 
 function fmt(iso?: string | null) {
-  return iso
-    ? new Date(iso).toLocaleString(undefined, {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : '—'
+  if (!iso) return '—'
+  const d = new Date(iso)
+  const hours = String(d.getHours()).padStart(2, '0')
+  const minutes = String(d.getMinutes()).padStart(2, '0')
+  return (
+    d.toLocaleString(undefined, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }) + ` ${hours}:${minutes}`
+  )
 }
 
 function MapWithSkeleton({ query, zoom }: { query: string; zoom?: number }) {

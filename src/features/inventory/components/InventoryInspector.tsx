@@ -128,13 +128,18 @@ export default function InventoryInspector({ id }: { id: string | null }) {
   const entry = data
   const fmtDate = (iso?: string | null) =>
     iso
-      ? new Date(iso).toLocaleString(undefined, {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-        })
+      ? (() => {
+          const d = new Date(iso)
+          const hours = String(d.getHours()).padStart(2, '0')
+          const minutes = String(d.getMinutes()).padStart(2, '0')
+          return (
+            d.toLocaleString(undefined, {
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+            }) + ` ${hours}:${minutes}`
+          )
+        })()
       : '—'
 
   // Build initialData we’ll feed into the dialogs in edit mode

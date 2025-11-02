@@ -16,15 +16,12 @@ import { NAV, Sidebar } from './Sidebar'
 
 export default function AppShell() {
   const [open, setOpen] = React.useState(true)
-  const [userName, setUserName] = React.useState<string | null>(null)
   const routerState = useRouterState()
   const currentPath = routerState.location.pathname
   const isMobile = useMediaQuery('(max-width: 768px)')
   const navigate = useNavigate()
 
-  // keep your existing `const [userName, setUserName] = React.useState<string | null>(null)` if you still need it for anything else,
-  // but we’ll rely on the profile data below.
-
+  // Get user from shared query (already fetched by CompanyProvider)
   const { data: authUser } = useQuery({
     queryKey: ['auth', 'user'],
     queryFn: async () => {
@@ -68,16 +65,6 @@ export default function AppShell() {
   React.useEffect(() => {
     if (isMobile) setOpen(false)
   }, [isMobile])
-
-  React.useEffect(() => {
-    async function fetchUser() {
-      const { data } = await supabase.auth.getUser()
-      if (data.user) {
-        setUserName(data.user.user_metadata.uid || data.user.email) // FIX THIS LATER
-      }
-    }
-    fetchUser()
-  }, [])
 
   async function handleLogout() {
     await supabase.auth.signOut()

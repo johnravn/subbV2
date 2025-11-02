@@ -12,6 +12,8 @@ import {
 } from '@radix-ui/themes'
 import { supabase } from '@shared/api/supabase'
 import { Mail, NavArrowDown, NavArrowRight, Plus } from 'iconoir-react'
+import { sendCrewInvites } from '../../../matters/api/queries'
+import { useToast } from '@shared/ui/toast/ToastProvider'
 import AddRoleDialog from '../dialogs/AddRoleDialog'
 import AddCrewToRoleDialog from '../dialogs/AddCrewToRoleDialog'
 import ConfirmStatusChangeDialog from '../dialogs/ConfirmStatusChangeDialog'
@@ -41,6 +43,7 @@ export default function CrewTab({
   } | null>(null)
 
   const qc = useQueryClient()
+  const { success, error: toastError } = useToast()
   const { data } = useQuery({
     queryKey: ['jobs.crew', jobId],
     queryFn: async () => {
@@ -166,6 +169,24 @@ export default function CrewTab({
       status: statusChangeConfirm.newStatus,
     })
   }
+
+  const sendInvites = useMutation({
+    mutationFn: async (timePeriodId: string) => {
+      await sendCrewInvites(jobId, timePeriodId, companyId)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['jobs.crew', jobId] })
+      qc.invalidateQueries({ queryKey: ['jobs', jobId, 'time_periods'] })
+      qc.invalidateQueries({ queryKey: ['matters'] })
+      success('Success', 'Invitations sent and matter created')
+    },
+    onError: (e: any) => {
+      toastError(
+        'Failed to send invitations',
+        e?.message || 'Please try again.',
+      )
+    },
+  })
 
   // Group roles by category
   const groupedRoles = React.useMemo(() => {
@@ -350,6 +371,25 @@ export default function CrewTab({
                             <Text size="2" weight="medium">
                               Crew ({roleCrew.length})
                             </Text>
+                            {roleCrew.filter((c) => c.status === 'planned')
+                              .length > 0 && (
+                              <Button
+                                size="1"
+                                variant="soft"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  sendInvites.mutate(role.id)
+                                }}
+                                disabled={sendInvites.isPending}
+                              >
+                                <Mail width={14} height={14} /> Send invite (
+                                {
+                                  roleCrew.filter((c) => c.status === 'planned')
+                                    .length
+                                }
+                                )
+                              </Button>
+                            )}
                           </Flex>
                           {roleCrew.length === 0 && (
                             <Text size="2" color="gray">
@@ -537,13 +577,15 @@ export default function CrewTab({
 }
 
 function fmt(iso?: string | null) {
-  return iso
-    ? new Date(iso).toLocaleString(undefined, {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : '—'
+  if (!iso) return '—'
+  const d = new Date(iso)
+  const hours = String(d.getHours()).padStart(2, '0')
+  const minutes = String(d.getMinutes()).padStart(2, '0')
+  return (
+    d.toLocaleString(undefined, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }) + ` ${hours}:${minutes}`
+  )
 }

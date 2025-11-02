@@ -8,7 +8,6 @@ import {
   Heading,
   SegmentedControl,
   Table,
-  Tabs,
   Text,
   TextField,
 } from '@radix-ui/themes'
@@ -31,6 +30,7 @@ export default function EquipmentTab({ jobId }: { jobId: string }) {
   const [bookItemsOpen, setBookItemsOpen] = React.useState(false)
   const [editMode, setEditMode] = React.useState(false)
   const [externalEditMode, setExternalEditMode] = React.useState(false)
+  const [view, setView] = React.useState<'internal' | 'external'>('internal')
   const { companyId } = useCompany()
   const canBook = !!companyId
   const timePeriodId: string | null = null
@@ -78,41 +78,48 @@ export default function EquipmentTab({ jobId }: { jobId: string }) {
 
   return (
     <Box>
-      <Tabs.Root defaultValue="internal">
-        <Tabs.List mb="3">
-          <Tabs.Trigger value="internal">Internal equipment</Tabs.Trigger>
-          <Tabs.Trigger value="external">External equipment</Tabs.Trigger>
-        </Tabs.List>
+      <Flex mb="3" justify="between" align="center">
+        <SegmentedControl.Root
+          value={view}
+          onValueChange={(v) => setView(v as 'internal' | 'external')}
+        >
+          <SegmentedControl.Item value="internal">
+            Internal equipment
+          </SegmentedControl.Item>
+          <SegmentedControl.Item value="external">
+            External equipment
+          </SegmentedControl.Item>
+        </SegmentedControl.Root>
+      </Flex>
 
-        {/* INTERNAL TAB */}
-        <Tabs.Content value="internal">
-          <InternalEquipmentTable
-            rows={data?.internal ?? []}
-            jobId={jobId}
-            canBook={canBook}
-            companyId={companyId ?? undefined}
-            bookItemsOpen={bookItemsOpen}
-            setBookItemsOpen={setBookItemsOpen}
-            editMode={editMode}
-            setEditMode={setEditMode}
-          />
-        </Tabs.Content>
+      {/* INTERNAL VIEW */}
+      {view === 'internal' && (
+        <InternalEquipmentTable
+          rows={data?.internal ?? []}
+          jobId={jobId}
+          canBook={canBook}
+          companyId={companyId ?? undefined}
+          bookItemsOpen={bookItemsOpen}
+          setBookItemsOpen={setBookItemsOpen}
+          editMode={editMode}
+          setEditMode={setEditMode}
+        />
+      )}
 
-        {/* EXTERNAL TAB */}
-        <Tabs.Content value="external">
-          <ExternalEquipmentTable
-            rows={data?.external ?? []}
-            canBook={canBook}
-            jobId={jobId}
-            companyId={companyId}
-            bookItemsOpen={bookItemsOpen}
-            setBookItemsOpen={setBookItemsOpen}
-            timePeriodId={timePeriodId}
-            editMode={externalEditMode}
-            setEditMode={setExternalEditMode}
-          />
-        </Tabs.Content>
-      </Tabs.Root>
+      {/* EXTERNAL VIEW */}
+      {view === 'external' && (
+        <ExternalEquipmentTable
+          rows={data?.external ?? []}
+          canBook={canBook}
+          jobId={jobId}
+          companyId={companyId}
+          bookItemsOpen={bookItemsOpen}
+          setBookItemsOpen={setBookItemsOpen}
+          timePeriodId={timePeriodId}
+          editMode={externalEditMode}
+          setEditMode={setExternalEditMode}
+        />
+      )}
     </Box>
   )
 }
@@ -651,16 +658,23 @@ function ExternalEquipmentTable({
           const noteChanged = editedNote !== currentNote
 
           return (
-            <Box key={ownerId} mb="4">
+            <Box
+              key={ownerId}
+              mb="4"
+              style={{
+                border: '1px solid var(--gray-a5)',
+                borderRadius: 8,
+                overflow: 'hidden',
+                background: 'var(--gray-a1)',
+              }}
+            >
               {/* Owner Header */}
               <Box
-                mb="2"
                 p="3"
                 style={{
-                  background: 'var(--blue-a2)',
-                  border: '1px solid var(--blue-a5)',
-                  borderRadius: 8,
+                  background: 'var(--gray-a2)',
                   cursor: 'pointer',
+                  borderBottom: isExpanded ? '1px solid var(--gray-a5)' : 'none',
                 }}
                 onClick={() => toggleOwner(ownerId)}
               >
@@ -693,12 +707,10 @@ function ExternalEquipmentTable({
               {/* Expanded Details */}
               {isExpanded && (
                 <Box
-                  mb="2"
                   p="3"
                   style={{
-                    background: 'var(--gray-a2)',
-                    border: '1px solid var(--gray-a5)',
-                    borderRadius: 8,
+                    background: 'var(--gray-a1)',
+                    borderTop: '1px solid var(--gray-a4)',
                   }}
                 >
                   <Flex direction="column" gap="3">
@@ -761,90 +773,90 @@ function ExternalEquipmentTable({
                         )}
                       </TextField.Root>
                     </Box>
+
+                    {/* Items Table */}
+                    <Box mt="3">
+                      <Table.Root variant="surface">
+                        <Table.Header>
+                          <Table.Row>
+                            <Table.ColumnHeaderCell>Item</Table.ColumnHeaderCell>
+                            <Table.ColumnHeaderCell>Qty</Table.ColumnHeaderCell>
+                            <Table.ColumnHeaderCell>Price</Table.ColumnHeaderCell>
+                            {editMode && <Table.ColumnHeaderCell />}
+                          </Table.Row>
+                        </Table.Header>
+                        <Table.Body>
+                          {ownerItems.map((r: ReservedItemRow) => {
+                            const rowItem = firstItem(r.item) as any
+                            const price = rowItem?.price ?? 0
+                            return (
+                              <Table.Row key={r.id}>
+                                <Table.Cell>{rowItem?.name ?? '—'}</Table.Cell>
+                                <Table.Cell>
+                                  {editMode ? (
+                                    <Box
+                                      style={{
+                                        display: 'flex',
+                                        gap: 4,
+                                        alignItems: 'center',
+                                      }}
+                                    >
+                                      <TextField.Root
+                                        type="number"
+                                        min="1"
+                                        value={String(
+                                          editingQty?.id === r.id
+                                            ? editingQty.value
+                                            : r.quantity,
+                                        )}
+                                        onChange={(e) =>
+                                          setEditingQty({
+                                            id: r.id,
+                                            value: Math.max(
+                                              1,
+                                              Number(e.target.value || 1),
+                                            ),
+                                          })
+                                        }
+                                        style={{ width: 80 }}
+                                      />
+                                      {editingQty?.id === r.id && (
+                                        <Button
+                                          size="1"
+                                          variant="soft"
+                                          onClick={() =>
+                                            handleSaveQty(r.id, editingQty.value)
+                                          }
+                                        >
+                                          <Check width={14} height={14} />
+                                        </Button>
+                                      )}
+                                    </Box>
+                                  ) : (
+                                    r.quantity
+                                  )}
+                                </Table.Cell>
+                                <Table.Cell>{formatNOK(price)}</Table.Cell>
+                                {editMode && (
+                                  <Table.Cell align="right">
+                                    <Button
+                                      size="1"
+                                      variant="soft"
+                                      color="red"
+                                      onClick={() => handleDelete(r.id)}
+                                    >
+                                      <Trash width={14} height={14} />
+                                    </Button>
+                                  </Table.Cell>
+                                )}
+                              </Table.Row>
+                            )
+                          })}
+                        </Table.Body>
+                      </Table.Root>
+                    </Box>
                   </Flex>
                 </Box>
-              )}
-
-              {/* Items Table - Only show when expanded */}
-              {isExpanded && (
-                <Table.Root variant="surface">
-                  <Table.Header>
-                    <Table.Row>
-                      <Table.ColumnHeaderCell>Item</Table.ColumnHeaderCell>
-                      <Table.ColumnHeaderCell>Qty</Table.ColumnHeaderCell>
-                      <Table.ColumnHeaderCell>Price</Table.ColumnHeaderCell>
-                      {editMode && <Table.ColumnHeaderCell />}
-                    </Table.Row>
-                  </Table.Header>
-                  <Table.Body>
-                    {ownerItems.map((r: ReservedItemRow) => {
-                      const rowItem = firstItem(r.item) as any
-                      const price = rowItem?.price ?? 0
-                      return (
-                        <Table.Row key={r.id}>
-                          <Table.Cell>{rowItem?.name ?? '—'}</Table.Cell>
-                          <Table.Cell>
-                            {editMode ? (
-                              <Box
-                                style={{
-                                  display: 'flex',
-                                  gap: 4,
-                                  alignItems: 'center',
-                                }}
-                              >
-                                <TextField.Root
-                                  type="number"
-                                  min="1"
-                                  value={String(
-                                    editingQty?.id === r.id
-                                      ? editingQty.value
-                                      : r.quantity,
-                                  )}
-                                  onChange={(e) =>
-                                    setEditingQty({
-                                      id: r.id,
-                                      value: Math.max(
-                                        1,
-                                        Number(e.target.value || 1),
-                                      ),
-                                    })
-                                  }
-                                  style={{ width: 80 }}
-                                />
-                                {editingQty?.id === r.id && (
-                                  <Button
-                                    size="1"
-                                    variant="soft"
-                                    onClick={() =>
-                                      handleSaveQty(r.id, editingQty.value)
-                                    }
-                                  >
-                                    <Check width={14} height={14} />
-                                  </Button>
-                                )}
-                              </Box>
-                            ) : (
-                              r.quantity
-                            )}
-                          </Table.Cell>
-                          <Table.Cell>{formatNOK(price)}</Table.Cell>
-                          {editMode && (
-                            <Table.Cell align="right">
-                              <Button
-                                size="1"
-                                variant="soft"
-                                color="red"
-                                onClick={() => handleDelete(r.id)}
-                              >
-                                <Trash width={14} height={14} />
-                              </Button>
-                            </Table.Cell>
-                          )}
-                        </Table.Row>
-                      )
-                    })}
-                  </Table.Body>
-                </Table.Root>
               )}
             </Box>
           )
