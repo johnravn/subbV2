@@ -142,6 +142,9 @@ const mattersRoute = createRoute({
 const companyRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: 'company',
+  validateSearch: (search: Record<string, unknown>) => ({
+    tab: (search.tab as string | undefined) || undefined,
+  }),
   component: guarded('visit:company', CompanyPage),
 })
 

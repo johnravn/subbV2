@@ -13,6 +13,7 @@ import {
 import { supabase } from '@shared/api/supabase'
 import { prettyPhone } from '@shared/phone/phone'
 import { useToast } from '@shared/ui/toast/ToastProvider'
+import { useAuthz } from '@shared/auth/useAuthz'
 import { CopyIconButton } from '@shared/lib/CopyIconButton'
 import { Edit, NavArrowDown, Plus, Trash } from 'iconoir-react'
 import AddContactDialog, {
@@ -26,6 +27,8 @@ export default function ContactsTab({
   jobId: string
   companyId: string
 }) {
+  const { companyRole } = useAuthz()
+  const isReadOnly = companyRole === 'freelancer'
   const qc = useQueryClient()
   const { success, error: toastError } = useToast()
   const [addOpen, setAddOpen] = React.useState(false)
@@ -42,6 +45,32 @@ export default function ContactsTab({
   const [expandedContactId, setExpandedContactId] = React.useState<
     string | null
   >(null)
+
+  // Fetch project lead
+  const { data: projectLeadData } = useQuery({
+    queryKey: ['jobs.project-lead', jobId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('jobs')
+        .select(
+          `project_lead_user_id, project_lead:project_lead_user_id ( user_id, display_name, email, phone )`,
+        )
+        .eq('id', jobId)
+        .maybeSingle()
+      if (error) throw error
+      return data as {
+        project_lead_user_id: string | null
+        project_lead?: {
+          user_id: string
+          display_name: string | null
+          email: string
+          phone: string | null
+        } | null
+      } | null
+    },
+    enabled: !!jobId,
+  })
+
   const { data } = useQuery({
     queryKey: ['jobs.contacts', jobId],
     queryFn: async () => {
@@ -110,9 +139,11 @@ export default function ContactsTab({
         }}
       >
         <Heading size="3">Contacts</Heading>
-        <Button size="2" onClick={() => setAddOpen(true)}>
-          <Plus /> Add contact
-        </Button>
+        {!isReadOnly && (
+          <Button size="2" onClick={() => setAddOpen(true)}>
+            <Plus /> Add contact
+          </Button>
+        )}
 
         <AddContactDialog
           open={addOpen}
@@ -133,6 +164,81 @@ export default function ContactsTab({
       </div>
 
       <Heading size="2" mb="2">
+        Project lead
+      </Heading>
+      {projectLeadData?.project_lead ? (
+        <Box
+          p="3"
+          mb="4"
+          style={{
+            border: '1px solid var(--gray-a6)',
+            borderRadius: 8,
+            background: 'var(--gray-a2)',
+          }}
+        >
+          <Grid columns="2" gap="3">
+            <Box>
+              <Flex direction="column" gap="0">
+
+              <Text size="1" color="gray" mb="1">
+                Name
+              </Text>
+              <Text size="2" weight="medium">
+                {projectLeadData.project_lead.display_name ?? '—'}
+              </Text>
+              </Flex>
+            </Box>
+            <Box>
+              <Flex direction="column" gap="0">
+
+              <Text size="1" color="gray" mb="1">
+                Email
+              </Text>
+              {projectLeadData.project_lead.email ? (
+                <a
+                href={`mailto:${projectLeadData.project_lead.email}`}
+                style={{
+                  color: 'inherit',
+                  textDecoration: 'none',
+                }}
+                >
+                  <Text size="2">{projectLeadData.project_lead.email}</Text>
+                </a>
+              ) : (
+                <Text size="2">—</Text>
+              )}
+              </Flex>
+            </Box>
+            {projectLeadData.project_lead.phone && (
+              <Box style={{ gridColumn: 'span 2' }}>
+                <Text size="1" color="gray" mb="1">
+                  Phone
+                </Text>
+                <Flex align="center" gap="2">
+                  <a
+                    href={`tel:${projectLeadData.project_lead.phone}`}
+                    style={{
+                      color: 'inherit',
+                      textDecoration: 'none',
+                    }}
+                  >
+                    <Text size="2">
+                      {prettyPhone(projectLeadData.project_lead.phone)}
+                    </Text>
+                  </a>
+                  <CopyIconButton text={projectLeadData.project_lead.phone} />
+                </Flex>
+              </Box>
+            )}
+          </Grid>
+        </Box>
+      ) : (
+        <Text size="2" color="gray" mb="4">
+          No project lead assigned
+        </Text>
+      )}
+
+      <Heading size="2" mb="2" mt="4">
         From job
       </Heading>
       <Table.Root variant="surface">
@@ -254,41 +360,43 @@ export default function ContactsTab({
                             </Box>
                           )}
                         </Grid>
-                        <Flex gap="2" mt="3" justify="end">
-                          <Button
-                            size="2"
-                            variant="soft"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setEditOpen({
-                                link: {
-                                  contact_id: r.contact_id,
-                                  role: r.role,
-                                  notes: r.notes,
-                                },
-                                contact: r.contact,
-                              })
-                            }}
-                          >
-                            <Edit width={16} height={16} /> Edit
-                          </Button>
-                          <Button
-                            size="2"
-                            variant="soft"
-                            color="red"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setPendingDeleteContactId(r.contact_id)
-                              setPendingDeleteContactName(
-                                r.contact?.name ?? 'contact',
-                              )
-                              setDeleteConfirmOpen(true)
-                            }}
-                            disabled={deleteContact.isPending}
-                          >
-                            <Trash width={16} height={16} /> Remove
-                          </Button>
-                        </Flex>
+                        {!isReadOnly && (
+                          <Flex gap="2" mt="3" justify="end">
+                            <Button
+                              size="2"
+                              variant="soft"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setEditOpen({
+                                  link: {
+                                    contact_id: r.contact_id,
+                                    role: r.role,
+                                    notes: r.notes,
+                                  },
+                                  contact: r.contact,
+                                })
+                              }}
+                            >
+                              <Edit width={16} height={16} /> Edit
+                            </Button>
+                            <Button
+                              size="2"
+                              variant="soft"
+                              color="red"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setPendingDeleteContactId(r.contact_id)
+                                setPendingDeleteContactName(
+                                  r.contact?.name ?? 'contact',
+                                )
+                                setDeleteConfirmOpen(true)
+                              }}
+                              disabled={deleteContact.isPending}
+                            >
+                              <Trash width={16} height={16} /> Remove
+                            </Button>
+                          </Flex>
+                        )}
                       </Box>
                     </Table.Cell>
                   </Table.Row>

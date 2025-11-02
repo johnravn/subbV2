@@ -91,6 +91,7 @@ export type Database = {
       }
       companies: {
         Row: {
+          accent_color: string | null
           address: string | null
           contact_person_id: string | null
           created_at: string
@@ -100,6 +101,7 @@ export type Database = {
           vat_number: string | null
         }
         Insert: {
+          accent_color?: string | null
           address?: string | null
           contact_person_id?: string | null
           created_at?: string
@@ -109,6 +111,7 @@ export type Database = {
           vat_number?: string | null
         }
         Update: {
+          accent_color?: string | null
           address?: string | null
           contact_person_id?: string | null
           created_at?: string
@@ -124,6 +127,41 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      company_expansions: {
+        Row: {
+          accounting_api_key_encrypted: string | null
+          accounting_software: string | null
+          company_id: string
+          created_at: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          accounting_api_key_encrypted?: string | null
+          accounting_software?: string | null
+          company_id: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          accounting_api_key_encrypted?: string | null
+          accounting_software?: string | null
+          company_id?: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_expansions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -1167,6 +1205,7 @@ export type Database = {
           allow_custom_responses: boolean
           company_id: string
           content: string | null
+          created_as_company: boolean
           created_at: string
           created_by_user_id: string
           id: string
@@ -1181,6 +1220,7 @@ export type Database = {
           allow_custom_responses?: boolean
           company_id: string
           content?: string | null
+          created_as_company?: boolean
           created_at?: string
           created_by_user_id: string
           id?: string
@@ -1195,6 +1235,7 @@ export type Database = {
           allow_custom_responses?: boolean
           company_id?: string
           content?: string | null
+          created_as_company?: boolean
           created_at?: string
           created_by_user_id?: string
           id?: string
@@ -2264,6 +2305,14 @@ export type Database = {
             Returns: string
           }
       current_company_id: { Args: never; Returns: string }
+      decrypt_api_key: {
+        Args: { p_company_id: string; p_encrypted_key: string }
+        Returns: string
+      }
+      encrypt_api_key: {
+        Args: { p_api_key: string; p_company_id: string }
+        Returns: string
+      }
       ensure_default_reservation: {
         Args: { p_job_id: string }
         Returns: string

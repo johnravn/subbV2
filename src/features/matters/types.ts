@@ -18,6 +18,7 @@ export type Matter = {
   time_period_id: string | null
   is_anonymous: boolean
   allow_custom_responses: boolean
+  created_as_company: boolean
   created_at: string
   updated_at: string
   created_by?: {
@@ -26,9 +27,19 @@ export type Matter = {
     email: string
     avatar_url: string | null
   } | null
+  company?: {
+    id: string
+    name: string
+  } | null
   job?: {
     id: string
     title: string
+    project_lead?: {
+      user_id: string
+      display_name: string | null
+      email: string
+      avatar_url: string | null
+    } | null
   } | null
   time_period?: {
     id: string
@@ -102,6 +113,7 @@ export type CreateMatterInput = {
   recipient_user_ids: Array<string>
   is_anonymous?: boolean
   allow_custom_responses?: boolean
+  created_as_company?: boolean
   files?: Array<File>
 }
 

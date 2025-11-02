@@ -12,7 +12,9 @@ import {
   TextArea,
   TextField,
 } from '@radix-ui/themes'
+import { useNavigate } from '@tanstack/react-router'
 import { useToast } from '@shared/ui/toast/ToastProvider'
+import { useAuthz } from '@shared/auth/useAuthz'
 import { supabase } from '@shared/api/supabase'
 import { Plus } from 'iconoir-react'
 import { partnerCustomersQuery } from '../api/partners'
@@ -65,6 +67,9 @@ export default function AddItemDialog({
 }) {
   const { success, error: toastError } = useToast()
   const qc = useQueryClient()
+  const navigate = useNavigate()
+  const { companyRole } = useAuthz()
+  const isOwner = companyRole === 'owner'
 
   const [form, setForm] = React.useState<FormState>({
     name: '',
@@ -353,7 +358,14 @@ export default function AddItemDialog({
               <Field label="Category">
                 <Select.Root
                   value={form.categoryId ?? undefined}
-                  onValueChange={(v) => set('categoryId', v)}
+                  onValueChange={(v) => {
+                    if (v === '__new_category__') {
+                      navigate({ to: '/company', search: { tab: 'setup' } })
+                      onOpenChange(false)
+                    } else {
+                      set('categoryId', v)
+                    }
+                  }}
                   disabled={loading}
                 >
                   <Select.Trigger
@@ -366,6 +378,14 @@ export default function AddItemDialog({
                           {c.name}
                         </Select.Item>
                       ))}
+                      {isOwner && (
+                        <>
+                          <Select.Separator />
+                          <Select.Item value="__new_category__">
+                            + New category
+                          </Select.Item>
+                        </>
+                      )}
                     </Select.Group>
                   </Select.Content>
                 </Select.Root>

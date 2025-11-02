@@ -14,13 +14,14 @@ import {
   TextField,
 } from '@radix-ui/themes'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Edit, NavArrowDown, NavArrowRight, Plus, Trash } from 'iconoir-react'
+import { Edit, NavArrowDown, NavArrowRight, Trash } from 'iconoir-react'
 import {
   jobDetailQuery,
   jobTimePeriodsQuery,
   upsertTimePeriod,
 } from '@features/jobs/api/queries'
 import { useCompany } from '@shared/companies/CompanyProvider'
+import { useAuthz } from '@shared/auth/useAuthz'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import DateTimePicker from '@shared/ui/components/DateTimePicker'
 import { supabase } from '@shared/api/supabase'
@@ -39,31 +40,45 @@ const JOB_STATUS_ORDER: Array<JobStatus> = [
   'paid',
 ]
 
+// Helper function to mask status for freelancers
+function getDisplayStatus(
+  status: JobStatus,
+  companyRole: string | null,
+): JobStatus {
+  if (companyRole === 'freelancer') {
+    // Freelancers should not see statuses beyond 'completed'
+    if (status === 'invoiced' || status === 'paid') {
+      return 'completed'
+    }
+  }
+  return status
+}
+
 export default function TimelineTab({ jobId }: { jobId: string }) {
   const { data: job } = useQuery(jobDetailQuery({ jobId }))
+  const { companyRole } = useAuthz()
+  const isReadOnly = companyRole === 'freelancer'
 
   if (!job) return <Text>Loading...</Text>
 
   return (
     <Box>
-      {/* Job Status Timeline */}
-      <Card mb="4">
-        <Heading size="3" mb="3">
-          Job Status
-        </Heading>
-        <JobStatusTimeline jobId={jobId} currentStatus={job.status} />
-      </Card>
+      {/* Job Status Timeline - Hidden for freelancers */}
+      {!isReadOnly && (
+        <Card mb="4">
+          <Heading size="3" mb="3">
+            Job Status
+          </Heading>
+          <JobStatusTimeline jobId={jobId} currentStatus={job.status} />
+        </Card>
+      )}
 
       {/* Time Periods Management */}
       <Card>
         <Heading size="3" mb="3">
           Time Periods
         </Heading>
-        <TimePeriodsManager
-          jobId={jobId}
-          defaultStartAt={job.start_at}
-          defaultEndAt={job.end_at}
-        />
+        <TimePeriodsManager jobId={jobId} />
       </Card>
     </Box>
   )
@@ -78,8 +93,10 @@ function JobStatusTimeline({
 }) {
   const qc = useQueryClient()
   const { success, error } = useToast()
-  const currentIndex = JOB_STATUS_ORDER.indexOf(currentStatus)
-  const isCanceled = currentStatus === 'canceled'
+  const { companyRole } = useAuthz()
+  const displayStatus = getDisplayStatus(currentStatus, companyRole)
+  const currentIndex = JOB_STATUS_ORDER.indexOf(displayStatus)
+  const isCanceled = displayStatus === 'canceled'
   const canceledIndex = JOB_STATUS_ORDER.indexOf('canceled')
 
   const updateStatus = useMutation({
@@ -103,24 +120,34 @@ function JobStatusTimeline({
     },
   })
 
+  // Filter statuses for freelancers - only show up to 'completed'
+  const visibleStatuses = React.useMemo(() => {
+    if (companyRole === 'freelancer') {
+      return JOB_STATUS_ORDER.filter((s) => s !== 'invoiced' && s !== 'paid')
+    }
+    return JOB_STATUS_ORDER
+  }, [companyRole])
+
   return (
     <Box>
       {/* Progress Bar */}
       <Flex direction="column" gap="2" mb="4">
         <Flex align="center" justify="between">
-          {JOB_STATUS_ORDER.map((status, idx) => {
-            const isActive = status === currentStatus
+          {visibleStatuses.map((status, idx) => {
+            const isActive = status === displayStatus
             const isCanceledStatus = status === 'canceled'
             const isPaidStatus = status === 'paid'
             const isInProgressStatus = status === 'in_progress'
+            const originalIndex = JOB_STATUS_ORDER.indexOf(status)
 
             // For non-canceled statuses: past if before current (unless current is canceled)
             // For canceled status: active only when current is canceled
             const isPast =
-              !isCanceledStatus && idx < currentIndex && !isCanceled
+              !isCanceledStatus && originalIndex < currentIndex && !isCanceled
             const isFuture = isCanceledStatus
               ? !isActive
-              : idx > currentIndex || (isCanceled && idx > canceledIndex)
+              : originalIndex > currentIndex ||
+                (isCanceled && originalIndex > canceledIndex)
 
             return (
               <Flex
@@ -130,19 +157,24 @@ function JobStatusTimeline({
                 style={{
                   flex: 1,
                   position: 'relative',
-                  cursor: 'pointer',
+                  cursor: companyRole === 'freelancer' ? 'default' : 'pointer',
                   opacity: updateStatus.isPending ? 0.6 : 1,
+                  pointerEvents: companyRole === 'freelancer' ? 'none' : 'auto',
                 }}
                 onClick={() => {
-                  if (!updateStatus.isPending && status !== currentStatus) {
+                  if (
+                    companyRole !== 'freelancer' &&
+                    !updateStatus.isPending &&
+                    status !== displayStatus
+                  ) {
                     updateStatus.mutate(status)
                   }
                 }}
               >
                 {/* Connector line - skip before canceled to avoid breaking the flow */}
-                {idx < JOB_STATUS_ORDER.length - 1 &&
+                {idx < visibleStatuses.length - 1 &&
                   !isCanceledStatus &&
-                  JOB_STATUS_ORDER[idx + 1] !== 'canceled' && (
+                  visibleStatuses[idx + 1] !== 'canceled' && (
                     <div
                       style={{
                         position: 'absolute',
@@ -213,11 +245,12 @@ function JobStatusTimeline({
                       ✕
                     </Text>
                   )}
-                  {isActive && isPaidStatus && (
-                    <Text size="1" style={{ color: 'white' }}>
-                      ✓
-                    </Text>
-                  )}
+                  {isActive &&
+                    (isPaidStatus || displayStatus === 'completed') && (
+                      <Text size="1" style={{ color: 'white' }}>
+                        ✓
+                      </Text>
+                    )}
                 </Box>
 
                 {/* Status label */}
@@ -230,7 +263,7 @@ function JobStatusTimeline({
                       ? isActive
                         ? 'var(--red-11)'
                         : 'var(--gray-a9)'
-                      : isPaidStatus
+                      : isPaidStatus || status === 'completed'
                         ? isActive
                           ? 'var(--green-11)'
                           : isPast
@@ -268,14 +301,14 @@ function JobStatusTimeline({
           color={
             isCanceled
               ? 'red'
-              : currentStatus === 'paid'
+              : displayStatus === 'paid' || displayStatus === 'completed'
                 ? 'green'
-                : currentStatus === 'in_progress'
+                : displayStatus === 'in_progress'
                   ? 'amber'
                   : 'blue'
           }
         >
-          {makeWordPresentable(currentStatus)}
+          {makeWordPresentable(displayStatus)}
         </Badge>
       </Flex>
 
@@ -290,15 +323,7 @@ function JobStatusTimeline({
   )
 }
 
-function TimePeriodsManager({
-  jobId,
-  defaultStartAt,
-  defaultEndAt,
-}: {
-  jobId: string
-  defaultStartAt: string | null
-  defaultEndAt: string | null
-}) {
+function TimePeriodsManager({ jobId }: { jobId: string }) {
   const qc = useQueryClient()
   const { companyId } = useCompany()
   const { data: timePeriods = [] } = useQuery(jobTimePeriodsQuery({ jobId }))
@@ -588,24 +613,6 @@ function TimePeriodsManager({
           })}
         </Table.Body>
       </Table.Root>
-
-      {/* Add New Button */}
-      <Button
-        size="2"
-        onClick={() =>
-          setEditing({
-            id: '' as any,
-            job_id: jobId,
-            company_id: companyId!,
-            title: '',
-            start_at: defaultStartAt || new Date().toISOString(),
-            end_at:
-              defaultEndAt || new Date(Date.now() + 86400000).toISOString(),
-          } as TimePeriodLite)
-        }
-      >
-        <Plus width={16} height={16} /> Add time period
-      </Button>
 
       {/* Edit Dialog */}
       {editing && (

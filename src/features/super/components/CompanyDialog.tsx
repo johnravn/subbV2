@@ -208,6 +208,7 @@ export default function CompanyDialog({
             ? f.vat_number.replace(/[\s-]/g, '') || null
             : null,
           contact_person_id: f.contact_person_id || null,
+          accent_color: 'indigo', // Default theme color
         })
         .select()
         .single()

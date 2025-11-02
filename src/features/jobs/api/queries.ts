@@ -20,6 +20,8 @@ export function jobsIndexQuery({
   status,
   sortBy = 'start_at',
   sortDir = 'desc',
+  userId,
+  companyRole,
 }: {
   companyId: string
   search: string
@@ -28,6 +30,8 @@ export function jobsIndexQuery({
   status?: string | null
   sortBy?: 'title' | 'start_at' | 'status' | 'customer_name'
   sortDir?: 'asc' | 'desc'
+  userId?: string | null
+  companyRole?: 'owner' | 'employee' | 'freelancer' | 'super_user' | null
 }) {
   return {
     queryKey: [
@@ -40,6 +44,8 @@ export function jobsIndexQuery({
       status,
       sortBy,
       sortDir,
+      userId,
+      companyRole,
     ],
     queryFn: async (): Promise<Array<JobListRow>> => {
       let q = supabase
@@ -58,7 +64,19 @@ export function jobsIndexQuery({
         q = q.eq('customer_id', customerId)
       }
       if (status) {
-        q = q.eq('status', status)
+        q = q.eq(
+          'status',
+          status as
+            | 'draft'
+            | 'planned'
+            | 'requested'
+            | 'confirmed'
+            | 'in_progress'
+            | 'completed'
+            | 'canceled'
+            | 'invoiced'
+            | 'paid',
+        )
       }
 
       // Note: We don't filter server-side when searching because we need to search
@@ -139,6 +157,64 @@ export function jobsIndexQuery({
           const comparison = aName.localeCompare(bName)
           return sortDir === 'asc' ? comparison : -comparison
         })
+      }
+
+      // Filter for freelancers to only show jobs they're part of with accepted status
+      if (companyRole === 'freelancer' && userId) {
+        // Get all time periods for these jobs
+        const jobIds = results.map((j) => j.id)
+
+        if (jobIds.length > 0) {
+          // First, get all time periods for these jobs
+          const { data: timePeriods, error: tpError } = await supabase
+            .from('time_periods')
+            .select('id, job_id')
+            .in('job_id', jobIds)
+
+          if (tpError) throw tpError
+
+          if (timePeriods && timePeriods.length > 0) {
+            // Then get crew reservations for this user in these time periods
+            const timePeriodIds = timePeriods.map((tp) => tp.id)
+
+            const { data: crewRes, error: crewError } = await supabase
+              .from('reserved_crew')
+              .select('time_period_id, status')
+              .eq('user_id', userId)
+              .in('time_period_id', timePeriodIds)
+
+            if (crewError) throw crewError
+
+            // Get unique job IDs where user has accepted crew assignments
+            const acceptedJobIds = new Set<string>()
+            if (crewRes) {
+              crewRes.forEach((c: any) => {
+                if (c.status === 'accepted') {
+                  const tp = timePeriods.find(
+                    (t: any) => t.id === c.time_period_id,
+                  )
+                  if (tp?.job_id) {
+                    acceptedJobIds.add(tp.job_id)
+                  }
+                }
+              })
+            }
+
+            // Filter results to only jobs where freelancer has accepted assignments
+            results = results.filter((job) => {
+              // Exclude canceled jobs
+              if (job.status === 'canceled') return false
+              // Only include jobs where they have accepted assignments
+              return acceptedJobIds.has(job.id)
+            })
+          } else {
+            // No time periods for these jobs
+            results = []
+          }
+        } else {
+          // No jobs, return empty
+          results = []
+        }
       }
 
       return results

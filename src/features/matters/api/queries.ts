@@ -55,10 +55,12 @@ export function mattersIndexQuery(companyId: string) {
           time_period_id,
           is_anonymous,
           allow_custom_responses,
+          created_as_company,
           created_at,
           updated_at,
           created_by:created_by_user_id ( user_id, display_name, email, avatar_url ),
-          job:job_id ( id, title ),
+          company:company_id ( id, name ),
+          job:job_id ( id, title, project_lead:project_lead_user_id ( user_id, display_name, email, avatar_url ) ),
           time_period:time_period_id ( id, title )
         `,
         )
@@ -69,9 +71,15 @@ export function mattersIndexQuery(companyId: string) {
       if (error) throw error
 
       // Filter to only matters where user is creator or recipient
-      const filteredMatters = (allMatters || []).filter(
-        (m) => m.created_by_user_id === user.id || recipientMatterIds.has(m.id),
-      )
+      // For crew_invite matters, only show if user is a recipient (not if they're the creator)
+      const filteredMatters = (allMatters || []).filter((m) => {
+        // For crew_invite, only show if user is a recipient
+        if (m.matter_type === 'crew_invite') {
+          return recipientMatterIds.has(m.id)
+        }
+        // For other matter types, show if user is creator or recipient
+        return m.created_by_user_id === user.id || recipientMatterIds.has(m.id)
+      })
 
       if (filteredMatters.length === 0) return []
 
@@ -109,10 +117,32 @@ export function mattersIndexQuery(companyId: string) {
         )
       }
 
+      // Get my responses for these matters
+      const { data: myResponsesData } = await supabase
+        .from('matter_responses' as any)
+        .select('matter_id, id, response, created_at, updated_at')
+        .eq('user_id', user.id)
+        .in('matter_id', matterIds)
+
+      const myResponseMap = new Map<string, any>()
+      if (myResponsesData) {
+        for (const r of myResponsesData) {
+          myResponseMap.set(r.matter_id as string, {
+            id: r.id,
+            matter_id: r.matter_id,
+            user_id: user.id,
+            response: r.response,
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+          })
+        }
+      }
+
       return filteredMatters.map((m) => ({
         ...m,
         recipient_count: recipientCounts.get(m.id) || 0,
         response_count: responseCounts.get(m.id) || 0,
+        my_response: myResponseMap.get(m.id) || null,
         // Matter is unread if user is a recipient and hasn't viewed it
         // Matters created by user are always considered "read"
         is_unread:
@@ -140,10 +170,12 @@ export function matterDetailQuery(matterId: string) {
           time_period_id,
           is_anonymous,
           allow_custom_responses,
+          created_as_company,
           created_at,
           updated_at,
           created_by:created_by_user_id ( user_id, display_name, email, avatar_url ),
-          job:job_id ( id, title ),
+          company:company_id ( id, name ),
+          job:job_id ( id, title, project_lead:project_lead_user_id ( user_id, display_name, email, avatar_url ) ),
           time_period:time_period_id ( id, title )
         `,
         )
@@ -321,6 +353,7 @@ export async function createMatter(input: CreateMatterInput): Promise<string> {
       time_period_id: input.time_period_id || null,
       is_anonymous: input.is_anonymous ?? false,
       allow_custom_responses: input.allow_custom_responses ?? true,
+      created_as_company: input.created_as_company ?? false,
     })
     .select('id')
     .single()
@@ -329,8 +362,14 @@ export async function createMatter(input: CreateMatterInput): Promise<string> {
   if (!matter) throw new Error('Failed to create matter')
 
   // Create recipients
-  if (input.recipient_user_ids.length > 0) {
-    const recipients = input.recipient_user_ids.map((userId) => ({
+  // For votes, automatically add the creator as a recipient
+  const recipientUserIds = [...input.recipient_user_ids]
+  if (input.matter_type === 'vote' && !recipientUserIds.includes(user.id)) {
+    recipientUserIds.push(user.id)
+  }
+
+  if (recipientUserIds.length > 0) {
+    const recipients = recipientUserIds.map((userId) => ({
       matter_id: matter.id,
       user_id: userId,
       status: 'pending' as const,
@@ -394,7 +433,14 @@ export async function sendCrewInvites(
   jobId: string,
   timePeriodId: string,
   companyId: string,
+  invitationMessage?: string | null,
 ): Promise<string> {
+  // Get current user who is sending the invite (the creator)
+  const {
+    data: { user: currentUser },
+  } = await supabase.auth.getUser()
+  if (!currentUser) throw new Error('Not authenticated')
+
   // Get job info
   const { data: job, error: jobError } = await supabase
     .from('jobs')
@@ -426,7 +472,17 @@ export async function sendCrewInvites(
     throw new Error('No crew members to invite (add crew members first)')
   }
 
-  const userIds = crew.map((c) => c.user_id as string)
+  // Filter out the creator from the recipient list
+  const userIds = crew
+    .map((c) => c.user_id as string)
+    .filter((id) => id !== currentUser.id)
+
+  // Check if there are any recipients after filtering out the creator
+  if (userIds.length === 0) {
+    throw new Error(
+      'No crew members to invite (all crew members are already invited or you are the only crew member)',
+    )
+  }
 
   const roleTitle = timePeriod.title || 'Role'
   const startDate = timePeriod.start_at
@@ -450,6 +506,23 @@ export async function sendCrewInvites(
     recipient_user_ids: userIds,
   })
 
+  // Store invitation message if provided
+  if (invitationMessage) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (user) {
+      const { error: messageError } = await supabase
+        .from('matter_messages' as any)
+        .insert({
+          matter_id: matterId,
+          user_id: user.id,
+          content: invitationMessage.trim(),
+        })
+      if (messageError) throw messageError
+    }
+  }
+
   // Update reserved_crew status to 'requested'
   const { error: updateError } = await supabase
     .from('reserved_crew')
@@ -457,6 +530,155 @@ export async function sendCrewInvites(
     .eq('time_period_id', timePeriodId)
     .eq('status', 'planned')
     .in('user_id', userIds)
+
+  if (updateError) throw updateError
+
+  return matterId
+}
+
+// Helper function to format date in 24-hour format
+function formatDateTime24h(dateString: string): string {
+  const d = new Date(dateString)
+  const day = String(d.getDate()).padStart(2, '0')
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const year = d.getFullYear()
+  const hours = String(d.getHours()).padStart(2, '0')
+  const minutes = String(d.getMinutes()).padStart(2, '0')
+  return `${year}-${month}-${day} ${hours}:${minutes}`
+}
+
+// Helper function to calculate hours between two dates
+function calculateHours(startDate: string, endDate: string): number {
+  const start = new Date(startDate)
+  const end = new Date(endDate)
+  const diffMs = end.getTime() - start.getTime()
+  return Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10 // Round to 1 decimal
+}
+
+export async function sendCrewInvite(
+  jobId: string,
+  timePeriodId: string,
+  userId: string,
+  companyId: string,
+  invitationMessage?: string | null,
+): Promise<string> {
+  // Get job info with address
+  const { data: job, error: jobError } = await supabase
+    .from('jobs')
+    .select(
+      'id, title, job_address_id, address:job_address_id ( id, name, address_line, zip_code, city, country )',
+    )
+    .eq('id', jobId)
+    .single()
+
+  if (jobError) throw jobError
+
+  // Get time period info
+  const { data: timePeriod, error: tpError } = await supabase
+    .from('time_periods')
+    .select('id, title, start_at, end_at')
+    .eq('id', timePeriodId)
+    .single()
+
+  if (tpError) throw tpError
+
+  // Get reserved_crew row to check status and get notes
+  const { data: crewRow, error: crewError } = await supabase
+    .from('reserved_crew')
+    .select('id, user_id, notes, status')
+    .eq('time_period_id', timePeriodId)
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (crewError) throw crewError
+
+  if (!crewRow) {
+    throw new Error('Crew member not found for this role')
+  }
+
+  if (crewRow.status !== 'planned') {
+    throw new Error(
+      `Crew member is already in ${crewRow.status} status. Only planned crew can be invited.`,
+    )
+  }
+
+  const roleTitle = timePeriod.title || 'Role'
+
+  // Format role time in 24-hour format and calculate hours
+  let roleTimeStr = ''
+  let hoursStr = ''
+  if (timePeriod.start_at && timePeriod.end_at) {
+    const startFormatted = formatDateTime24h(timePeriod.start_at)
+    const endFormatted = formatDateTime24h(timePeriod.end_at)
+    const hours = calculateHours(timePeriod.start_at, timePeriod.end_at)
+    roleTimeStr = `${startFormatted} - ${endFormatted}`
+    hoursStr = ` (${hours} hours)`
+  }
+
+  // Build address string for map query
+  let addressStr = ''
+  if (job.address) {
+    const addr = job.address as any
+    const parts = [
+      addr.address_line,
+      addr.zip_code,
+      addr.city,
+      addr.country,
+    ].filter(Boolean)
+    addressStr = parts.join(', ')
+  }
+
+  const title = `Crew invitation: ${roleTitle}`
+  let content = `You have been invited to work on "${job.title}" as ${roleTitle}.`
+
+  if (roleTimeStr) {
+    content += `\n\nRole Time: ${roleTimeStr}${hoursStr}`
+  }
+
+  if (addressStr) {
+    content += `\n\nAddress: ${addressStr}`
+  }
+
+  if (crewRow.notes) {
+    content += `\n\nNotes: ${crewRow.notes}`
+  }
+
+  // Create the matter
+  const matterId = await createMatter({
+    company_id: companyId,
+    matter_type: 'crew_invite',
+    title,
+    content,
+    job_id: jobId,
+    time_period_id: timePeriodId,
+    recipient_user_ids: [userId],
+  })
+
+  // Store invitation message if provided
+  if (invitationMessage) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (user) {
+      const { error: messageError } = await supabase
+        .from('matter_messages' as any)
+        .insert({
+          matter_id: matterId,
+          user_id: user.id,
+          content: invitationMessage.trim(),
+        })
+      if (messageError) throw messageError
+    }
+  }
+
+  // Store map query in matter content or metadata (we'll fetch it separately in UI)
+  // For now, the address is in the content, and we'll fetch it in MatterDetail
+
+  // Update reserved_crew status to 'requested'
+  const { error: updateError } = await supabase
+    .from('reserved_crew')
+    .update({ status: 'requested' as const })
+    .eq('id', crewRow.id)
 
   if (updateError) throw updateError
 
@@ -473,6 +695,15 @@ export async function respondToMatter(
   if (!user) throw new Error('Not authenticated')
 
   const trimmedResponse = response.trim().toLowerCase()
+
+  // Get matter to check if it's a crew_invite
+  const { data: matter, error: matterError } = await supabase
+    .from('matters' as any)
+    .select('matter_type, job_id, time_period_id')
+    .eq('id', matterId)
+    .single()
+
+  if (matterError) throw matterError
 
   // Upsert response
   const { error: responseError } = await supabase
@@ -492,11 +723,15 @@ export async function respondToMatter(
 
   // Determine recipient status based on response
   // For votes: 'approved' -> 'accepted', 'rejected' -> 'declined', otherwise -> 'responded'
+  // For crew_invite: 'approved' -> 'accepted', 'rejected' -> 'declined'
   let recipientStatus: 'accepted' | 'declined' | 'responded' = 'responded'
+  let crewStatus: 'accepted' | 'declined' | null = null
   if (trimmedResponse === 'approved') {
     recipientStatus = 'accepted'
+    crewStatus = 'accepted'
   } else if (trimmedResponse === 'rejected') {
     recipientStatus = 'declined'
+    crewStatus = 'declined'
   }
 
   // Update recipient status
@@ -530,6 +765,21 @@ export async function respondToMatter(
         `Failed to update recipient status: ${createError.message}`,
       )
     }
+  }
+
+  // If this is a crew_invite and we have a crew status, update reserved_crew
+  if (
+    matter.matter_type === 'crew_invite' &&
+    crewStatus &&
+    matter.time_period_id
+  ) {
+    const { error: crewUpdateError } = await supabase
+      .from('reserved_crew')
+      .update({ status: crewStatus as any })
+      .eq('time_period_id', matter.time_period_id)
+      .eq('user_id', user.id)
+
+    if (crewUpdateError) throw crewUpdateError
   }
 }
 

@@ -17,12 +17,15 @@ import { fmtVAT } from '@shared/lib/generalFunctions'
 import { prettyPhone } from '@shared/phone/phone'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@shared/ui/toast/ToastProvider'
+import { useAuthz } from '@shared/auth/useAuthz'
 import { supabase } from '@shared/api/supabase'
 import { Edit } from 'iconoir-react'
 import AddressDialog from '../dialogs/AddressDialog'
 import type { JobDetail } from '../../types'
 
 export default function OverviewTab({ job }: { job: JobDetail }) {
+  const { companyRole } = useAuthz()
+  const isReadOnly = companyRole === 'freelancer'
   const qc = useQueryClient()
   const addr = job.address
     ? [
@@ -129,7 +132,7 @@ export default function OverviewTab({ job }: { job: JobDetail }) {
       <Box>
         <Flex align={'center'} gap={'2'} mt={'1'}>
           <Heading size="3">Location</Heading>
-          {job.address && (
+          {!isReadOnly && job.address && (
             <IconButton variant="ghost" onClick={() => setEditOpen(true)}>
               <Edit fontSize={'0.8rem'} />
             </IconButton>
@@ -173,29 +176,35 @@ export default function OverviewTab({ job }: { job: JobDetail }) {
             )}
           </Grid>
         ) : (
-          <Button size="3" variant="soft" onClick={() => setEditOpen(true)}>
-            Add location
-          </Button>
+          !isReadOnly && (
+            <Button size="3" variant="soft" onClick={() => setEditOpen(true)}>
+              Add location
+            </Button>
+          )
         )}
         <KV label="Notes">
-          <TextField.Root
-            value={notes || ''}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Add notes here"
-          >
-            {initialNotes != notes && (
-              <TextField.Slot side="right">
-                <Button
-                  size="2"
-                  variant="ghost"
-                  onClick={() => mut.mutate()}
-                  disabled={mut.isPending}
-                >
-                  {mut.isPending ? 'Saving…' : 'Save'}
-                </Button>
-              </TextField.Slot>
-            )}
-          </TextField.Root>
+          {isReadOnly ? (
+            <Text>{notes || '—'}</Text>
+          ) : (
+            <TextField.Root
+              value={notes || ''}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Add notes here"
+            >
+              {initialNotes != notes && (
+                <TextField.Slot side="right">
+                  <Button
+                    size="2"
+                    variant="ghost"
+                    onClick={() => mut.mutate()}
+                    disabled={mut.isPending}
+                  >
+                    {mut.isPending ? 'Saving…' : 'Save'}
+                  </Button>
+                </TextField.Slot>
+              )}
+            </TextField.Root>
+          )}
         </KV>
       </Box>
     </Box>

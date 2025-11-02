@@ -68,17 +68,37 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('storage', onStorage)
   }, [lsKey])
 
-  // 2) Company memberships
+  // 2) Company memberships (or all companies for superusers)
   const companiesQ = useQuery({
     queryKey: ['my-companies', userId],
     enabled: !!userId,
     queryFn: async (): Promise<Array<Company>> => {
-      const { data, error } = await supabase
-        .from('company_users')
-        .select('companies ( id, name )')
+      // Check if user is a superuser
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('superuser')
         .eq('user_id', userId!)
-      if (error) throw error
-      return (data as Array<any>).map((r) => r.companies).filter(Boolean)
+        .maybeSingle()
+
+      const isSuperuser = profile?.superuser ?? false
+
+      if (isSuperuser) {
+        // Superusers can access all companies
+        const { data, error } = await supabase
+          .from('companies')
+          .select('id, name')
+          .order('name', { ascending: true })
+        if (error) throw error
+        return data as Array<Company>
+      } else {
+        // Regular users only see companies they're members of
+        const { data, error } = await supabase
+          .from('company_users')
+          .select('companies ( id, name )')
+          .eq('user_id', userId!)
+        if (error) throw error
+        return (data as Array<any>).map((r) => r.companies).filter(Boolean)
+      }
     },
     staleTime: 60_000,
   })

@@ -4,6 +4,7 @@ import {
   Badge,
   Box,
   Button,
+  Dialog,
   Flex,
   Heading,
   SegmentedControl,
@@ -11,12 +12,14 @@ import {
   Text,
 } from '@radix-ui/themes'
 import { supabase } from '@shared/api/supabase'
-import { Mail, NavArrowDown, NavArrowRight, Plus } from 'iconoir-react'
-import { sendCrewInvites } from '../../../matters/api/queries'
+import { Mail, NavArrowDown, NavArrowRight, Plus, Trash } from 'iconoir-react'
 import { useToast } from '@shared/ui/toast/ToastProvider'
+import { useAuthz } from '@shared/auth/useAuthz'
+import { sendCrewInvite, sendCrewInvites } from '../../../matters/api/queries'
 import AddRoleDialog from '../dialogs/AddRoleDialog'
 import AddCrewToRoleDialog from '../dialogs/AddCrewToRoleDialog'
 import ConfirmStatusChangeDialog from '../dialogs/ConfirmStatusChangeDialog'
+import SendInviteDialog from '../dialogs/SendInviteDialog'
 import type { CrewReqStatus, ReservedCrewRow } from '../../types'
 
 export default function CrewTab({
@@ -30,6 +33,8 @@ export default function CrewTab({
   view: 'roles' | 'crew'
   onViewChange?: (view: 'roles' | 'crew') => void
 }) {
+  const { companyRole } = useAuthz()
+  const isReadOnly = companyRole === 'freelancer'
   const [addRoleOpen, setAddRoleOpen] = React.useState(false)
   const [expandedRoles, setExpandedRoles] = React.useState<Set<string>>(
     new Set(),
@@ -41,6 +46,18 @@ export default function CrewTab({
     currentStatus: CrewReqStatus
     newStatus: CrewReqStatus
   } | null>(null)
+  const [sendInviteDialog, setSendInviteDialog] = React.useState<{
+    userId?: string // Optional - if not provided, it's "send to all"
+    timePeriodId: string
+    crewName: string
+    roleTitle: string
+    isSendToAll?: boolean
+  } | null>(null)
+  const [deleteRoleConfirm, setDeleteRoleConfirm] = React.useState<{
+    roleId: string
+    roleTitle: string
+    crewCount: number
+  } | null>(null)
 
   const qc = useQueryClient()
   const { success, error: toastError } = useToast()
@@ -51,6 +68,7 @@ export default function CrewTab({
         .from('time_periods')
         .select('id')
         .eq('job_id', jobId)
+        .eq('category', 'crew')
       if (rErr) throw rErr
       const resIds = timePeriods.map((r) => r.id)
       if (!resIds.length) return [] as Array<ReservedCrewRow>
@@ -93,9 +111,9 @@ export default function CrewTab({
           .in('time_period_id', tpIds)
         if (cErr) throw cErr
         for (const r of rows) {
-          const key = r.time_period_id as string
+          const key = r.time_period_id
           const bag = statusByTp.get(key) || {}
-          bag[r.status as string] = (bag[r.status as string] || 0) + 1
+          bag[r.status] = (bag[r.status] || 0) + 1
           statusByTp.set(key, bag)
         }
       }
@@ -147,6 +165,121 @@ export default function CrewTab({
     },
   })
 
+  const removeRole = useMutation({
+    mutationFn: async ({ roleId }: { roleId: string }) => {
+      // Find and delete all matters (crew_invite) for this time period
+      const { data: matters, error: matterError } = await supabase
+        .from('matters' as any)
+        .select('id')
+        .eq('job_id', jobId)
+        .eq('time_period_id', roleId)
+        .eq('matter_type', 'crew_invite')
+
+      if (matterError) throw matterError
+
+      // Delete all matters for this role
+      const mattersList = matters as unknown as Array<{ id: string }>
+      for (const matter of mattersList) {
+        const { error: deleteError } = await supabase
+          .from('matters' as any)
+          .delete()
+          .eq('id', matter.id)
+
+        if (deleteError) throw deleteError
+      }
+
+      // Delete all crew entries for this role
+      const { error: deleteCrewError } = await supabase
+        .from('reserved_crew')
+        .delete()
+        .eq('time_period_id', roleId)
+
+      if (deleteCrewError) throw deleteCrewError
+
+      // Delete the time period (role) itself
+      const { error: deleteRoleError } = await supabase
+        .from('time_periods')
+        .delete()
+        .eq('id', roleId)
+
+      if (deleteRoleError) throw deleteRoleError
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['jobs.crew', jobId] })
+      qc.invalidateQueries({ queryKey: ['jobs', jobId, 'time_periods'] })
+      qc.invalidateQueries({ queryKey: ['matters'] })
+      success('Success', 'Role and all crew members removed')
+      setDeleteRoleConfirm(null)
+    },
+    onError: (e: any) => {
+      toastError('Failed to remove role', e?.message || 'Please try again.')
+    },
+  })
+
+  const removeCrew = useMutation({
+    mutationFn: async ({
+      crewId,
+      timePeriodId,
+      userId,
+    }: {
+      crewId: string
+      timePeriodId: string
+      userId: string
+    }) => {
+      // Find and delete the matter (crew_invite) for this user and time period
+      const { data: matters, error: matterError } = await supabase
+        .from('matters' as any)
+        .select('id')
+        .eq('job_id', jobId)
+        .eq('time_period_id', timePeriodId)
+        .eq('matter_type', 'crew_invite')
+
+      if (matterError) throw matterError
+
+      // Check if user is a recipient of this matter
+      const mattersList = matters as unknown as Array<{ id: string }>
+      for (const matter of mattersList) {
+        const { data: recipients } = await supabase
+          .from('matter_recipients' as any)
+          .select('id')
+          .eq('matter_id', matter.id)
+          .eq('user_id', userId)
+          .maybeSingle()
+
+        if (recipients) {
+          // Delete the matter (this will cascade delete recipients and responses)
+          const { error: deleteError } = await supabase
+            .from('matters' as any)
+            .delete()
+            .eq('id', matter.id)
+
+          if (deleteError) throw deleteError
+          break // Found and deleted, no need to continue
+        }
+      }
+
+      // Delete the crew entry
+      const { error } = await supabase
+        .from('reserved_crew')
+        .delete()
+        .eq('id', crewId)
+
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['jobs.crew', jobId] })
+      qc.invalidateQueries({ queryKey: ['jobs', jobId, 'time_periods'] })
+      qc.invalidateQueries({ queryKey: ['matters'] })
+      success('Success', 'Crew member removed')
+    },
+    onError: (e: any) => {
+      toastError(
+        'Failed to remove crew member',
+        e?.message || 'Please try again.',
+      )
+    },
+  })
+
   const handleStatusChange = (
     crewId: string,
     crewName: string,
@@ -171,20 +304,66 @@ export default function CrewTab({
   }
 
   const sendInvites = useMutation({
-    mutationFn: async (timePeriodId: string) => {
-      await sendCrewInvites(jobId, timePeriodId, companyId)
+    mutationFn: async ({
+      timePeriodId,
+      message,
+    }: {
+      timePeriodId: string
+      message?: string | null
+    }) => {
+      await sendCrewInvites(jobId, timePeriodId, companyId, message)
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['jobs.crew', jobId] })
       qc.invalidateQueries({ queryKey: ['jobs', jobId, 'time_periods'] })
       qc.invalidateQueries({ queryKey: ['matters'] })
       success('Success', 'Invitations sent and matter created')
+      setSendInviteDialog(null)
     },
     onError: (e: any) => {
       toastError(
         'Failed to send invitations',
         e?.message || 'Please try again.',
       )
+    },
+  })
+
+  // Fetch job title for dialog
+  const { data: jobTitleData } = useQuery({
+    queryKey: ['job-title', jobId],
+    queryFn: async () => {
+      const { data: jobData, error } = await supabase
+        .from('jobs')
+        .select('title')
+        .eq('id', jobId)
+        .single()
+      if (error) throw error
+      return jobData as { title: string }
+    },
+    enabled: !!jobId,
+  })
+
+  const sendInvite = useMutation({
+    mutationFn: async ({
+      timePeriodId,
+      userId,
+      message,
+    }: {
+      timePeriodId: string
+      userId: string
+      message?: string | null
+    }) => {
+      await sendCrewInvite(jobId, timePeriodId, userId, companyId, message)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['jobs.crew', jobId] })
+      qc.invalidateQueries({ queryKey: ['jobs', jobId, 'time_periods'] })
+      qc.invalidateQueries({ queryKey: ['matters'] })
+      success('Success', 'Invitation sent and matter created')
+      setSendInviteDialog(null)
+    },
+    onError: (e: any) => {
+      toastError('Failed to send invitation', e?.message || 'Please try again.')
     },
   })
 
@@ -254,28 +433,32 @@ export default function CrewTab({
           }}
         >
           <Heading size="3">Roles</Heading>
-          <Flex align="center" gap="3">
-            <Button size="2" onClick={() => setAddRoleOpen(true)}>
-              <Plus /> Add role
-            </Button>
-            {onViewChange && (
-              <SegmentedControl.Root
-                size="2"
-                value={view}
-                onValueChange={(v) => onViewChange(v as 'roles' | 'crew')}
-              >
-                <SegmentedControl.Item value="roles">
-                  Roles
-                </SegmentedControl.Item>
-                <SegmentedControl.Item value="crew">Crew</SegmentedControl.Item>
-              </SegmentedControl.Root>
-            )}
-            <AddRoleDialog
-              open={addRoleOpen}
-              onOpenChange={setAddRoleOpen}
-              jobId={jobId}
-            />
-          </Flex>
+          {!isReadOnly && (
+            <Flex align="center" gap="3">
+              <Button size="2" onClick={() => setAddRoleOpen(true)}>
+                <Plus /> Add role
+              </Button>
+              {onViewChange && (
+                <SegmentedControl.Root
+                  size="2"
+                  value={view}
+                  onValueChange={(v) => onViewChange(v as 'roles' | 'crew')}
+                >
+                  <SegmentedControl.Item value="roles">
+                    Roles
+                  </SegmentedControl.Item>
+                  <SegmentedControl.Item value="crew">
+                    Crew
+                  </SegmentedControl.Item>
+                </SegmentedControl.Root>
+              )}
+              <AddRoleDialog
+                open={addRoleOpen}
+                onOpenChange={setAddRoleOpen}
+                jobId={jobId}
+              />
+            </Flex>
+          )}
         </Box>
 
         <Box style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -289,11 +472,6 @@ export default function CrewTab({
                   style={{ textTransform: 'capitalize' }}
                 >
                   {group.category}
-                </Heading>
-              )}
-              {!group.category && (
-                <Heading size="4" mb="2">
-                  Roles
                 </Heading>
               )}
               <Box
@@ -332,33 +510,49 @@ export default function CrewTab({
                           ) : (
                             <NavArrowRight width={18} height={18} />
                           )}
-                          <Text weight="bold">{role.title ?? '—'}</Text>
-                          <Text size="2" color="gray">
-                            Needed: {role.needed_count ?? 1}
-                          </Text>
-                          <Text size="2" color="gray">
-                            • Planned: {counts['planned'] ?? 0}
-                          </Text>
-                          <Text size="2" color="gray">
-                            • Requested: {counts['requested'] ?? 0}
-                          </Text>
-                          <Text size="2" color="gray">
-                            • Accepted: {counts['accepted'] ?? 0}
-                          </Text>
-                          <Text size="2" color="gray">
-                            • Declined: {counts['declined'] ?? 0}
+                          <Text
+                            weight="bold"
+                            style={{
+                              color:
+                                (counts['accepted'] ?? 0) >=
+                                (role.needed_count ?? 1)
+                                  ? 'var(--green-9)'
+                                  : undefined,
+                            }}
+                          >
+                            {role.title ?? '—'}
                           </Text>
                         </Flex>
-                        <Button
-                          size="1"
-                          variant="soft"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setAddCrewToRole(role.id)
-                          }}
-                        >
-                          <Plus width={14} height={14} /> Add crew
-                        </Button>
+                        {!isReadOnly && (
+                          <Flex gap="2">
+                            <Button
+                              size="1"
+                              variant="soft"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setAddCrewToRole(role.id)
+                              }}
+                            >
+                              <Plus width={14} height={14} /> Add crew
+                            </Button>
+                            <Button
+                              size="1"
+                              variant="soft"
+                              color="red"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setDeleteRoleConfirm({
+                                  roleId: role.id,
+                                  roleTitle: role.title || 'Untitled Role',
+                                  crewCount: roleCrew.length,
+                                })
+                              }}
+                              disabled={removeRole.isPending}
+                            >
+                              <Trash width={14} height={14} />
+                            </Button>
+                          </Flex>
+                        )}
                       </Box>
 
                       {isExpanded && (
@@ -367,29 +561,55 @@ export default function CrewTab({
                           pt="3"
                           style={{ borderTop: '1px solid var(--gray-a6)' }}
                         >
+                          {/* Stats section */}
+                          <Flex mb="3" gap="4" wrap="wrap">
+                            <Text size="2" color="gray">
+                              Needed: {role.needed_count ?? 1}
+                            </Text>
+                            <Text size="2" color="gray">
+                              • Planned: {counts['planned'] ?? 0}
+                            </Text>
+                            <Text size="2" color="gray">
+                              • Requested: {counts['requested'] ?? 0}
+                            </Text>
+                            <Text size="2" color="gray">
+                              • Accepted: {counts['accepted'] ?? 0}
+                            </Text>
+                            <Text size="2" color="gray">
+                              • Declined: {counts['declined'] ?? 0}
+                            </Text>
+                          </Flex>
+
                           <Flex mb="2" justify="between" align="center">
                             <Text size="2" weight="medium">
                               Crew ({roleCrew.length})
                             </Text>
-                            {roleCrew.filter((c) => c.status === 'planned')
-                              .length > 0 && (
-                              <Button
-                                size="1"
-                                variant="soft"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  sendInvites.mutate(role.id)
-                                }}
-                                disabled={sendInvites.isPending}
-                              >
-                                <Mail width={14} height={14} /> Send invite (
-                                {
-                                  roleCrew.filter((c) => c.status === 'planned')
-                                    .length
-                                }
-                                )
-                              </Button>
-                            )}
+                            {!isReadOnly &&
+                              roleCrew.filter((c) => c.status === 'planned')
+                                .length > 0 && (
+                                <Button
+                                  size="1"
+                                  variant="soft"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setSendInviteDialog({
+                                      timePeriodId: role.id,
+                                      crewName: `${roleCrew.filter((c) => c.status === 'planned').length} crew members`,
+                                      roleTitle: role.title || 'Role',
+                                      isSendToAll: true,
+                                    })
+                                  }}
+                                  disabled={sendInvites.isPending}
+                                >
+                                  <Mail width={14} height={14} /> Send to all (
+                                  {
+                                    roleCrew.filter(
+                                      (c) => c.status === 'planned',
+                                    ).length
+                                  }
+                                  )
+                                </Button>
+                              )}
                           </Flex>
                           {roleCrew.length === 0 && (
                             <Text size="2" color="gray">
@@ -406,7 +626,9 @@ export default function CrewTab({
                                   <Table.ColumnHeaderCell>
                                     Status
                                   </Table.ColumnHeaderCell>
-                                  <Table.ColumnHeaderCell></Table.ColumnHeaderCell>
+                                  <Table.ColumnHeaderCell>
+                                    Actions
+                                  </Table.ColumnHeaderCell>
                                 </Table.Row>
                               </Table.Header>
                               <Table.Body>
@@ -419,50 +641,105 @@ export default function CrewTab({
                                     <Table.Row key={crew.id}>
                                       <Table.Cell>{crewName}</Table.Cell>
                                       <Table.Cell>
-                                        <SegmentedControl.Root
-                                          size="1"
-                                          value={crew.status}
-                                          onValueChange={(v) =>
-                                            handleStatusChange(
-                                              crew.id,
-                                              crewName,
-                                              crew.status,
-                                              v as CrewReqStatus,
-                                            )
-                                          }
-                                        >
-                                          {(
-                                            [
-                                              'planned',
-                                              'requested',
-                                              'declined',
-                                              'accepted',
-                                            ] as Array<CrewReqStatus>
-                                          ).map((s) => (
-                                            <SegmentedControl.Item
-                                              key={s}
-                                              value={s}
-                                            >
-                                              {s}
-                                            </SegmentedControl.Item>
-                                          ))}
-                                        </SegmentedControl.Root>
+                                        {isReadOnly ? (
+                                          <Badge
+                                            radius="full"
+                                            highContrast
+                                            color={
+                                              crew.status === 'accepted'
+                                                ? 'green'
+                                                : crew.status === 'declined'
+                                                  ? 'red'
+                                                  : crew.status === 'requested'
+                                                    ? 'blue'
+                                                    : 'gray'
+                                            }
+                                          >
+                                            {crew.status}
+                                          </Badge>
+                                        ) : (
+                                          <SegmentedControl.Root
+                                            size="1"
+                                            value={crew.status}
+                                            onValueChange={(v) =>
+                                              handleStatusChange(
+                                                crew.id,
+                                                crewName,
+                                                crew.status,
+                                                v as CrewReqStatus,
+                                              )
+                                            }
+                                          >
+                                            {(
+                                              [
+                                                'planned',
+                                                'requested',
+                                                'declined',
+                                                'accepted',
+                                              ] as Array<CrewReqStatus>
+                                            ).map((s) => (
+                                              <SegmentedControl.Item
+                                                key={s}
+                                                value={s}
+                                                style={{
+                                                  color:
+                                                    s === 'accepted'
+                                                      ? 'var(--green-9)'
+                                                      : s === 'declined'
+                                                        ? 'var(--red-9)'
+                                                        : s === 'requested'
+                                                          ? 'var(--blue-9)'
+                                                          : undefined,
+                                                }}
+                                              >
+                                                {s}
+                                              </SegmentedControl.Item>
+                                            ))}
+                                          </SegmentedControl.Root>
+                                        )}
                                       </Table.Cell>
                                       <Table.Cell>
-                                        <Button
-                                          size="1"
-                                          variant="soft"
-                                          onClick={() => {
-                                            // TODO: Implement invite sending
-                                            console.log(
-                                              'Send invite to',
-                                              crewName,
-                                            )
-                                          }}
-                                        >
-                                          <Mail width={14} height={14} /> Send
-                                          invite
-                                        </Button>
+                                        <Flex gap="2">
+                                          {!isReadOnly &&
+                                            crew.status === 'planned' && (
+                                              <Button
+                                                size="1"
+                                                variant="soft"
+                                                onClick={(e) => {
+                                                  e.stopPropagation()
+                                                  setSendInviteDialog({
+                                                    userId: crew.user_id,
+                                                    timePeriodId: role.id,
+                                                    crewName: crewName,
+                                                    roleTitle:
+                                                      role.title || 'Role',
+                                                  })
+                                                }}
+                                                disabled={sendInvite.isPending}
+                                              >
+                                                <Mail width={14} height={14} />{' '}
+                                                Send invite
+                                              </Button>
+                                            )}
+                                          {!isReadOnly && (
+                                            <Button
+                                              size="1"
+                                              variant="soft"
+                                              color="red"
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                removeCrew.mutate({
+                                                  crewId: crew.id,
+                                                  timePeriodId: role.id,
+                                                  userId: crew.user_id,
+                                                })
+                                              }}
+                                              disabled={removeCrew.isPending}
+                                            >
+                                              <Trash width={14} height={14} />
+                                            </Button>
+                                          )}
+                                        </Flex>
                                       </Table.Cell>
                                     </Table.Row>
                                   )
@@ -503,6 +780,80 @@ export default function CrewTab({
             }}
           />
         )}
+
+        {sendInviteDialog && jobTitleData && (
+          <SendInviteDialog
+            open={!!sendInviteDialog}
+            onOpenChange={(v) => !v && setSendInviteDialog(null)}
+            crewName={sendInviteDialog.crewName}
+            jobTitle={jobTitleData.title}
+            roleTitle={sendInviteDialog.roleTitle}
+            onSend={(message) => {
+              if (sendInviteDialog.isSendToAll) {
+                sendInvites.mutate({
+                  timePeriodId: sendInviteDialog.timePeriodId,
+                  message,
+                })
+              } else if (sendInviteDialog.userId) {
+                sendInvite.mutate({
+                  timePeriodId: sendInviteDialog.timePeriodId,
+                  userId: sendInviteDialog.userId,
+                  message,
+                })
+              }
+            }}
+            isPending={sendInvite.isPending || sendInvites.isPending}
+          />
+        )}
+
+        {deleteRoleConfirm && (
+          <Dialog.Root
+            open={!!deleteRoleConfirm}
+            onOpenChange={(v) => !v && setDeleteRoleConfirm(null)}
+          >
+            <Dialog.Content style={{ maxWidth: 450 }}>
+              <Dialog.Title>Delete Role</Dialog.Title>
+              <Dialog.Description>
+                Are you sure you want to delete the role "
+                {deleteRoleConfirm.roleTitle}"? This will permanently remove:
+              </Dialog.Description>
+              <Box
+                mt="3"
+                p="3"
+                style={{ background: 'var(--red-a2)', borderRadius: 8 }}
+              >
+                <Flex direction="column" gap="1">
+                  <Text size="2">• The role itself</Text>
+                  <Text size="2">
+                    • All {deleteRoleConfirm.crewCount} crew member
+                    {deleteRoleConfirm.crewCount !== 1 ? 's' : ''} assigned to
+                    it
+                  </Text>
+                  <Text size="2">• All invitation matters for this role</Text>
+                </Flex>
+              </Box>
+              <Text size="2" color="red" weight="bold" mt="3">
+                ⚠️ This action cannot be undone!
+              </Text>
+              <Flex mt="4" gap="2" justify="end">
+                <Dialog.Close>
+                  <Button variant="soft" disabled={removeRole.isPending}>
+                    Cancel
+                  </Button>
+                </Dialog.Close>
+                <Button
+                  color="red"
+                  onClick={() => {
+                    removeRole.mutate({ roleId: deleteRoleConfirm.roleId })
+                  }}
+                  disabled={removeRole.isPending}
+                >
+                  {removeRole.isPending ? 'Deleting...' : 'Yes, delete'}
+                </Button>
+              </Flex>
+            </Dialog.Content>
+          </Dialog.Root>
+        )}
       </div>
     )
   }
@@ -535,7 +886,7 @@ export default function CrewTab({
         <Table.Header>
           <Table.Row>
             <Table.ColumnHeaderCell>Name</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>Role period</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>Role</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
           </Table.Row>
         </Table.Header>
@@ -551,9 +902,7 @@ export default function CrewTab({
                     ? roleById.get(r.time_period_id)
                     : undefined
                   if (!tp) return '—'
-                  const title = tp.title ?? 'Role'
-                  const range = `${fmt(tp.start_at)} → ${fmt(tp.end_at)}`
-                  return `${title} (${range})`
+                  return tp.title ?? 'Role'
                 })()}
               </Table.Cell>
               <Table.Cell>
@@ -573,19 +922,5 @@ export default function CrewTab({
         </Table.Body>
       </Table.Root>
     </div>
-  )
-}
-
-function fmt(iso?: string | null) {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  const hours = String(d.getHours()).padStart(2, '0')
-  const minutes = String(d.getMinutes()).padStart(2, '0')
-  return (
-    d.toLocaleString(undefined, {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }) + ` ${hours}:${minutes}`
   )
 }

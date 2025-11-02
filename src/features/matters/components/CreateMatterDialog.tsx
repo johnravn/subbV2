@@ -9,7 +9,6 @@ import {
   Flex,
   Grid,
   RadioGroup,
-  Separator,
   Text,
   TextArea,
   TextField,
@@ -47,6 +46,7 @@ export default function CreateMatterDialog({
   const [search, setSearch] = React.useState('')
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
   const [isAnonymous, setIsAnonymous] = React.useState(false)
+  const [createdAsCompany, setCreatedAsCompany] = React.useState(false)
   const [selectedFiles, setSelectedFiles] = React.useState<Array<File>>([])
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
@@ -256,6 +256,11 @@ export default function CreateMatterDialog({
         recipient_user_ids: Array.from(selectedIds),
         is_anonymous: matterType === 'vote' ? isAnonymous : undefined,
         allow_custom_responses: matterType === 'vote' ? false : undefined,
+        created_as_company:
+          matterType === 'announcement' &&
+          (companyRole === 'owner' || companyRole === 'super_user')
+            ? createdAsCompany
+            : undefined,
         files: selectedFiles.length > 0 ? selectedFiles : undefined,
       })
     },
@@ -267,6 +272,7 @@ export default function CreateMatterDialog({
       setSelectedIds(new Set())
       setSearch('')
       setIsAnonymous(false)
+      setCreatedAsCompany(false)
       setSelectedFiles([])
       if (fileInputRef.current) fileInputRef.current.value = ''
       onOpenChange(false)
@@ -293,6 +299,7 @@ export default function CreateMatterDialog({
       setSelectedIds(new Set())
       setSearch('')
       setIsAnonymous(false)
+      setCreatedAsCompany(false)
       setSelectedFiles([])
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
@@ -411,6 +418,31 @@ export default function CreateMatterDialog({
                 </Box>
               </>
             )}
+
+            {matterType === 'announcement' &&
+              (companyRole === 'owner' || companyRole === 'super_user') && (
+                <Box my="4">
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 'var(--space-2)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Checkbox
+                      checked={createdAsCompany}
+                      onCheckedChange={(checked) =>
+                        setCreatedAsCompany(checked === true)
+                      }
+                    />
+                    <Text size="2">
+                      Create as company (will show company name instead of your
+                      name)
+                    </Text>
+                  </label>
+                </Box>
+              )}
 
             <Box my="4">
               <Text

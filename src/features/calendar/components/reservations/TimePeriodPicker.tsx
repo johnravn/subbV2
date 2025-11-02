@@ -192,11 +192,13 @@ function isoLocalEnd() {
 type FixedTimePeriodEditorProps = {
   jobId: string
   timePeriodId: string
+  readOnly?: boolean
 }
 
 export function FixedTimePeriodEditor({
   jobId,
   timePeriodId,
+  readOnly = false,
 }: FixedTimePeriodEditorProps) {
   const qc = useQueryClient()
   const { companyId } = useCompany()
@@ -280,7 +282,7 @@ export function FixedTimePeriodEditor({
             <Calendar />
             <strong>{timePeriod.title || '(untitled)'}</strong>
           </Flex>
-          {!editing && (
+          {!readOnly && !editing && (
             <Button size="1" variant="soft" onClick={() => setEditing(true)}>
               <Edit width={14} height={14} /> Edit
             </Button>

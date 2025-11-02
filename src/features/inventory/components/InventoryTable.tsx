@@ -20,7 +20,6 @@ import {
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { Search } from 'iconoir-react'
 import { categoryNamesQuery, inventoryIndexQuery } from '../api/queries'
-import EditCategoriesDialog from './EditCategoriesDialog'
 import EditBrandsDialog from './EditBrandsDialog'
 import AddItemDialog from './AddItemDialog'
 import AddGroupDialog from './AddGroupDialog'
@@ -67,7 +66,6 @@ export default function InventoryTable({
 
   const [addItemOpen, setAddItemOpen] = React.useState(false)
   const [addGroupDialog, setAddGroupDialog] = React.useState(false)
-  const [editCategoriesOpen, setEditCategoriesOpen] = React.useState(false)
   const [editBrandsOpen, setEditBrandsOpen] = React.useState(false)
 
   // ⬇️ add these near your other state hooks
@@ -220,7 +218,7 @@ export default function InventoryTable({
         header: 'Category',
         cell: (ctx) => (
           <Text size="2" color="gray">
-            {String(ctx.getValue() ?? '')}
+            {String(ctx.getValue() ?? '').toUpperCase()}
           </Text>
         ),
       },
@@ -320,7 +318,7 @@ export default function InventoryTable({
             <Select.Item value="all">All</Select.Item>
             {categories.map((name) => (
               <Select.Item key={name} value={name}>
-                {name}
+                {name.toUpperCase()}
               </Select.Item>
             ))}
           </Select.Content>
@@ -440,11 +438,6 @@ export default function InventoryTable({
             </Button>
           </Flex>
           <Flex align="center" gap={'1'}>
-            <EditCategoriesDialog
-              open={editCategoriesOpen}
-              onOpenChange={setEditCategoriesOpen}
-              companyId={companyId ?? ''}
-            />
             <EditBrandsDialog
               open={editBrandsOpen}
               onOpenChange={setEditBrandsOpen}

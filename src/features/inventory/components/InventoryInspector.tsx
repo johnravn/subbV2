@@ -194,13 +194,13 @@ export default function InventoryInspector({ id }: { id: string | null }) {
           <Text as="div" color="gray" size="2">
             {entry.type}
             {entry.type === 'item' && entry.category_name
-              ? ` · ${entry.category_name}`
+              ? ` · ${entry.category_name.toUpperCase()}`
               : ''}
             {entry.type === 'item' && entry.brand_name
               ? ` · ${entry.brand_name}`
               : ''}
             {entry.type === 'group' && entry.category_name
-              ? ` · ${entry.category_name}`
+              ? ` · ${entry.category_name.toUpperCase()}`
               : ''}
           </Text>
         </div>
@@ -255,7 +255,12 @@ export default function InventoryInspector({ id }: { id: string | null }) {
 
           {/* Meta */}
           <Grid columns={{ initial: '1', sm: '2' }} gap="3">
-            <Field label="Category" value={entry.category_name ?? '—'} />
+            <Field
+              label="Category"
+              value={
+                entry.category_name ? entry.category_name.toUpperCase() : '—'
+              }
+            />
             <Field label="Brand" value={entry.brand_name ?? '—'} />
             <Field
               label="Owner"
@@ -385,7 +390,12 @@ export default function InventoryInspector({ id }: { id: string | null }) {
 
           {/* Meta */}
           <Grid columns={{ initial: '1', sm: '2' }} gap="3">
-            <Field label="Category" value={entry.category_name ?? '—'} />
+            <Field
+              label="Category"
+              value={
+                entry.category_name ? entry.category_name.toUpperCase() : '—'
+              }
+            />
             <Field
               label="Owner"
               value={

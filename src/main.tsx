@@ -2,7 +2,6 @@
 import { StrictMode } from 'react'
 import ReactDOM from 'react-dom/client'
 import '@radix-ui/themes/styles.css'
-import { Theme } from '@radix-ui/themes'
 import { ThemeProvider as NextThemesProvider } from 'next-themes'
 import { RouterProvider } from '@tanstack/react-router'
 
@@ -12,6 +11,7 @@ import { QueryProvider } from '@app/providers/QueryProvider.tsx'
 import { AuthProvider } from '@app/providers/AuthProvider.tsx'
 import { CompanyProvider } from '@shared/companies/CompanyProvider.tsx'
 import { AppToastProvider } from '@shared/ui/toast/ToastProvider.tsx'
+import { ThemeWrapper } from '@shared/theme/ThemeWrapper.tsx'
 import { IconContext } from 'react-icons/lib'
 import reportWebVitals from './reportWebVitals.ts'
 import 'react-phone-number-input/style.css'
@@ -28,19 +28,19 @@ if (rootElement && !rootElement.innerHTML) {
   root.render(
     <StrictMode>
       <NextThemesProvider attribute="class" defaultTheme="system" enableSystem>
-        <Theme radius="small">
-          <QueryProvider>
-            <AuthProvider>
-              <CompanyProvider>
+        <QueryProvider>
+          <AuthProvider>
+            <CompanyProvider>
+              <ThemeWrapper>
                 <AppToastProvider>
                   <IconContext.Provider value={{ size: '1.5em' }}>
                     <RouterProvider router={router} />
                   </IconContext.Provider>
                 </AppToastProvider>
-              </CompanyProvider>
-            </AuthProvider>
-          </QueryProvider>
-        </Theme>
+              </ThemeWrapper>
+            </CompanyProvider>
+          </AuthProvider>
+        </QueryProvider>
       </NextThemesProvider>
     </StrictMode>,
   )

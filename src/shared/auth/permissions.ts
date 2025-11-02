@@ -86,8 +86,9 @@ export function capabilitiesFor({
 
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   if (companyRole === 'freelancer') {
-    // blocked: inventory, vehicles, crew, jobs
-    // (calendar, matters, profile, home already allowed)
+    // blocked: inventory, vehicles, crew
+    // (calendar, matters, profile, home, jobs already allowed)
+    caps.add('visit:jobs')
     return caps
   }
 

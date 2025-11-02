@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  Box,
   Button,
   Dialog,
   Flex,
@@ -14,6 +15,14 @@ import { useToast } from '@shared/ui/toast/ToastProvider'
 import { supabase } from '@shared/api/supabase'
 
 const WELCOME_MATTER_TITLE = 'Welcome to our company'
+
+const GENERIC_WELCOME_MESSAGE = `Welcome to the team! We're excited to have you on board.
+
+This platform will help you stay connected with the team, manage your work assignments, and access important company information.
+
+If you have any questions or need help getting started, don't hesitate to reach out. We're here to support you!
+
+Looking forward to working with you.`
 
 export default function EditWelcomeMatterDialog({
   open,
@@ -58,7 +67,7 @@ export default function EditWelcomeMatterDialog({
 
   const [form, setForm] = React.useState({
     title: WELCOME_MATTER_TITLE,
-    content: '',
+    content: GENERIC_WELCOME_MESSAGE,
   })
 
   React.useEffect(() => {
@@ -70,7 +79,7 @@ export default function EditWelcomeMatterDialog({
     } else {
       setForm({
         title: WELCOME_MATTER_TITLE,
-        content: '',
+        content: GENERIC_WELCOME_MESSAGE,
       })
     }
   }, [welcomeMatter?.id])
@@ -101,17 +110,13 @@ export default function EditWelcomeMatterDialog({
         if (updateError) throw updateError
       } else {
         // Create new welcome matter
-        const { data: newMatter, error: createError } = await supabase
-          .from('matters')
-          .insert({
-            company_id: companyId,
-            created_by_user_id: user.id,
-            matter_type: 'announcement',
-            title: form.title.trim(),
-            content: form.content.trim() || null,
-          })
-          .select('id')
-          .single()
+        const { error: createError } = await supabase.from('matters').insert({
+          company_id: companyId,
+          created_by_user_id: user.id,
+          matter_type: 'announcement',
+          title: form.title.trim(),
+          content: form.content.trim() || null,
+        })
 
         if (createError) throw createError
 
@@ -119,7 +124,7 @@ export default function EditWelcomeMatterDialog({
         // This is handled by the system when users join
       }
     },
-    onSuccess: async () => {
+    onSuccess: () => {
       qc.invalidateQueries({
         queryKey: ['company', companyId, 'welcome-matter'],
       })
@@ -167,14 +172,27 @@ export default function EditWelcomeMatterDialog({
             />
           </Field>
 
-          <Field label="Content">
+          <Box>
+            <Flex align="center" justify="between" mb="1">
+              <Text as="div" size="2" color="gray">
+                Content
+              </Text>
+              <Button
+                size="1"
+                variant="soft"
+                onClick={() => set('content', GENERIC_WELCOME_MESSAGE)}
+                type="button"
+              >
+                Use generic message
+              </Button>
+            </Flex>
             <TextArea
               rows={8}
               value={form.content}
               onChange={(e) => set('content', e.target.value)}
               placeholder="Welcome message content..."
             />
-          </Field>
+          </Box>
         </Flex>
 
         <Flex gap="2" mt="4" justify="end">

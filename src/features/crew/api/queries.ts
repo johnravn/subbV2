@@ -42,7 +42,7 @@ export function crewIndexQuery({
   return {
     queryKey: ['company', companyId, 'crew-index', kind ?? 'all'] as const,
     queryFn: async () => {
-      // One round-trip via the view
+      // Get users from company_user_profiles view
       const { data, error } = await supabase
         .from('company_user_profiles')
         .select('user_id, role, email, display_name, first_name, last_name')
@@ -58,6 +58,25 @@ export function crewIndexQuery({
         first_name: string | null
         last_name: string | null
       }>
+
+      // Filter out superusers by checking profiles
+      // Get all user_ids that are superusers
+      const userIds = rows.map((r) => r.user_id)
+      if (userIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('user_id, superuser')
+          .in('user_id', userIds)
+
+        const superuserIds = new Set(
+          (profilesData ?? [])
+            .filter((p) => p.superuser)
+            .map((p) => p.user_id),
+        )
+
+        // Filter out superusers
+        rows = rows.filter((r) => !superuserIds.has(r.user_id))
+      }
 
       if (kind && kind !== 'all') {
         rows = rows.filter((r) => r.role === kind)

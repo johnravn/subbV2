@@ -21,6 +21,7 @@ import {
   Trash,
 } from 'iconoir-react'
 import { useCompany } from '@shared/companies/CompanyProvider'
+import { useAuthz } from '@shared/auth/useAuthz'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { FixedTimePeriodEditor } from '@features/calendar/components/reservations/TimePeriodPicker'
 import BookItemsDialog from '../dialogs/BookItemsDialog'
@@ -32,7 +33,8 @@ export default function EquipmentTab({ jobId }: { jobId: string }) {
   const [externalEditMode, setExternalEditMode] = React.useState(false)
   const [view, setView] = React.useState<'internal' | 'external'>('internal')
   const { companyId } = useCompany()
-  const canBook = !!companyId
+  const { companyRole } = useAuthz()
+  const canBook = !!companyId && companyRole !== 'freelancer'
   const timePeriodId: string | null = null
 
   const { data } = useQuery({
@@ -146,6 +148,7 @@ function InternalEquipmentTable({
 }) {
   const qc = useQueryClient()
   const { success, error } = useToast()
+  const { companyRole } = useAuthz()
   const [expandedGroups, setExpandedGroups] = React.useState<Set<string>>(
     new Set(),
   )
@@ -238,27 +241,29 @@ function InternalEquipmentTable({
         }}
       >
         <Heading size="3">Internal equipment</Heading>
-        <Box style={{ display: 'flex', gap: 8 }}>
-          {rows.length > 0 && (
+        {companyRole !== 'freelancer' && (
+          <Box style={{ display: 'flex', gap: 8 }}>
+            {rows.length > 0 && (
+              <Button
+                size="2"
+                variant={editMode ? 'solid' : 'soft'}
+                color={editMode ? 'green' : undefined}
+                disabled={!canBook}
+                onClick={() => setEditMode(!editMode)}
+              >
+                <Edit width={16} height={16} />{' '}
+                {editMode ? 'Done editing' : 'Edit bookings'}
+              </Button>
+            )}
             <Button
               size="2"
-              variant={editMode ? 'solid' : 'soft'}
-              color={editMode ? 'green' : undefined}
               disabled={!canBook}
-              onClick={() => setEditMode(!editMode)}
+              onClick={() => setBookItemsOpen(true)}
             >
-              <Edit width={16} height={16} />{' '}
-              {editMode ? 'Done editing' : 'Edit bookings'}
+              <Plus width={16} height={16} /> Book items
             </Button>
-          )}
-          <Button
-            size="2"
-            disabled={!canBook}
-            onClick={() => setBookItemsOpen(true)}
-          >
-            <Plus width={16} height={16} /> Book items
-          </Button>
-        </Box>
+          </Box>
+        )}
         {canBook && companyId && (
           <BookItemsDialog
             open={bookItemsOpen}
@@ -481,6 +486,8 @@ function ExternalEquipmentTable({
 }: any) {
   const qc = useQueryClient()
   const { success, error } = useToast()
+  const { companyRole } = useAuthz()
+  const isReadOnly = companyRole === 'freelancer'
   const [editingQty, setEditingQty] = React.useState<{
     id: string
     value: number
@@ -600,27 +607,29 @@ function ExternalEquipmentTable({
         }}
       >
         <Heading size="3">External equipment</Heading>
-        <Box style={{ display: 'flex', gap: 8 }}>
-          {rows.length > 0 && (
+        {companyRole !== 'freelancer' && (
+          <Box style={{ display: 'flex', gap: 8 }}>
+            {rows.length > 0 && (
+              <Button
+                size="2"
+                variant={editMode ? 'solid' : 'soft'}
+                color={editMode ? 'green' : undefined}
+                disabled={!canBook}
+                onClick={() => setEditMode(!editMode)}
+              >
+                <Edit width={16} height={16} />{' '}
+                {editMode ? 'Done editing' : 'Edit bookings'}
+              </Button>
+            )}
             <Button
               size="2"
-              variant={editMode ? 'solid' : 'soft'}
-              color={editMode ? 'green' : undefined}
               disabled={!canBook}
-              onClick={() => setEditMode(!editMode)}
+              onClick={() => setBookItemsOpen(true)}
             >
-              <Edit width={16} height={16} />{' '}
-              {editMode ? 'Done editing' : 'Edit bookings'}
+              <Plus width={16} height={16} /> Book items
             </Button>
-          )}
-          <Button
-            size="2"
-            disabled={!canBook}
-            onClick={() => setBookItemsOpen(true)}
-          >
-            <Plus width={16} height={16} /> Book items
-          </Button>
-        </Box>
+          </Box>
+        )}
         {canBook && (
           <BookItemsDialog
             open={bookItemsOpen}
@@ -674,7 +683,9 @@ function ExternalEquipmentTable({
                 style={{
                   background: 'var(--gray-a2)',
                   cursor: 'pointer',
-                  borderBottom: isExpanded ? '1px solid var(--gray-a5)' : 'none',
+                  borderBottom: isExpanded
+                    ? '1px solid var(--gray-a5)'
+                    : 'none',
                 }}
                 onClick={() => toggleOwner(ownerId)}
               >
@@ -691,16 +702,22 @@ function ExternalEquipmentTable({
                       {ownerItems.length === 1 ? 'item' : 'items'})
                     </Text>
                   </Flex>
-                  <Box onClick={(e) => e.stopPropagation()}>
-                    <StatusBadge
-                      value={currentStatus}
-                      onChange={(v) =>
-                        handleUpdateOwnerItems(ownerItems, {
-                          external_status: v,
-                        })
-                      }
-                    />
-                  </Box>
+                  {isReadOnly ? (
+                    <Badge radius="full" highContrast>
+                      {currentStatus}
+                    </Badge>
+                  ) : (
+                    <Box onClick={(e) => e.stopPropagation()}>
+                      <StatusBadge
+                        value={currentStatus}
+                        onChange={(v) =>
+                          handleUpdateOwnerItems(ownerItems, {
+                            external_status: v,
+                          })
+                        }
+                      />
+                    </Box>
+                  )}
                 </Flex>
               </Box>
 
@@ -722,6 +739,7 @@ function ExternalEquipmentTable({
                         <FixedTimePeriodEditor
                           jobId={jobId}
                           timePeriodId={currentTimePeriod}
+                          readOnly={isReadOnly}
                         />
                       ) : (
                         <Box
@@ -743,35 +761,39 @@ function ExternalEquipmentTable({
                       <Text size="1" weight="medium" mb="1">
                         Note
                       </Text>
-                      <TextField.Root
-                        placeholder="Add note for all items from this owner…"
-                        value={editedNote}
-                        onChange={(e) => {
-                          const newNotes = new Map(ownerNotes)
-                          newNotes.set(ownerId, e.target.value)
-                          setOwnerNotes(newNotes)
-                        }}
-                      >
-                        {noteChanged && (
-                          <TextField.Slot side="right">
-                            <Button
-                              size="2"
-                              variant="ghost"
-                              onClick={() => {
-                                handleUpdateOwnerItems(ownerItems, {
-                                  external_note: editedNote,
-                                })
-                                // Clear the edited note after saving
-                                const newNotes = new Map(ownerNotes)
-                                newNotes.delete(ownerId)
-                                setOwnerNotes(newNotes)
-                              }}
-                            >
-                              Save
-                            </Button>
-                          </TextField.Slot>
-                        )}
-                      </TextField.Root>
+                      {isReadOnly ? (
+                        <Text size="2">{editedNote || '—'}</Text>
+                      ) : (
+                        <TextField.Root
+                          placeholder="Add note for all items from this owner…"
+                          value={editedNote}
+                          onChange={(e) => {
+                            const newNotes = new Map(ownerNotes)
+                            newNotes.set(ownerId, e.target.value)
+                            setOwnerNotes(newNotes)
+                          }}
+                        >
+                          {noteChanged && (
+                            <TextField.Slot side="right">
+                              <Button
+                                size="2"
+                                variant="ghost"
+                                onClick={() => {
+                                  handleUpdateOwnerItems(ownerItems, {
+                                    external_note: editedNote,
+                                  })
+                                  // Clear the edited note after saving
+                                  const newNotes = new Map(ownerNotes)
+                                  newNotes.delete(ownerId)
+                                  setOwnerNotes(newNotes)
+                                }}
+                              >
+                                Save
+                              </Button>
+                            </TextField.Slot>
+                          )}
+                        </TextField.Root>
+                      )}
                     </Box>
 
                     {/* Items Table */}
@@ -779,9 +801,13 @@ function ExternalEquipmentTable({
                       <Table.Root variant="surface">
                         <Table.Header>
                           <Table.Row>
-                            <Table.ColumnHeaderCell>Item</Table.ColumnHeaderCell>
+                            <Table.ColumnHeaderCell>
+                              Item
+                            </Table.ColumnHeaderCell>
                             <Table.ColumnHeaderCell>Qty</Table.ColumnHeaderCell>
-                            <Table.ColumnHeaderCell>Price</Table.ColumnHeaderCell>
+                            <Table.ColumnHeaderCell>
+                              Price
+                            </Table.ColumnHeaderCell>
                             {editMode && <Table.ColumnHeaderCell />}
                           </Table.Row>
                         </Table.Header>
@@ -825,7 +851,10 @@ function ExternalEquipmentTable({
                                           size="1"
                                           variant="soft"
                                           onClick={() =>
-                                            handleSaveQty(r.id, editingQty.value)
+                                            handleSaveQty(
+                                              r.id,
+                                              editingQty.value,
+                                            )
                                           }
                                         >
                                           <Check width={14} height={14} />

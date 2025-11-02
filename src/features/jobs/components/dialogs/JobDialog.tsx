@@ -189,7 +189,7 @@ export default function JobDialog({
           console.warn('Failed to create Job duration time period', e)
         }
 
-        return data.id as UUID
+        return data.id
       } else {
         if (!initialData) throw new Error('Missing initial data')
         const { error } = await supabase

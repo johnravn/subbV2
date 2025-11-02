@@ -14,9 +14,12 @@ import {
 import { Download, Edit, GoogleDocs, Plus, Trash } from 'iconoir-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@shared/api/supabase'
+import { useAuthz } from '@shared/auth/useAuthz'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 
 export default function FilesTab({ jobId }: { jobId: string }) {
+  const { companyRole } = useAuthz()
+  const isReadOnly = companyRole === 'freelancer'
   const { success, error, info } = useToast()
   const qc = useQueryClient()
   const [addOpen, setAddOpen] = React.useState(false)
@@ -79,10 +82,12 @@ export default function FilesTab({ jobId }: { jobId: string }) {
         <Text size="2" color="gray">
           Files uploaded for this job
         </Text>
-        <Button size="2" variant="soft" onClick={() => setAddOpen(true)}>
-          <Plus width={16} height={16} />
-          Upload file
-        </Button>
+        {!isReadOnly && (
+          <Button size="2" variant="soft" onClick={() => setAddOpen(true)}>
+            <Plus width={16} height={16} />
+            Upload file
+          </Button>
+        )}
         <AddFileDialog
           open={addOpen}
           onOpenChange={setAddOpen}
@@ -183,24 +188,28 @@ export default function FilesTab({ jobId }: { jobId: string }) {
                     >
                       <Download width={14} height={14} />
                     </IconButton>
-                    <IconButton
-                      size="1"
-                      variant="soft"
-                      onClick={() => setEditFileId(file.id)}
-                    >
-                      <Edit width={14} height={14} />
-                    </IconButton>
-                    <IconButton
-                      size="1"
-                      variant="soft"
-                      color="red"
-                      onClick={() => {
-                        info('Deleting file...', 'Please wait')
-                        deleteFile.mutate(file.id)
-                      }}
-                    >
-                      <Trash width={14} height={14} />
-                    </IconButton>
+                    {!isReadOnly && (
+                      <>
+                        <IconButton
+                          size="1"
+                          variant="soft"
+                          onClick={() => setEditFileId(file.id)}
+                        >
+                          <Edit width={14} height={14} />
+                        </IconButton>
+                        <IconButton
+                          size="1"
+                          variant="soft"
+                          color="red"
+                          onClick={() => {
+                            info('Deleting file...', 'Please wait')
+                            deleteFile.mutate(file.id)
+                          }}
+                        >
+                          <Trash width={14} height={14} />
+                        </IconButton>
+                      </>
+                    )}
                   </Flex>
                 </Table.Cell>
               </Table.Row>

@@ -1,37 +1,40 @@
 // src/features/company/pages/CompanyPage.tsx
 import * as React from 'react'
-import {
-  Box,
-  Button,
-  Card,
-  Checkbox,
-  DropdownMenu,
-  Flex,
-  Heading,
-  Separator,
-  Text,
-} from '@radix-ui/themes'
+import { Box, Tabs } from '@radix-ui/themes'
+import { useLocation, useNavigate } from '@tanstack/react-router'
 import { useCompany } from '@shared/companies/CompanyProvider'
-import { NavArrowDown } from 'iconoir-react'
-import CompanyTable from '../components/CompanyTable'
-import CompanyInspector from '../components/CompanyInspector'
-import CrewInspector from '../../crew/components/CrewInspector'
-
-type Selection =
-  | { kind: 'company' }
-  | { kind: 'user'; userId: string }
-  | { kind: 'none' }
+import CompanyOverviewTab from '../components/CompanyOverviewTab'
+import CompanyUsersTab from '../components/CompanyUsersTab'
+import CompanyExpansionsTab from '../components/CompanyExpansionsTab'
+import CompanyPersonalizationTab from '../components/CompanyPersonalizationTab'
+import CompanySetupTab from '../components/CompanySetupTab'
 
 export default function CompanyPage() {
   const { companyId } = useCompany()
-  const [selection, setSelection] = React.useState<Selection>({ kind: 'none' })
+  const location = useLocation()
+  const navigate = useNavigate()
+  const search = location.search as { tab?: string }
+  const tabFromUrl = search.tab
 
-  // ⬇️ Same filters as CrewPage
-  const [showEmployees, setShowEmployees] = React.useState(true)
-  const [showFreelancers, setShowFreelancers] = React.useState(true)
-  const [showMyPending, setShowMyPending] = React.useState(true)
+  // Track active tab, initialize from URL or default to 'overview'
+  const [activeTab, setActiveTab] = React.useState<string>(
+    tabFromUrl || 'overview',
+  )
 
-  // same responsive pattern as your CrewPage
+  // Update tab when URL changes
+  React.useEffect(() => {
+    if (tabFromUrl) {
+      setActiveTab(tabFromUrl)
+    }
+  }, [tabFromUrl])
+
+  // Update URL when tab changes
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab)
+    navigate({ to: '/company', search: { tab } })
+  }
+
+  // match JobsPage behavior for responsive layout
   const [isLarge, setIsLarge] = React.useState<boolean>(() =>
     typeof window !== 'undefined'
       ? window.matchMedia('(min-width: 1024px)').matches
@@ -52,212 +55,101 @@ export default function CompanyPage() {
   if (!companyId) return <div>No company selected.</div>
 
   return (
-    <section style={{ height: isLarge ? '100%' : undefined, minHeight: 0 }}>
-      <div
+    <section
+      style={{
+        height: isLarge ? '100%' : undefined,
+        minHeight: 0,
+      }}
+    >
+      <Tabs.Root
+        defaultValue="overview"
+        value={activeTab}
+        onValueChange={handleTabChange}
         style={{
-          display: 'grid',
-          gridTemplateColumns: isLarge ? '2fr 1fr' : '1fr',
-          gap: 'var(--space-4)',
+          display: 'flex',
+          flexDirection: 'column',
           height: isLarge ? '100%' : undefined,
           minHeight: 0,
         }}
       >
-        {/* LEFT */}
-        <Card
-          size="3"
+        <Tabs.List>
+          <Tabs.Trigger value="overview">Overview</Tabs.Trigger>
+          <Tabs.Trigger value="users">Users</Tabs.Trigger>
+          <Tabs.Trigger value="expansions">Expansions</Tabs.Trigger>
+          <Tabs.Trigger value="personalization">Personalization</Tabs.Trigger>
+          <Tabs.Trigger value="setup">Setup</Tabs.Trigger>
+        </Tabs.List>
+
+        <Box
+          pt="4"
           style={{
+            flex: isLarge ? 1 : undefined,
+            minHeight: isLarge ? 0 : undefined,
             display: 'flex',
             flexDirection: 'column',
-            height: isLarge ? '100%' : undefined,
-            minHeight: 0,
           }}
         >
-          <Flex align="center" justify="between" mb="3">
-            <Heading size="5">Company</Heading>
-            <StatusDropdown
-              showEmployees={showEmployees}
-              showFreelancers={showFreelancers}
-              showMyPending={showMyPending}
-              onShowEmployeesChange={setShowEmployees}
-              onShowFreelancersChange={setShowFreelancers}
-              onShowMyPendingChange={setShowMyPending}
-            />
-          </Flex>
-          <Separator size="4" mb="3" />
-
-          {/* Company card (96px) */}
-          <button
-            type="button"
-            onClick={() => setSelection({ kind: 'company' })}
+          <Tabs.Content
+            value="overview"
             style={{
-              all: 'unset',
-              cursor: 'pointer',
-              display: 'block',
-              marginBottom: 12,
-            }}
-            aria-label="Show company details"
-          >
-            <Card
-              size="2"
-              variant="surface"
-              style={{
-                height: 96,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '0 var(--space-4)',
-                border: '1px solid var(--gray-5)',
-              }}
-            >
-              <Heading size="4">Company details</Heading>
-              <span
-                style={{
-                  fontSize: 12,
-                  color: 'var(--gray-11)',
-                }}
-              >
-                Press to view in inspector →
-              </span>
-            </Card>
-          </button>
-
-          {/* Employees/Freelancers/Invites table */}
-          <Box
-            style={{
-              flex: isLarge ? 1 : undefined,
-              minHeight: isLarge ? 0 : undefined,
-              overflowY: isLarge ? 'auto' : 'visible',
+              flex: 1,
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column',
             }}
           >
-            <CompanyTable
-              selectedUserId={
-                selection.kind === 'user' ? selection.userId : null
-              }
-              onSelectUser={(userId) => setSelection({ kind: 'user', userId })}
-              showEmployees={showEmployees}
-              showFreelancers={showFreelancers}
-              showMyPending={showMyPending}
-            />
-          </Box>
-        </Card>
+            <CompanyOverviewTab />
+          </Tabs.Content>
 
-        {/* RIGHT */}
-        <Card
-          size="3"
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            height: isLarge ? '100%' : undefined,
-            maxHeight: isLarge ? '100%' : undefined,
-            overflow: isLarge ? 'hidden' : 'visible',
-            minHeight: 0,
-          }}
-        >
-          <Heading size="5" mb="3">
-            Inspector
-          </Heading>
-          <Separator size="4" mb="3" />
-          <Box
+          <Tabs.Content
+            value="users"
             style={{
-              flex: isLarge ? 1 : undefined,
-              minHeight: isLarge ? 0 : undefined,
-              overflowY: isLarge ? 'auto' : 'visible',
+              flex: 1,
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column',
             }}
           >
-            {selection.kind === 'company' ? (
-              <CompanyInspector />
-            ) : selection.kind === 'user' ? (
-              <CrewInspector userId={selection.userId} />
-            ) : (
-              <div style={{ color: 'var(--gray-11)' }}>
-                Press the company card or select an employee.
-              </div>
-            )}
-          </Box>
-        </Card>
-      </div>
+            <CompanyUsersTab />
+          </Tabs.Content>
+
+          <Tabs.Content
+            value="expansions"
+            style={{
+              flex: 1,
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <CompanyExpansionsTab />
+          </Tabs.Content>
+
+          <Tabs.Content
+            value="personalization"
+            style={{
+              flex: 1,
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <CompanyPersonalizationTab />
+          </Tabs.Content>
+
+          <Tabs.Content
+            value="setup"
+            style={{
+              flex: 1,
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <CompanySetupTab />
+          </Tabs.Content>
+        </Box>
+      </Tabs.Root>
     </section>
-  )
-}
-
-function StatusDropdown({
-  showEmployees,
-  showFreelancers,
-  showMyPending,
-  onShowEmployeesChange,
-  onShowFreelancersChange,
-  onShowMyPendingChange,
-}: {
-  showEmployees: boolean
-  showFreelancers: boolean
-  showMyPending: boolean
-  onShowEmployeesChange: (v: boolean) => void
-  onShowFreelancersChange: (v: boolean) => void
-  onShowMyPendingChange: (v: boolean) => void
-}) {
-  const selectedCount = [showEmployees, showFreelancers, showMyPending].filter(
-    Boolean,
-  ).length
-
-  const label =
-    selectedCount === 3
-      ? 'All statuses'
-      : selectedCount === 0
-        ? 'No statuses'
-        : `${selectedCount} selected`
-
-  return (
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger>
-        <Button variant="soft" size="2">
-          <Text>{label}</Text>
-          <NavArrowDown width={14} height={14} />
-        </Button>
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Content>
-        <DropdownMenu.Item
-          onSelect={(e) => {
-            e.preventDefault()
-            onShowEmployeesChange(!showEmployees)
-          }}
-        >
-          <Flex align="center" gap="2">
-            <Checkbox
-              checked={showEmployees}
-              onCheckedChange={onShowEmployeesChange}
-            />
-            <Text>Employees</Text>
-          </Flex>
-        </DropdownMenu.Item>
-        <DropdownMenu.Item
-          onSelect={(e) => {
-            e.preventDefault()
-            onShowFreelancersChange(!showFreelancers)
-          }}
-        >
-          <Flex align="center" gap="2">
-            <Checkbox
-              checked={showFreelancers}
-              onCheckedChange={onShowFreelancersChange}
-            />
-            <Text>Freelancers</Text>
-          </Flex>
-        </DropdownMenu.Item>
-        <DropdownMenu.Item
-          onSelect={(e) => {
-            e.preventDefault()
-            onShowMyPendingChange(!showMyPending)
-          }}
-        >
-          <Flex align="center" gap="2">
-            <Checkbox
-              checked={showMyPending}
-              onCheckedChange={onShowMyPendingChange}
-            />
-            <Text>My pending invites</Text>
-          </Flex>
-        </DropdownMenu.Item>
-      </DropdownMenu.Content>
-    </DropdownMenu.Root>
   )
 }

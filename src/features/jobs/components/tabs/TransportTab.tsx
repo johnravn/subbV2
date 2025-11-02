@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  Badge,
   Box,
   Button,
   Dialog,
@@ -15,6 +16,7 @@ import {
 import { supabase } from '@shared/api/supabase'
 import { Edit, NavArrowDown, NavArrowRight, Trash, Truck } from 'iconoir-react'
 import { useCompany } from '@shared/companies/CompanyProvider'
+import { useAuthz } from '@shared/auth/useAuthz'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { FixedTimePeriodEditor } from '@features/calendar/components/reservations/TimePeriodPicker'
 import BookVehicleDialog, {
@@ -33,7 +35,9 @@ export default function TransportTab({ jobId }: { jobId: string }) {
     null,
   )
   const { companyId } = useCompany()
-  const canBook = !!companyId
+  const { companyRole } = useAuthz()
+  const canBook = !!companyId && companyRole !== 'freelancer'
+  const isReadOnly = companyRole === 'freelancer'
 
   const qc = useQueryClient()
   const { success, error: showError } = useToast()
@@ -207,20 +211,24 @@ export default function TransportTab({ jobId }: { jobId: string }) {
         }}
       >
         <Heading size="3">Transportation</Heading>
-        <Button
-          size="2"
-          disabled={!canBook}
-          onClick={() => setBookVehOpen(true)}
-        >
-          <Truck /> Book vehicle
-        </Button>
-        {canBook && (
-          <BookVehicleDialog
-            open={bookVehOpen}
-            onOpenChange={setBookVehOpen}
-            jobId={jobId}
-            companyId={companyId}
-          />
+        {!isReadOnly && (
+          <>
+            <Button
+              size="2"
+              disabled={!canBook}
+              onClick={() => setBookVehOpen(true)}
+            >
+              <Truck /> Book vehicle
+            </Button>
+            {canBook && (
+              <BookVehicleDialog
+                open={bookVehOpen}
+                onOpenChange={setBookVehOpen}
+                jobId={jobId}
+                companyId={companyId}
+              />
+            )}
+          </>
         )}
       </Box>
 
@@ -310,6 +318,7 @@ export default function TransportTab({ jobId }: { jobId: string }) {
                           <FixedTimePeriodEditor
                             jobId={jobId}
                             timePeriodId={firstTimePeriod}
+                            readOnly={isReadOnly}
                           />
                           {!allSamePeriod && (
                             <Text size="1" color="amber" mt="1">
@@ -329,9 +338,11 @@ export default function TransportTab({ jobId }: { jobId: string }) {
                   <Table.Header>
                     <Table.Row>
                       <Table.ColumnHeaderCell>Vehicle</Table.ColumnHeaderCell>
-                      <Table.ColumnHeaderCell style={{ width: '120px' }}>
-                        Actions
-                      </Table.ColumnHeaderCell>
+                      {!isReadOnly && (
+                        <Table.ColumnHeaderCell style={{ width: '120px' }}>
+                          Actions
+                        </Table.ColumnHeaderCell>
+                      )}
                     </Table.Row>
                   </Table.Header>
                   <Table.Body>
@@ -340,31 +351,33 @@ export default function TransportTab({ jobId }: { jobId: string }) {
                         <Table.Cell>
                           {(r.vehicle as any)?.name ?? '—'}
                         </Table.Cell>
-                        <Table.Cell>
-                          <Flex gap="2">
-                            <IconButton
-                              size="1"
-                              variant="ghost"
-                              onClick={() =>
-                                setEditingBooking({
-                                  id: r.id,
-                                  external_status: null,
-                                  external_note: null,
-                                })
-                              }
-                            >
-                              <Edit />
-                            </IconButton>
-                            <IconButton
-                              size="1"
-                              variant="ghost"
-                              color="red"
-                              onClick={() => setDeletingBooking(r.id)}
-                            >
-                              <Trash />
-                            </IconButton>
-                          </Flex>
-                        </Table.Cell>
+                        {!isReadOnly && (
+                          <Table.Cell>
+                            <Flex gap="2">
+                              <IconButton
+                                size="1"
+                                variant="ghost"
+                                onClick={() =>
+                                  setEditingBooking({
+                                    id: r.id,
+                                    external_status: null,
+                                    external_note: null,
+                                  })
+                                }
+                              >
+                                <Edit />
+                              </IconButton>
+                              <IconButton
+                                size="1"
+                                variant="ghost"
+                                color="red"
+                                onClick={() => setDeletingBooking(r.id)}
+                              >
+                                <Trash />
+                              </IconButton>
+                            </Flex>
+                          </Table.Cell>
+                        )}
                       </Table.Row>
                     ))}
                   </Table.Body>
@@ -437,16 +450,22 @@ export default function TransportTab({ jobId }: { jobId: string }) {
                     {ownerVehicles.length === 1 ? 'vehicle' : 'vehicles'})
                   </Text>
                 </Flex>
-                <Box onClick={(e) => e.stopPropagation()}>
-                  <StatusBadge
-                    value={currentStatus}
-                    onChange={(v) =>
-                      handleUpdateOwnerVehicles(ownerVehicles, {
-                        external_status: v,
-                      })
-                    }
-                  />
-                </Box>
+                {isReadOnly ? (
+                  <Badge radius="full" highContrast>
+                    {currentStatus}
+                  </Badge>
+                ) : (
+                  <Box onClick={(e) => e.stopPropagation()}>
+                    <StatusBadge
+                      value={currentStatus}
+                      onChange={(v) =>
+                        handleUpdateOwnerVehicles(ownerVehicles, {
+                          external_status: v,
+                        })
+                      }
+                    />
+                  </Box>
+                )}
               </Flex>
             </Box>
 
@@ -468,6 +487,7 @@ export default function TransportTab({ jobId }: { jobId: string }) {
                       <FixedTimePeriodEditor
                         jobId={jobId}
                         timePeriodId={currentTimePeriod}
+                        readOnly={isReadOnly}
                       />
                     ) : (
                       <Box
@@ -489,34 +509,38 @@ export default function TransportTab({ jobId }: { jobId: string }) {
                     <Text size="1" weight="medium" mb="1">
                       Note
                     </Text>
-                    <TextField.Root
-                      placeholder="Add note for all vehicles from this owner…"
-                      value={editedNote}
-                      onChange={(e) => {
-                        const newNotes = new Map(ownerNotes)
-                        newNotes.set(ownerId, e.target.value)
-                        setOwnerNotes(newNotes)
-                      }}
-                    >
-                      {noteChanged && (
-                        <TextField.Slot side="right">
-                          <Button
-                            size="2"
-                            variant="ghost"
-                            onClick={() => {
-                              handleUpdateOwnerVehicles(ownerVehicles, {
-                                external_note: editedNote,
-                              })
-                              const newNotes = new Map(ownerNotes)
-                              newNotes.delete(ownerId)
-                              setOwnerNotes(newNotes)
-                            }}
-                          >
-                            Save
-                          </Button>
-                        </TextField.Slot>
-                      )}
-                    </TextField.Root>
+                    {isReadOnly ? (
+                      <Text size="2">{editedNote || '—'}</Text>
+                    ) : (
+                      <TextField.Root
+                        placeholder="Add note for all vehicles from this owner…"
+                        value={editedNote}
+                        onChange={(e) => {
+                          const newNotes = new Map(ownerNotes)
+                          newNotes.set(ownerId, e.target.value)
+                          setOwnerNotes(newNotes)
+                        }}
+                      >
+                        {noteChanged && (
+                          <TextField.Slot side="right">
+                            <Button
+                              size="2"
+                              variant="ghost"
+                              onClick={() => {
+                                handleUpdateOwnerVehicles(ownerVehicles, {
+                                  external_note: editedNote,
+                                })
+                                const newNotes = new Map(ownerNotes)
+                                newNotes.delete(ownerId)
+                                setOwnerNotes(newNotes)
+                              }}
+                            >
+                              Save
+                            </Button>
+                          </TextField.Slot>
+                        )}
+                      </TextField.Root>
+                    )}
                   </Box>
                 </Flex>
 
@@ -526,9 +550,11 @@ export default function TransportTab({ jobId }: { jobId: string }) {
                     <Table.Header>
                       <Table.Row>
                         <Table.ColumnHeaderCell>Vehicle</Table.ColumnHeaderCell>
-                        <Table.ColumnHeaderCell style={{ width: '120px' }}>
-                          Actions
-                        </Table.ColumnHeaderCell>
+                        {!isReadOnly && (
+                          <Table.ColumnHeaderCell style={{ width: '120px' }}>
+                            Actions
+                          </Table.ColumnHeaderCell>
+                        )}
                       </Table.Row>
                     </Table.Header>
                     <Table.Body>
@@ -537,31 +563,33 @@ export default function TransportTab({ jobId }: { jobId: string }) {
                           <Table.Cell>
                             {(r.vehicle as any)?.name ?? '—'}
                           </Table.Cell>
-                          <Table.Cell>
-                            <Flex gap="2">
-                              <IconButton
-                                size="1"
-                                variant="ghost"
-                                onClick={() =>
-                                  setEditingBooking({
-                                    id: r.id,
-                                    external_status: r.external_status,
-                                    external_note: r.external_note,
-                                  })
-                                }
-                              >
-                                <Edit />
-                              </IconButton>
-                              <IconButton
-                                size="1"
-                                variant="ghost"
-                                color="red"
-                                onClick={() => setDeletingBooking(r.id)}
-                              >
-                                <Trash />
-                              </IconButton>
-                            </Flex>
-                          </Table.Cell>
+                          {!isReadOnly && (
+                            <Table.Cell>
+                              <Flex gap="2">
+                                <IconButton
+                                  size="1"
+                                  variant="ghost"
+                                  onClick={() =>
+                                    setEditingBooking({
+                                      id: r.id,
+                                      external_status: r.external_status,
+                                      external_note: r.external_note,
+                                    })
+                                  }
+                                >
+                                  <Edit />
+                                </IconButton>
+                                <IconButton
+                                  size="1"
+                                  variant="ghost"
+                                  color="red"
+                                  onClick={() => setDeletingBooking(r.id)}
+                                >
+                                  <Trash />
+                                </IconButton>
+                              </Flex>
+                            </Table.Cell>
+                          )}
                         </Table.Row>
                       ))}
                     </Table.Body>

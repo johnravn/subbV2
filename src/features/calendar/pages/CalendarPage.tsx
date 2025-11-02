@@ -12,6 +12,7 @@ import {
 } from '@radix-ui/themes'
 import { Calendar, List, Search } from 'iconoir-react'
 import { useCompany } from '@shared/companies/CompanyProvider'
+import { useAuthz } from '@shared/auth/useAuthz'
 import CompanyCalendarPro from '@features/calendar/components/CompanyCalendarPro'
 import {
   applyCalendarFilter,
@@ -27,6 +28,7 @@ type Category = 'jobDuration' | 'equipment' | 'crew' | 'transport' | 'all'
 
 export default function CalendarPage() {
   const { companyId } = useCompany()
+  const { userId, companyRole } = useAuthz()
   const [category, setCategory] = React.useState<Category>('jobDuration')
   const [searchQuery, setSearchQuery] = React.useState('')
   const [selectedEntityId, setSelectedEntityId] = React.useState<string | null>(
@@ -35,6 +37,13 @@ export default function CalendarPage() {
   const [showSuggestions, setShowSuggestions] = React.useState(false)
   const [listMode, setListMode] = React.useState(false)
   const searchRef = React.useRef<HTMLDivElement>(null)
+
+  // Set default category based on role
+  React.useEffect(() => {
+    if (companyRole === 'freelancer') {
+      setCategory('crew')
+    }
+  }, [companyRole])
 
   // Close suggestions when clicking outside
   React.useEffect(() => {
@@ -60,6 +69,8 @@ export default function CalendarPage() {
     ...companyCalendarQuery({
       companyId: companyId ?? '',
       categories: undefined, // Fetch all categories
+      userId,
+      companyRole,
     }),
     enabled: !!companyId,
   })

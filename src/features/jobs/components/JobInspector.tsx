@@ -13,6 +13,7 @@ import {
 } from '@radix-ui/themes'
 import { Edit, Trash } from 'iconoir-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useAuthz } from '@shared/auth/useAuthz'
 import { makeWordPresentable } from '@shared/lib/generalFunctions'
 import { supabase } from '@shared/api/supabase'
 import { useToast } from '@shared/ui/toast/ToastProvider'
@@ -27,7 +28,21 @@ import ContactsTab from './tabs/ContactsTab'
 import CalendarTab from './tabs/CalendarTab'
 import FilesTab from './tabs/FilesTab'
 import JobDialog from './dialogs/JobDialog'
-import type { JobDetail } from '../types'
+import type { JobDetail, JobStatus } from '../types'
+
+// Helper function to mask status for freelancers
+function getDisplayStatus(
+  status: JobStatus,
+  companyRole: string | null,
+): JobStatus {
+  if (companyRole === 'freelancer') {
+    // Freelancers should not see statuses beyond 'completed'
+    if (status === 'invoiced' || status === 'paid') {
+      return 'completed'
+    }
+  }
+  return status
+}
 
 const ORDER: Array<JobDetail['status']> = [
   'draft',
@@ -51,6 +66,7 @@ export default function JobInspector({
   initialTab?: string
 }) {
   // ✅ hooks first
+  const { companyRole } = useAuthz()
   const [editOpen, setEditOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [statusTimelineOpen, setStatusTimelineOpen] = React.useState(false)
@@ -123,46 +139,55 @@ export default function JobInspector({
       >
         <Heading size="4">{job.title}</Heading>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <Badge
-            color={
-              job.status === 'canceled'
-                ? 'red'
-                : job.status === 'paid'
-                  ? 'green'
-                  : job.status === 'in_progress'
-                    ? 'amber'
-                    : 'blue'
-            }
-            radius="full"
-            highContrast
-          >
-            {job.status}
-          </Badge>
-          <Button size="2" variant="soft" onClick={() => setEditOpen(true)}>
-            <Edit width={16} height={16} />
-          </Button>
-          <Button
-            size="2"
-            variant="soft"
-            color="red"
-            onClick={() => setDeleteOpen(true)}
-          >
-            <Trash width={16} height={16} />
-          </Button>
-          <JobDialog
-            open={editOpen}
-            onOpenChange={setEditOpen}
-            companyId={job.company_id}
-            mode="edit"
-            initialData={job}
-          />
-          <DeleteJobDialog
-            open={deleteOpen}
-            onOpenChange={setDeleteOpen}
-            job={job}
-            onConfirm={() => deleteJob.mutate(job.id)}
-            isDeleting={deleteJob.isPending}
-          />
+          {(() => {
+            const displayStatus = getDisplayStatus(job.status, companyRole)
+            return (
+              <Badge
+                color={
+                  displayStatus === 'canceled'
+                    ? 'red'
+                    : displayStatus === 'paid' || displayStatus === 'completed'
+                      ? 'green'
+                      : displayStatus === 'in_progress'
+                        ? 'amber'
+                        : 'blue'
+                }
+                radius="full"
+                highContrast
+              >
+                {displayStatus}
+              </Badge>
+            )
+          })()}
+          {companyRole !== 'freelancer' && (
+            <>
+              <Button size="2" variant="soft" onClick={() => setEditOpen(true)}>
+                <Edit width={16} height={16} />
+              </Button>
+              <Button
+                size="2"
+                variant="soft"
+                color="red"
+                onClick={() => setDeleteOpen(true)}
+              >
+                <Trash width={16} height={16} />
+              </Button>
+              <JobDialog
+                open={editOpen}
+                onOpenChange={setEditOpen}
+                companyId={job.company_id}
+                mode="edit"
+                initialData={job}
+              />
+              <DeleteJobDialog
+                open={deleteOpen}
+                onOpenChange={setDeleteOpen}
+                job={job}
+                onConfirm={() => deleteJob.mutate(job.id)}
+                isDeleting={deleteJob.isPending}
+              />
+            </>
+          )}
         </div>
       </Box>
 

@@ -67,7 +67,7 @@ export function vehicleCalendarQuery({
 
       // Get unique job IDs for fetching job titles
       const jobIds = Array.from(
-        new Set(data.map((tp) => tp.job_id).filter(Boolean)),
+        new Set(data.map((tp) => tp.job_id).filter((id): id is string => !!id)),
       )
 
       // Fetch job titles
@@ -258,9 +258,13 @@ export function jobCalendarQuery({
 export function companyCalendarQuery({
   companyId,
   categories,
+  userId,
+  companyRole,
 }: {
   companyId: string
   categories?: Array<'program' | 'equipment' | 'crew' | 'transport'>
+  userId?: string | null
+  companyRole?: 'owner' | 'employee' | 'freelancer' | 'super_user' | null
 }) {
   return queryOptions<Array<CalendarRecord>>({
     queryKey: [
@@ -268,6 +272,8 @@ export function companyCalendarQuery({
       companyId,
       'calendar',
       categories?.sort().join(',') || 'all',
+      userId,
+      companyRole,
     ] as const,
     queryFn: async () => {
       let q = supabase
@@ -288,17 +294,29 @@ export function companyCalendarQuery({
 
       // Get unique job IDs for fetching project lead info
       const jobIds = Array.from(
-        new Set(data.map((tp) => tp.job_id).filter(Boolean)),
+        new Set(data.map((tp) => tp.job_id).filter((id): id is string => !!id)),
       )
 
       // Fetch job project lead info and titles for all jobs
       const jobProjectLeads = new Map<string, any>()
       const jobTitles = new Map<string, string>()
+      const jobStatusMap = new Map<
+        string,
+        | 'draft'
+        | 'planned'
+        | 'requested'
+        | 'confirmed'
+        | 'in_progress'
+        | 'completed'
+        | 'canceled'
+        | 'invoiced'
+        | 'paid'
+      >()
       if (jobIds.length > 0) {
         const { data: jobsData, error: jobsError } = await supabase
           .from('jobs')
           .select(
-            'id, title, project_lead:project_lead_user_id ( user_id, display_name, email, avatar_url )',
+            'id, title, status, project_lead:project_lead_user_id ( user_id, display_name, email, avatar_url )',
           )
           .in('id', jobIds)
 
@@ -310,6 +328,9 @@ export function companyCalendarQuery({
             }
             if (job.title) {
               jobTitles.set(job.id, job.title)
+            }
+            if (job.status) {
+              jobStatusMap.set(job.id, job.status)
             }
           }
         })
@@ -329,7 +350,7 @@ export function companyCalendarQuery({
           .in('time_period_id', timePeriodIds),
         supabase
           .from('reserved_crew')
-          .select('time_period_id, user_id')
+          .select('time_period_id, user_id, status')
           .in('time_period_id', timePeriodIds),
       ])
 
@@ -348,59 +369,96 @@ export function companyCalendarQuery({
         itemMap.set(i.time_period_id, i.item_id)
       })
 
-      const crewMap = new Map<string, string>()
+      // Map time_period_id to set of user_ids and their statuses
+      const crewMap = new Map<
+        string,
+        Array<{ user_id: string; status: string }>
+      >()
       ;(crewRes.data || []).forEach((c: any) => {
-        crewMap.set(c.time_period_id, c.user_id)
+        if (!crewMap.has(c.time_period_id)) {
+          crewMap.set(c.time_period_id, [])
+        }
+        crewMap.get(c.time_period_id)!.push({
+          user_id: c.user_id,
+          status: c.status,
+        })
       })
 
-      return data.map((tp: any): CalendarRecord => {
-        // Determine kind based on category and what's reserved
-        let kind: CalendarRecord['kind'] = 'job'
-        const ref: CalendarRecord['ref'] = {
-          jobId: tp.job_id || undefined,
-        }
-
-        if (tp.category === 'transport') {
-          kind = 'vehicle'
-          if (vehicleMap.has(tp.id)) {
-            ref.vehicleId = vehicleMap.get(tp.id)!
+      return data
+        .map((tp: any): CalendarRecord => {
+          // Determine kind based on category and what's reserved
+          let kind: CalendarRecord['kind'] = 'job'
+          const ref: CalendarRecord['ref'] = {
+            jobId: tp.job_id || undefined,
           }
-        } else if (tp.category === 'equipment') {
-          kind = 'item'
-          if (itemMap.has(tp.id)) {
-            ref.itemId = itemMap.get(tp.id)!
-          }
-        } else if (tp.category === 'crew') {
-          kind = 'crew'
-          if (crewMap.has(tp.id)) {
-            ref.userId = crewMap.get(tp.id)!
-          }
-        } else {
-          // For 'program' category, it's a job event
-          kind = 'job'
-        }
 
-        // Get project lead and job title for job events
-        const projectLead = tp.job_id
-          ? jobProjectLeads.get(tp.job_id) || null
-          : null
-        const jobTitle = tp.job_id
-          ? jobTitles.get(tp.job_id) || undefined
-          : undefined
+          if (tp.category === 'transport') {
+            kind = 'vehicle'
+            if (vehicleMap.has(tp.id)) {
+              ref.vehicleId = vehicleMap.get(tp.id)!
+            }
+          } else if (tp.category === 'equipment') {
+            kind = 'item'
+            if (itemMap.has(tp.id)) {
+              ref.itemId = itemMap.get(tp.id)!
+            }
+          } else if (tp.category === 'crew') {
+            kind = 'crew'
+            const crewForPeriod = crewMap.get(tp.id)
+            if (crewForPeriod && crewForPeriod.length > 0) {
+              ref.userId = crewForPeriod[0].user_id
+            }
+          } else {
+            // For 'program' category, it's a job event
+            kind = 'job'
+          }
 
-        return {
-          id: tp.id,
-          title: tp.title || 'Event',
-          start: tp.start_at,
-          end: tp.end_at ?? undefined,
-          kind,
-          ref,
-          notes: undefined,
-          projectLead: projectLead || undefined,
-          category: tp.category || undefined,
-          jobTitle: jobTitle || undefined,
-        }
-      })
+          // Get project lead and job title for job events
+          const projectLead = tp.job_id
+            ? jobProjectLeads.get(tp.job_id) || null
+            : null
+          const jobTitle = tp.job_id
+            ? jobTitles.get(tp.job_id) || undefined
+            : undefined
+          const jobStatus = tp.job_id
+            ? jobStatusMap.get(tp.job_id) || undefined
+            : undefined
+
+          return {
+            id: tp.id,
+            title: tp.title || 'Event',
+            start: tp.start_at,
+            end: tp.end_at ?? undefined,
+            kind,
+            ref,
+            notes: undefined,
+            projectLead: projectLead || undefined,
+            category: tp.category || undefined,
+            jobTitle: jobTitle || undefined,
+            status: jobStatus || undefined,
+          }
+        })
+        .filter((record) => {
+          // For freelancers, filter to only show events they're part of
+          if (companyRole === 'freelancer' && userId) {
+            const crewForPeriod = crewMap.get(record.id)
+            if (!crewForPeriod) return false
+
+            // Find the specific user's crew assignment
+            const userCrewAssignment = crewForPeriod.find(
+              (c) => c.user_id === userId,
+            )
+            if (!userCrewAssignment) return false
+
+            // Only show events for crew assignments that are accepted (not planned/requested/declined)
+            if (userCrewAssignment.status !== 'accepted') return false
+
+            // Exclude canceled jobs
+            if (record.status === 'canceled') return false
+          }
+
+          return true
+        })
     },
   })
 }

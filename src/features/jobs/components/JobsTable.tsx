@@ -14,6 +14,7 @@ import {
   Tooltip,
 } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
+import { useAuthz } from '@shared/auth/useAuthz'
 import DateTimePicker from '@shared/ui/components/DateTimePicker'
 import { ArrowDown, ArrowUp, CalendarXmark, Plus, Search } from 'iconoir-react'
 import { makeWordPresentable } from '@shared/lib/generalFunctions'
@@ -21,6 +22,20 @@ import { supabase } from '@shared/api/supabase'
 import { customersForFilterQuery, jobsIndexQuery } from '../api/queries'
 import JobDialog from './dialogs/JobDialog'
 import type { JobListRow, JobStatus } from '../types'
+
+// Helper function to mask status for freelancers
+function getDisplayStatus(
+  status: JobStatus,
+  companyRole: string | null,
+): JobStatus {
+  if (companyRole === 'freelancer') {
+    // Freelancers should not see statuses beyond 'completed'
+    if (status === 'invoiced' || status === 'paid') {
+      return 'completed'
+    }
+  }
+  return status
+}
 
 type SortBy = 'title' | 'start_at' | 'status' | 'customer_name'
 type SortDir = 'asc' | 'desc'
@@ -42,6 +57,7 @@ export default function JobsTable({
   onSelect: (id: string | null) => void
 }) {
   const { companyId } = useCompany()
+  const { userId, companyRole } = useAuthz()
   const [search, setSearch] = React.useState('')
   const [selectedDate, setSelectedDate] = React.useState<string>('')
   const [customerIdFilter, setCustomerIdFilter] = React.useState<string | null>(
@@ -67,6 +83,8 @@ export default function JobsTable({
       status: statusFilter,
       sortBy,
       sortDir,
+      userId,
+      companyRole,
     }),
     enabled: !!companyId,
   })
@@ -99,13 +117,15 @@ export default function JobsTable({
             </TextField.Slot>
           </TextField.Root>
 
-          <Button
-            size="2"
-            variant="classic"
-            onClick={() => setCreateOpen(true)}
-          >
-            <Plus width={16} height={16} /> New job
-          </Button>
+          {companyRole !== 'freelancer' && (
+            <Button
+              size="2"
+              variant="classic"
+              onClick={() => setCreateOpen(true)}
+            >
+              <Plus width={16} height={16} /> New job
+            </Button>
+          )}
         </Flex>
 
         <Flex gap="2" align="center" wrap="wrap">
@@ -344,21 +364,30 @@ export default function JobsTable({
                     : '—'}
                 </Table.Cell>
                 <Table.Cell>
-                  <Badge
-                    color={
-                      j.status === 'canceled'
-                        ? 'red'
-                        : j.status === 'paid'
-                          ? 'green'
-                          : j.status === 'in_progress'
-                            ? 'amber'
-                            : 'blue'
-                    }
-                    radius="full"
-                    highContrast
-                  >
-                    {makeWordPresentable(j.status)}
-                  </Badge>
+                  {(() => {
+                    const displayStatus = getDisplayStatus(
+                      j.status,
+                      companyRole,
+                    )
+                    return (
+                      <Badge
+                        color={
+                          displayStatus === 'canceled'
+                            ? 'red'
+                            : displayStatus === 'paid' ||
+                                displayStatus === 'completed'
+                              ? 'green'
+                              : displayStatus === 'in_progress'
+                                ? 'amber'
+                                : 'blue'
+                        }
+                        radius="full"
+                        highContrast
+                      >
+                        {makeWordPresentable(displayStatus)}
+                      </Badge>
+                    )
+                  })()}
                 </Table.Cell>
               </Table.Row>
             )

@@ -16,6 +16,8 @@ import {
   TextField,
 } from '@radix-ui/themes'
 import { NewTab, Search, Trash } from 'iconoir-react'
+import { useNavigate } from '@tanstack/react-router'
+import { useAuthz } from '@shared/auth/useAuthz'
 import { supabase } from '@shared/api/supabase'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { partnerCustomersQuery } from '../api/partners'
@@ -79,6 +81,9 @@ export default function AddGroupDialog({
 }) {
   const qc = useQueryClient()
   const { success, error: toastError } = useToast()
+  const navigate = useNavigate()
+  const { companyRole } = useAuthz()
+  const isOwner = companyRole === 'owner'
 
   const [form, setForm] = React.useState<FormState>({
     name: '',
@@ -527,7 +532,14 @@ export default function AddGroupDialog({
                 <Field label="Category">
                   <Select.Root
                     value={form.categoryId ?? undefined}
-                    onValueChange={(v) => set('categoryId', v)}
+                    onValueChange={(v) => {
+                      if (v === '__new_category__') {
+                        navigate({ to: '/company', search: { tab: 'setup' } })
+                        onOpenChange(false)
+                      } else {
+                        set('categoryId', v)
+                      }
+                    }}
                     size="3"
                     disabled={loading}
                   >
@@ -542,6 +554,14 @@ export default function AddGroupDialog({
                             {c.name}
                           </Select.Item>
                         ))}
+                        {isOwner && (
+                          <>
+                            <Select.Separator />
+                            <Select.Item value="__new_category__">
+                              + New category
+                            </Select.Item>
+                          </>
+                        )}
                       </Select.Group>
                     </Select.Content>
                   </Select.Root>
