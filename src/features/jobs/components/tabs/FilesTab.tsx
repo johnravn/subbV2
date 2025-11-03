@@ -1,9 +1,11 @@
 import * as React from 'react'
 import {
+  AlertDialog,
   Box,
   Button,
   Dialog,
   Flex,
+  Heading,
   IconButton,
   Separator,
   Table,
@@ -16,22 +18,126 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@shared/api/supabase'
 import { useAuthz } from '@shared/auth/useAuthz'
 import { useToast } from '@shared/ui/toast/ToastProvider'
+import type { JobDetail } from '../../types'
 
-export default function FilesTab({ jobId }: { jobId: string }) {
-  const { companyRole } = useAuthz()
-  const isReadOnly = companyRole === 'freelancer'
-  const { success, error, info } = useToast()
-  const qc = useQueryClient()
-  const [addOpen, setAddOpen] = React.useState(false)
-  const [editFileId, setEditFileId] = React.useState<string | null>(null)
+export type FilesTabHandle = {
+  checkUnsavedChanges: (proceed: () => void) => void
+}
+
+const FilesTab = React.forwardRef<FilesTabHandle, { job: JobDetail }>(
+  ({ job }, ref) => {
+    const { companyRole } = useAuthz()
+    const isReadOnly = companyRole === 'freelancer'
+    const { success, error, info } = useToast()
+    const qc = useQueryClient()
+    const [addOpen, setAddOpen] = React.useState(false)
+    const [editFileId, setEditFileId] = React.useState<string | null>(null)
+
+    const { data: authUser } = useQuery({
+      queryKey: ['auth', 'user'],
+      queryFn: async () => {
+        const { data, error: authError } = await supabase.auth.getUser()
+        if (authError) throw authError
+        return data.user
+      },
+    })
+
+    const [notes, setNotes] = React.useState(job.description)
+    const [saveBeforeLeaveOpen, setSaveBeforeLeaveOpen] = React.useState(false)
+    const [pendingNavigation, setPendingNavigation] = React.useState<
+      (() => void) | null
+    >(null)
+
+    // Reset notes when job changes
+    React.useEffect(() => {
+      setNotes(job.description)
+      setPendingNavigation(null)
+      setSaveBeforeLeaveOpen(false)
+    }, [job.id, job.description])
+
+    const initialNotes = job.description
+    const hasUnsavedChanges = initialNotes !== notes
+
+    // Expose function to check for unsaved changes when parent tries to change tabs
+    React.useImperativeHandle(
+      ref,
+      () => ({
+        checkUnsavedChanges: (proceed: () => void) => {
+          if (hasUnsavedChanges) {
+            setPendingNavigation(() => proceed)
+            setSaveBeforeLeaveOpen(true)
+          } else {
+            proceed()
+          }
+        },
+      }),
+      [hasUnsavedChanges],
+    )
+
+    // Handle beforeunload for page navigation
+    React.useEffect(() => {
+      if (!hasUnsavedChanges || isReadOnly) return
+
+      const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+
+      window.addEventListener('beforeunload', handleBeforeUnload)
+      return () => {
+        window.removeEventListener('beforeunload', handleBeforeUnload)
+      }
+    }, [hasUnsavedChanges, isReadOnly])
+
+    const notesMutation = useMutation({
+      mutationFn: async () => {
+        if (!authUser?.id) throw new Error('Not Authenticated')
+
+        const { error: linkErr } = await supabase
+          .from('jobs')
+          .update({ description: notes })
+          .eq('id', job.id)
+        if (linkErr) throw linkErr
+      },
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: ['jobs-detail', job.id] })
+        success('Saved', 'Notes saved on selected job.')
+        // If there was a pending navigation, allow it now
+        if (pendingNavigation) {
+          const proceed = pendingNavigation
+          setPendingNavigation(null)
+          setSaveBeforeLeaveOpen(false)
+          proceed()
+        }
+      },
+      onError: (e: any) => {
+        error('Save failed', e?.message ?? 'Please try again.')
+      },
+    })
+
+    const handleSaveAndLeave = () => {
+      if (pendingNavigation) {
+        notesMutation.mutate()
+      }
+    }
+
+    const handleDiscardAndLeave = () => {
+      setNotes(initialNotes)
+      if (pendingNavigation) {
+        const proceed = pendingNavigation
+        setPendingNavigation(null)
+        setSaveBeforeLeaveOpen(false)
+        proceed()
+      }
+    }
 
   const { data: files = [], isLoading } = useQuery({
-    queryKey: ['job-files', jobId],
+    queryKey: ['job-files', job.id],
     queryFn: async () => {
       const { data, error: queryError } = await supabase
         .from('job_files')
         .select('*, uploaded_by:uploaded_by_user_id(email, display_name)')
-        .eq('job_id', jobId)
+        .eq('job_id', job.id)
         .order('created_at', { ascending: false })
 
       if (queryError) throw queryError
@@ -66,7 +172,7 @@ export default function FilesTab({ jobId }: { jobId: string }) {
       if (dbErr) throw dbErr
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['job-files', jobId] })
+      qc.invalidateQueries({ queryKey: ['job-files', job.id] })
       success('File deleted', 'The file has been removed.')
     },
     onError: (err: any) => {
@@ -78,7 +184,48 @@ export default function FilesTab({ jobId }: { jobId: string }) {
 
   return (
     <Box>
-      <Flex justify="between" align="center" mb="3">
+      <Box mb="4">
+        <Heading size="3">Notes</Heading>
+        <Separator size="4" mb="3" />
+        {isReadOnly ? (
+          <Text style={{ whiteSpace: 'pre-wrap' }}>{notes || '—'}</Text>
+        ) : (
+          <Box>
+            <TextArea
+              value={notes || ''}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Add notes here"
+              rows={6}
+              resize="vertical"
+            />
+            {initialNotes != notes && (
+              <Flex gap="2" mt="2" justify="end">
+                <Button
+                  size="2"
+                  variant="soft"
+                  onClick={() => {
+                    setNotes(initialNotes)
+                  }}
+                  disabled={notesMutation.isPending}
+                >
+                  Discard
+                </Button>
+                <Button
+                  size="2"
+                  variant="solid"
+                  onClick={() => notesMutation.mutate()}
+                  disabled={notesMutation.isPending}
+                >
+                  {notesMutation.isPending ? 'Saving…' : 'Save'}
+                </Button>
+              </Flex>
+            )}
+          </Box>
+        )}
+      </Box>
+
+      <Box>
+        <Flex justify="between" align="center" mb="3">
         <Text size="2" color="gray">
           Files uploaded for this job
         </Text>
@@ -91,20 +238,20 @@ export default function FilesTab({ jobId }: { jobId: string }) {
         <AddFileDialog
           open={addOpen}
           onOpenChange={setAddOpen}
-          jobId={jobId}
+          jobId={job.id}
           onUploaded={() => {
             setAddOpen(false)
-            qc.invalidateQueries({ queryKey: ['job-files', jobId] })
+            qc.invalidateQueries({ queryKey: ['job-files', job.id] })
           }}
         />
         <EditFileDialog
           open={!!editFileId}
           onOpenChange={(open) => !open && setEditFileId(null)}
           fileId={editFileId}
-          jobId={jobId}
+          jobId={job.id}
           onSaved={() => {
             setEditFileId(null)
-            qc.invalidateQueries({ queryKey: ['job-files', jobId] })
+            qc.invalidateQueries({ queryKey: ['job-files', job.id] })
           }}
         />
       </Flex>
@@ -217,9 +364,57 @@ export default function FilesTab({ jobId }: { jobId: string }) {
           </Table.Body>
         </Table.Root>
       )}
+      </Box>
+
+      {/* Save before leave dialog */}
+      <AlertDialog.Root
+        open={saveBeforeLeaveOpen}
+        onOpenChange={setSaveBeforeLeaveOpen}
+      >
+        <AlertDialog.Content maxWidth="480px">
+          <AlertDialog.Title>Save changes?</AlertDialog.Title>
+          <AlertDialog.Description size="2">
+            You have unsaved changes to the notes. Do you want to save them
+            before leaving?
+          </AlertDialog.Description>
+          <Flex gap="3" justify="end" mt="4">
+            <AlertDialog.Cancel>
+              <Button
+                variant="soft"
+                onClick={() => {
+                  setSaveBeforeLeaveOpen(false)
+                  setPendingNavigation(null)
+                }}
+              >
+                Cancel
+              </Button>
+            </AlertDialog.Cancel>
+            <Button
+              variant="soft"
+              color="red"
+              onClick={handleDiscardAndLeave}
+              disabled={notesMutation.isPending}
+            >
+              Discard
+            </Button>
+            <Button
+              variant="solid"
+              onClick={handleSaveAndLeave}
+              disabled={notesMutation.isPending}
+            >
+              {notesMutation.isPending ? 'Saving…' : 'Save and leave'}
+            </Button>
+          </Flex>
+        </AlertDialog.Content>
+      </AlertDialog.Root>
     </Box>
   )
-}
+  },
+)
+
+FilesTab.displayName = 'FilesTab'
+
+export default FilesTab
 
 function AddFileDialog({
   open,

@@ -51,14 +51,16 @@ export default function AddRoleDialog({
     }
   }, [open, job, startAt, endAt])
 
-  const categorySuggestions = [
-    'Audio',
-    'Lights',
-    'AV',
-    'Transport',
-    'Rigging',
+  const titleSuggestions = [
+    'Technician',
+    'Loader',
+    'FOH',
+    'Monitors',
     'Hands',
+    'Driver',
   ]
+
+  const categorySuggestions = ['Audio', 'Lights', 'AV', 'Transport', 'Rigging']
 
   const save = useMutation({
     mutationFn: async () => {
@@ -82,6 +84,9 @@ export default function AddRoleDialog({
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['jobs', jobId, 'time_periods'] })
+      await qc.invalidateQueries({
+        queryKey: ['jobs', jobId, 'time_periods', 'crew'],
+      })
       onOpenChange(false)
       setTitle('')
       setNeeded(1)
@@ -91,44 +96,69 @@ export default function AddRoleDialog({
     },
   })
 
-  const disabled =
-    save.isPending || !title.trim() || !startAt || !endAt
+  const disabled = save.isPending || !title.trim() || !startAt || !endAt
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content maxWidth="460px">
+      <Dialog.Content maxWidth="600px">
         <Dialog.Title>Add role</Dialog.Title>
         <Flex direction="column" gap="3" mt="3">
           <Box>
-            <Text size="2" color="gray" mb="1">Title</Text>
+            <Text size="2" color="gray" mb="1">
+              Title
+            </Text>
             <TextField.Root
               placeholder="e.g. FOH, Monitor, Loader"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
+            <Flex gap="2" wrap="wrap" mt="2">
+              <Text size="1" color="gray" style={{ width: '100%' }}>
+                Quick suggestions:
+              </Text>
+              {titleSuggestions.map((suggestion) => (
+                <Button
+                  key={suggestion}
+                  size="1"
+                  variant="soft"
+                  color="gray"
+                  onClick={() => setTitle(suggestion)}
+                >
+                  {suggestion}
+                </Button>
+              ))}
+            </Flex>
           </Box>
           <Box>
-            <Text size="2" color="gray" mb="1">Needed</Text>
+            <Text size="2" color="gray" mb="1">
+              Needed
+            </Text>
             <TextField.Root
               type="number"
               min="1"
               value={String(needed)}
-              onChange={(e) => setNeeded(Math.max(1, Number(e.target.value || 1)))}
+              onChange={(e) =>
+                setNeeded(Math.max(1, Number(e.target.value || 1)))
+              }
               style={{ width: 120 }}
             />
           </Box>
-          <DateTimePicker
-            label="Start"
-            value={startAt}
-            onChange={setStartAt}
-          />
-          <DateTimePicker
-            label="End"
-            value={endAt}
-            onChange={setEndAt}
-          />
+          <Flex gap="3">
+            <Box style={{ flex: 1 }}>
+              <DateTimePicker
+                label="Start"
+                value={startAt}
+                onChange={setStartAt}
+              />
+            </Box>
+            <Box style={{ flex: 1 }}>
+              <DateTimePicker label="End" value={endAt} onChange={setEndAt} />
+            </Box>
+          </Flex>
           <Box>
-            <Text size="2" color="gray" mb="1">Role Category</Text>
+            <Text size="2" color="gray" mb="1">
+              Role Category
+            </Text>
             <TextField.Root
               placeholder="e.g. Audio, Lights, AV"
               value={roleCategory}
@@ -156,7 +186,11 @@ export default function AddRoleDialog({
           <Dialog.Close>
             <Button variant="soft">Cancel</Button>
           </Dialog.Close>
-          <Button variant="classic" onClick={() => save.mutate()} disabled={disabled}>
+          <Button
+            variant="classic"
+            onClick={() => save.mutate()}
+            disabled={disabled}
+          >
             {save.isPending ? 'Saving…' : 'Add role'}
           </Button>
         </Flex>
@@ -164,5 +198,3 @@ export default function AddRoleDialog({
     </Dialog.Root>
   )
 }
-
-

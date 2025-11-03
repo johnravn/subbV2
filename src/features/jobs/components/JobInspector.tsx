@@ -29,7 +29,7 @@ import CalendarTab from './tabs/CalendarTab'
 import FilesTab from './tabs/FilesTab'
 import JobDialog from './dialogs/JobDialog'
 import type { JobDetail, JobStatus } from '../types'
-import type { OverviewTabHandle } from './tabs/OverviewTab'
+import type { FilesTabHandle } from './tabs/FilesTab'
 
 // Helper function to mask status for freelancers
 function getDisplayStatus(
@@ -75,7 +75,7 @@ export default function JobInspector({
   const [activeTab, setActiveTab] = React.useState<string>(
     initialTab || 'overview',
   )
-  const overviewTabRef = React.useRef<OverviewTabHandle>(null)
+  const filesTabRef = React.useRef<FilesTabHandle>(null)
 
   // Update activeTab when initialTab changes
   React.useEffect(() => {
@@ -97,6 +97,14 @@ export default function JobInspector({
   const deleteJob = useMutation({
     mutationFn: async (jobId: string) => {
       // Delete related data first (cascade should handle most, but being explicit)
+      // Delete invite matters referencing this job
+      const { error: mattersErr } = await supabase
+        .from('matters')
+        .delete()
+        .eq('job_id', jobId)
+        .eq('matter_type', 'crew_invite')
+      if (mattersErr) throw mattersErr
+
       // Delete time_periods (which will cascade to reserved_items, reserved_crew, reserved_vehicles)
       const { error: periodsErr } = await supabase
         .from('time_periods')
@@ -197,13 +205,13 @@ export default function JobInspector({
         defaultValue="overview"
         value={activeTab}
         onValueChange={(newTab) => {
-          // If switching away from overview tab, check for unsaved changes
+          // If switching away from files tab, check for unsaved changes
           if (
-            activeTab === 'overview' &&
-            newTab !== 'overview' &&
-            overviewTabRef.current
+            activeTab === 'files' &&
+            newTab !== 'files' &&
+            filesTabRef.current
           ) {
-            overviewTabRef.current.checkUnsavedChanges(() => {
+            filesTabRef.current.checkUnsavedChanges(() => {
               setActiveTab(newTab)
             })
           } else {
@@ -223,7 +231,7 @@ export default function JobInspector({
         </Tabs.List>
 
         <Tabs.Content value="overview" mt={'10px'}>
-          <OverviewTab ref={overviewTabRef} job={job} />
+          <OverviewTab job={job} />
         </Tabs.Content>
         <Tabs.Content value="timeline" mt={'10px'}>
           <TimelineTab jobId={job.id} />
@@ -249,7 +257,7 @@ export default function JobInspector({
           <ContactsTab jobId={job.id} companyId={job.company_id} />
         </Tabs.Content>
         <Tabs.Content value="files" mt={'10px'}>
-          <FilesTab jobId={job.id} />
+          <FilesTab ref={filesTabRef} job={job} />
         </Tabs.Content>
       </Tabs.Root>
     </Box>

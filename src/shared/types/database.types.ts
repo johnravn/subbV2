@@ -257,7 +257,6 @@ export type Database = {
           name: string
           notes: string | null
           phone: string | null
-          vat_number: string | null
         }
         Insert: {
           address?: string | null
@@ -270,7 +269,6 @@ export type Database = {
           name: string
           notes?: string | null
           phone?: string | null
-          vat_number?: string | null
         }
         Update: {
           address?: string | null
@@ -283,7 +281,6 @@ export type Database = {
           name?: string
           notes?: string | null
           phone?: string | null
-          vat_number?: string | null
         }
         Relationships: [
           {

@@ -36,6 +36,11 @@ export default function InventoryPage() {
       : false,
   )
 
+  // Resize state: track left panel width as percentage (default 66.67% for 2fr/3fr ratio)
+  const [leftPanelWidth, setLeftPanelWidth] = React.useState<number>(66.67)
+  const [isResizing, setIsResizing] = React.useState(false)
+  const containerRef = React.useRef<HTMLDivElement>(null)
+
   React.useEffect(() => {
     const mq = window.matchMedia('(min-width: 1024px)')
     const onChange = (e: MediaQueryListEvent) => setIsLarge(e.matches)
@@ -49,23 +54,175 @@ export default function InventoryPage() {
     }
   }, [])
 
+  // Handle mouse move for resizing
+  React.useEffect(() => {
+    if (!isResizing) return
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!containerRef.current) return
+      const containerRect = containerRef.current.getBoundingClientRect()
+      const containerWidth = containerRect.width
+
+      // Calculate mouse position relative to container
+      const mouseX = e.clientX - containerRect.left
+
+      // Calculate new left panel width percentage
+      // Min 25%, Max 75% to prevent panels from getting too small
+      const minWidth = 25
+      const maxWidth = 75
+      const newWidthPercent = Math.max(
+        minWidth,
+        Math.min(maxWidth, (mouseX / containerWidth) * 100),
+      )
+
+      setLeftPanelWidth(newWidthPercent)
+    }
+
+    const handleMouseUp = () => {
+      setIsResizing(false)
+      // Restore cursor and text selection
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+
+    // Set global cursor and prevent text selection during resize
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      // Cleanup in case component unmounts during resize
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [isResizing])
+
   if (!companyId) return <PageSkeleton columns="2fr 1fr" />
 
+  // On small screens, use Grid layout (stack)
+  if (!isLarge) {
+    return (
+      <section
+        style={{
+          height: isLarge ? '100%' : undefined,
+          minHeight: 0,
+        }}
+      >
+        <Grid
+          columns="1fr"
+          gap="4"
+          align="stretch"
+          style={{
+            height: isLarge ? '100%' : undefined,
+            minHeight: 0,
+          }}
+        >
+          {/* LEFT */}
+          <Card
+            size="3"
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              height: isLarge ? '100%' : undefined,
+              minHeight: 0,
+            }}
+          >
+            <Flex align="center" justify="between" mb="3">
+              <Heading size="5">Overview</Heading>
+              <FiltersDropdown
+                showActive={showActive}
+                showInactive={showInactive}
+                showInternal={showInternal}
+                showExternal={showExternal}
+                showGroupOnlyItems={showGroupOnlyItems}
+                showGroups={showGroups}
+                showItems={showItems}
+                onShowActiveChange={setShowActive}
+                onShowInactiveChange={setShowInactive}
+                onShowInternalChange={setShowInternal}
+                onShowExternalChange={setShowExternal}
+                onShowGroupOnlyItemsChange={setShowGroupOnlyItems}
+                onShowGroupsChange={setShowGroups}
+                onShowItemsChange={setShowItems}
+              />
+            </Flex>
+
+            <Separator size="4" mb="3" />
+
+            <Box
+              style={{
+                flex: isLarge ? 1 : undefined,
+                minHeight: isLarge ? 0 : undefined,
+                overflowY: isLarge ? 'auto' : 'visible',
+              }}
+            >
+              <InventoryTable
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+                showActive={showActive}
+                showInactive={showInactive}
+                showInternal={showInternal}
+                showExternal={showExternal}
+                showGroupOnlyItems={showGroupOnlyItems}
+                showGroups={showGroups}
+                showItems={showItems}
+                pageSizeOverride={!isLarge ? 12 : undefined}
+              />
+            </Box>
+          </Card>
+
+          {/* RIGHT */}
+          <Card
+            size="3"
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              height: isLarge ? '100%' : undefined,
+              maxHeight: isLarge ? '100%' : undefined,
+              overflow: isLarge ? 'hidden' : 'visible',
+              minHeight: 0,
+            }}
+          >
+            <Heading size="5" mb="3">
+              Inspector
+            </Heading>
+            <Separator size="4" mb="3" />
+
+            <Box
+              style={{
+                flex: isLarge ? 1 : undefined,
+                minHeight: isLarge ? 0 : undefined,
+                overflowY: isLarge ? 'auto' : 'visible',
+              }}
+            >
+              <InventoryInspector id={selectedId} />
+            </Box>
+          </Card>
+        </Grid>
+      </section>
+    )
+  }
+
+  // On large screens, use resizable flex layout
   return (
     <section
-      // On large screens we want the section to fill available height so inner scroll works.
       style={{
         height: isLarge ? '100%' : undefined,
         minHeight: 0,
       }}
     >
-      <Grid
-        columns={{ initial: '1fr', lg: '2fr 1fr' }} // stack <1024px; 65/35 at >=1024px
+      <Flex
+        ref={containerRef}
         gap="4"
         align="stretch"
         style={{
           height: isLarge ? '100%' : undefined,
           minHeight: 0,
+          position: 'relative',
         }}
       >
         {/* LEFT */}
@@ -74,9 +231,13 @@ export default function InventoryPage() {
           style={{
             display: 'flex',
             flexDirection: 'column',
-            // Only force full-height layout on large screens
+            width: `${leftPanelWidth}%`,
             height: isLarge ? '100%' : undefined,
+            minWidth: '300px', // Prevent panel from getting too small
+            maxWidth: '75%', // Enforce max width
             minHeight: 0,
+            flexShrink: 0,
+            transition: isResizing ? 'none' : 'width 0.1s ease-out',
           }}
         >
           <Flex align="center" justify="between" mb="3">
@@ -101,7 +262,6 @@ export default function InventoryPage() {
 
           <Separator size="4" mb="3" />
 
-          {/* Scrollable on large screens; flows naturally on small */}
           <Box
             style={{
               flex: isLarge ? 1 : undefined,
@@ -124,17 +284,50 @@ export default function InventoryPage() {
           </Box>
         </Card>
 
+        {/* RESIZER */}
+        <Box
+          onMouseDown={(e) => {
+            e.preventDefault()
+            setIsResizing(true)
+          }}
+          style={{
+            width: '8px',
+            height: '20%',
+            cursor: 'col-resize',
+            backgroundColor: 'var(--gray-a4)',
+            borderRadius: '4px',
+            flexShrink: 0,
+            alignSelf: 'center',
+            userSelect: 'none',
+            margin: '0 -4px', // Extend into gap for easier clicking
+            zIndex: 10,
+            transition: isResizing ? 'none' : 'background-color 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            if (!isResizing) {
+              e.currentTarget.style.backgroundColor = 'var(--gray-a6)'
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!isResizing) {
+              e.currentTarget.style.backgroundColor = 'var(--gray-a4)'
+            }
+          }}
+        />
+
         {/* RIGHT */}
         <Card
           size="3"
           style={{
             display: 'flex',
             flexDirection: 'column',
-            // Contain/scroll on large; expand on small
+            flex: 1,
             height: isLarge ? '100%' : undefined,
             maxHeight: isLarge ? '100%' : undefined,
             overflow: isLarge ? 'hidden' : 'visible',
+            minWidth: '300px', // Prevent panel from getting too small
             minHeight: 0,
+            transition: isResizing ? 'none' : 'flex-basis 0.1s ease-out',
           }}
         >
           <Heading size="5" mb="3">
@@ -142,7 +335,6 @@ export default function InventoryPage() {
           </Heading>
           <Separator size="4" mb="3" />
 
-          {/* Scrollable on large screens; flows naturally on small */}
           <Box
             style={{
               flex: isLarge ? 1 : undefined,
@@ -153,7 +345,7 @@ export default function InventoryPage() {
             <InventoryInspector id={selectedId} />
           </Box>
         </Card>
-      </Grid>
+      </Flex>
     </section>
   )
 }

@@ -88,7 +88,7 @@ export default function CrewTab({
 
   // Roles (time periods) with counts per status
   const { data: roles = [] } = useQuery({
-    queryKey: ['jobs', jobId, 'time_periods'],
+    queryKey: ['jobs', jobId, 'time_periods', 'crew'],
     queryFn: async () => {
       const { data: tps, error } = await supabase
         .from('time_periods')
@@ -161,7 +161,9 @@ export default function CrewTab({
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['jobs.crew', jobId] })
-      qc.invalidateQueries({ queryKey: ['jobs', jobId, 'time_periods'] })
+      qc.invalidateQueries({
+        queryKey: ['jobs', jobId, 'time_periods', 'crew'],
+      })
     },
   })
 
@@ -206,7 +208,9 @@ export default function CrewTab({
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['jobs.crew', jobId] })
-      qc.invalidateQueries({ queryKey: ['jobs', jobId, 'time_periods'] })
+      qc.invalidateQueries({
+        queryKey: ['jobs', jobId, 'time_periods', 'crew'],
+      })
       qc.invalidateQueries({ queryKey: ['matters'] })
       success('Success', 'Role and all crew members removed')
       setDeleteRoleConfirm(null)
@@ -268,7 +272,9 @@ export default function CrewTab({
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['jobs.crew', jobId] })
-      qc.invalidateQueries({ queryKey: ['jobs', jobId, 'time_periods'] })
+      qc.invalidateQueries({
+        queryKey: ['jobs', jobId, 'time_periods', 'crew'],
+      })
       qc.invalidateQueries({ queryKey: ['matters'] })
       success('Success', 'Crew member removed')
     },
@@ -315,7 +321,9 @@ export default function CrewTab({
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['jobs.crew', jobId] })
-      qc.invalidateQueries({ queryKey: ['jobs', jobId, 'time_periods'] })
+      qc.invalidateQueries({
+        queryKey: ['jobs', jobId, 'time_periods', 'crew'],
+      })
       qc.invalidateQueries({ queryKey: ['matters'] })
       success('Success', 'Invitations sent and matter created')
       setSendInviteDialog(null)
@@ -357,7 +365,9 @@ export default function CrewTab({
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['jobs.crew', jobId] })
-      qc.invalidateQueries({ queryKey: ['jobs', jobId, 'time_periods'] })
+      qc.invalidateQueries({
+        queryKey: ['jobs', jobId, 'time_periods', 'crew'],
+      })
       qc.invalidateQueries({ queryKey: ['matters'] })
       success('Success', 'Invitation sent and matter created')
       setSendInviteDialog(null)
@@ -462,7 +472,37 @@ export default function CrewTab({
         </Box>
 
         <Box style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {groupedRoles.length === 0 && <Text color="gray">No roles yet</Text>}
+          {groupedRoles.length === 0 && !isReadOnly && (
+            <Box
+              p="4"
+              style={{
+                border: '2px dashed var(--gray-a6)',
+                borderRadius: 8,
+                textAlign: 'center',
+                cursor: 'pointer',
+                transition: 'all 100ms',
+              }}
+              onClick={() => setAddRoleOpen(true)}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'var(--gray-a8)'
+                e.currentTarget.style.background = 'var(--gray-a2)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--gray-a6)'
+                e.currentTarget.style.background = 'transparent'
+              }}
+            >
+              <Flex direction="column" align="center" gap="2">
+                <Plus width={24} height={24} />
+                <Text size="2" color="gray">
+                  Add role
+                </Text>
+              </Flex>
+            </Box>
+          )}
+          {groupedRoles.length === 0 && isReadOnly && (
+            <Text color="gray">No roles yet</Text>
+          )}
           {groupedRoles.map((group) => (
             <Box key={group.category || 'no-category'}>
               {group.category && (
@@ -906,7 +946,19 @@ export default function CrewTab({
                 })()}
               </Table.Cell>
               <Table.Cell>
-                <Badge radius="full" highContrast>
+                <Badge
+                  radius="full"
+                  highContrast
+                  color={
+                    r.status === 'accepted'
+                      ? 'green'
+                      : r.status === 'declined'
+                        ? 'red'
+                        : r.status === 'requested'
+                          ? 'blue'
+                          : 'gray'
+                  }
+                >
                   {r.status}
                 </Badge>
               </Table.Cell>

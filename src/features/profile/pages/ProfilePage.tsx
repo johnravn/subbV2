@@ -25,6 +25,7 @@ import { Camera } from 'iconoir-react'
 import { PhoneInputField } from '@shared/phone/PhoneInputField'
 import MapEmbed from '@shared/maps/MapEmbed' // <- ensure this path fits your project
 import ThemeToggle from '@shared/theme/ThemeToggle'
+import { NorwayZipCodeField } from '@shared/lib/NorwayZipCodeField'
 
 type ProfileRow = {
   user_id: string
@@ -587,10 +588,10 @@ export default function ProfilePage() {
               <FieldRow>
                 <Flex gap={'2'} width={'100%'}>
                   <Field label="ZIP" maxWidth={100}>
-                    <TextField.Root
+                    <NorwayZipCodeField
                       value={addr.zip_code}
-                      onChange={(e) => setAddrVal('zip_code', e.target.value)}
-                      placeholder="e.g., 0361"
+                      onChange={(val) => setAddrVal('zip_code', val)}
+                      autoCompleteCity={(city) => setAddrVal('city', city)}
                     />
                   </Field>
                   <Field label="City" maxWidth={FIELD_MAX}>

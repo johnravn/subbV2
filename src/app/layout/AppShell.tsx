@@ -316,6 +316,18 @@ function AnimatedBackground({ intensity = 1.0 }: { intensity?: number }) {
           left: 0;
           animation: slideSlow 200s linear infinite;
         }
+        
+        /* Increase contrast for light mode */
+        .light .bg-shape-1,
+        .light .bg-shape-3,
+        .light .bg-shape-5 {
+          background: var(--accent-a7);
+        }
+        
+        .light .bg-shape-2,
+        .light .bg-shape-4 {
+          background: var(--accent-a6);
+        }
       `}</style>
       <div className="bg-shape bg-shape-1" />
       <div className="bg-shape bg-shape-2" />

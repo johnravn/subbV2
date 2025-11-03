@@ -3,6 +3,7 @@ import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Badge,
+  Box,
   Button,
   Dialog,
   Flex,
@@ -16,8 +17,9 @@ import { Search } from 'iconoir-react'
 import { supabase } from '@shared/api/supabase'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { categoryNamesQuery } from '@features/inventory/api/queries'
-import { jobTimePeriodsQuery } from '@features/jobs/api/queries'
+import { jobDetailQuery, jobTimePeriodsQuery } from '@features/jobs/api/queries'
 import TimePeriodPicker from '@features/calendar/components/reservations/TimePeriodPicker'
+import DateTimePicker from '@shared/ui/components/DateTimePicker'
 import type { UUID } from '../../types'
 
 const ALL = '__ALL__'
@@ -78,6 +80,7 @@ export default function BookItemsDialog({
   companyId,
   timePeriodId: initialTimePeriodId,
   externalOnlyInitial = false,
+  externalOwnerId,
   onSaved,
 }: {
   open: boolean
@@ -86,6 +89,7 @@ export default function BookItemsDialog({
   companyId: UUID
   timePeriodId?: UUID | null
   externalOnlyInitial?: boolean
+  externalOwnerId?: string // When set, only show items from this owner
   onSaved?: () => void
 }) {
   const qc = useQueryClient()
@@ -100,27 +104,90 @@ export default function BookItemsDialog({
   } | null>(null)
   const { success, error } = useToast()
 
+  // State for custom time pickers when no equipment period exists
+  const [customStartTime, setCustomStartTime] = React.useState<string | null>(
+    null,
+  )
+  const [customEndTime, setCustomEndTime] = React.useState<string | null>(null)
+  const [timesTouched, setTimesTouched] = React.useState(false)
+
+  // Fetch job details to get duration times
+  const { data: job } = useQuery({
+    ...jobDetailQuery({ jobId }),
+    enabled: open,
+  })
+
   // Fetch time periods to find default
   const { data: timePeriods = [] } = useQuery({
     ...jobTimePeriodsQuery({ jobId }),
     enabled: open,
   })
 
+  // "External only" filter (items whose external_owner_id is set)
+  const [externalOnly, setExternalOnly] = React.useState(externalOnlyInitial)
+
+  // Initialize custom times from job duration when dialog opens and no equipment period exists
+  React.useEffect(() => {
+    if (!open) {
+      // Reset state when dialog closes
+      setCustomStartTime(null)
+      setCustomEndTime(null)
+      setTimesTouched(false)
+      return
+    }
+
+    // Only initialize if no equipment period is selected and job has times
+    if (!selectedTimePeriodId && job && job.start_at && job.end_at) {
+      // Check for equipment periods - different logic for external vs internal
+      if (externalOnly) {
+        // For external items, we don't pre-select a period since each owner gets their own
+        // Just set default times
+        setCustomStartTime(job.start_at)
+        setCustomEndTime(job.end_at)
+        setTimesTouched(false)
+      } else {
+        // For internal items, check for exact "Equipment period" match
+        const equipmentPeriod = timePeriods.find(
+          (tp) =>
+            tp.category === 'equipment' && tp.title === 'Equipment period',
+        )
+
+        // If no equipment period exists, set default times from job duration
+        if (!equipmentPeriod) {
+          setCustomStartTime(job.start_at)
+          setCustomEndTime(job.end_at)
+          setTimesTouched(false)
+        }
+      }
+    }
+  }, [open, job, timePeriods, selectedTimePeriodId, externalOnly])
+
   // Set default time period when dialog opens - only use equipment periods
   React.useEffect(() => {
     if (!open || initialTimePeriodId || selectedTimePeriodId) return
 
-    // Find "Equipment period" (must be equipment category)
+    // For external-only mode, don't auto-select a period (each owner gets their own)
+    if (externalOnly) return
+
+    // Find "Equipment period" (must be equipment category) for internal items
     const equipmentPeriod = timePeriods.find(
-      (tp) =>
-        tp.category === 'equipment' &&
-        tp.title?.toLowerCase().includes('equipment period'),
+      (tp) => tp.category === 'equipment' && tp.title === 'Equipment period', // Exact match for internal
     )
 
     if (equipmentPeriod) {
       setSelectedTimePeriodId(equipmentPeriod.id)
+      // Clear custom times if equipment period exists
+      setCustomStartTime(null)
+      setCustomEndTime(null)
+      setTimesTouched(false)
     }
-  }, [open, timePeriods, initialTimePeriodId, selectedTimePeriodId])
+  }, [
+    open,
+    timePeriods,
+    initialTimePeriodId,
+    selectedTimePeriodId,
+    externalOnly,
+  ])
 
   // Update local state when prop changes, but only if it's an equipment period
   React.useEffect(() => {
@@ -146,9 +213,6 @@ export default function BookItemsDialog({
     }
   }, [open, externalOnlyInitial])
 
-  // "External only" filter (items whose external_owner_id is set)
-  const [externalOnly, setExternalOnly] = React.useState(externalOnlyInitial)
-
   // Reset externalOnly when prop changes (e.g., when opening from different views)
   React.useEffect(() => {
     if (open) {
@@ -167,7 +231,14 @@ export default function BookItemsDialog({
   })
 
   const { data: picker = [], isFetching } = useQuery({
-    queryKey: ['book-items', companyId, search, externalOnly, categoryFilter],
+    queryKey: [
+      'book-items',
+      companyId,
+      search,
+      externalOnly,
+      categoryFilter,
+      externalOwnerId,
+    ],
     enabled: open,
     queryFn: async (): Promise<Array<PickerRow>> => {
       // Fetch both items and groups from inventory_index
@@ -179,7 +250,11 @@ export default function BookItemsDialog({
         .or('deleted.is.null,deleted.eq.false')
         .limit(100)
 
-      if (externalOnly) {
+      if (externalOwnerId) {
+        // When externalOwnerId is provided, only show items/groups from that specific owner
+        q = q.eq('external_owner_id', externalOwnerId)
+        q = q.or('is_group.eq.true,allow_individual_booking.eq.true')
+      } else if (externalOnly) {
         // When external only is enabled, show externally owned items and groups
         // Filter: internally_owned=false AND (is_group=true OR allow_individual_booking=true)
         // Since we filter by internally_owned=false first, the OR will only match external groups
@@ -345,9 +420,9 @@ export default function BookItemsDialog({
     mutationFn: async () => {
       if (rows.length === 0) return
 
-      // Time period is now required
-      if (!selectedTimePeriodId) {
-        throw new Error('Please select a time period')
+      // If no time period selected but custom times are set, we'll create one
+      if (!selectedTimePeriodId && !customStartTime && !customEndTime) {
+        throw new Error('Please select a time period or set custom times')
       }
 
       const itemRows: Array<Extract<Row, { kind: 'item' }>> = rows.filter(
@@ -357,13 +432,18 @@ export default function BookItemsDialog({
         (r): r is Extract<Row, { kind: 'group' }> => r.kind === 'group',
       )
 
-      // Fetch job details for duration times
-      const { data: job, error: jobErr } = await supabase
-        .from('jobs')
-        .select('start_at, end_at')
-        .eq('id', jobId)
-        .single()
-      if (jobErr) throw jobErr
+      // Get job data - use already fetched job if available, otherwise fetch
+      let jobData: { start_at: string | null; end_at: string | null } | null =
+        job || null
+      if (!jobData) {
+        const { data, error: jobErr } = await supabase
+          .from('jobs')
+          .select('start_at, end_at')
+          .eq('id', jobId)
+          .single()
+        if (jobErr) throw jobErr
+        jobData = data as { start_at: string | null; end_at: string | null }
+      }
 
       // Fetch all time periods for this job
       const { data: existingTimePeriods, error: tpErr } = await supabase
@@ -419,14 +499,24 @@ export default function BookItemsDialog({
 
         if (!tp) {
           // Create the time period with equipment category
+          // Use job duration times or custom times if available
+          const startTime =
+            customStartTime && timesTouched
+              ? customStartTime
+              : jobData.start_at || customStartTime || new Date().toISOString()
+          const endTime =
+            customEndTime && timesTouched
+              ? customEndTime
+              : jobData.end_at || customEndTime || new Date().toISOString()
+
           const { data: newTp, error: createErr } = await supabase
             .from('time_periods')
             .insert({
               job_id: jobId,
               company_id: companyId,
               title: expectedTitle,
-              start_at: job.start_at,
-              end_at: job.end_at,
+              start_at: startTime,
+              end_at: endTime,
               category: 'equipment',
             } as any)
             .select('id, title')
@@ -452,16 +542,50 @@ export default function BookItemsDialog({
           return !ownerInfo?.owner_id || !ownerInfo.owner_name
         }) || groupRows.length > 0
 
-      if (!internalEquipmentPeriod && hasInternalItems) {
-        // Create the equipment period for internal items
+      // If no time period selected but we have custom times, create equipment period
+      if (
+        !selectedTimePeriodId &&
+        customStartTime &&
+        customEndTime &&
+        hasInternalItems
+      ) {
+        // Determine times: use custom times if touched, otherwise use job duration times
+        // If times weren't touched, they should match job duration (default)
+        const startTime = timesTouched
+          ? customStartTime
+          : jobData.start_at || customStartTime || new Date().toISOString()
+        const endTime = timesTouched
+          ? customEndTime
+          : jobData.end_at || customEndTime || new Date().toISOString()
+
+        // Create the equipment period with determined times
         const { data: newTp, error: createErr } = await supabase
           .from('time_periods')
           .insert({
             job_id: jobId,
             company_id: companyId,
             title: equipmentPeriodTitle,
-            start_at: job.start_at,
-            end_at: job.end_at,
+            start_at: startTime,
+            end_at: endTime,
+            category: 'equipment',
+          } as any)
+          .select('id, title')
+          .single()
+        if (createErr) throw createErr
+        internalEquipmentPeriod = newTp
+        existingTimePeriods.push(newTp)
+        // Store the new period ID to use in rest of function
+        // Note: We can't use setState here as it's async, so we'll use the variable
+      } else if (!internalEquipmentPeriod && hasInternalItems) {
+        // Create the equipment period for internal items (existing logic)
+        const { data: newTp, error: createErr } = await supabase
+          .from('time_periods')
+          .insert({
+            job_id: jobId,
+            company_id: companyId,
+            title: equipmentPeriodTitle,
+            start_at: jobData.start_at || new Date().toISOString(),
+            end_at: jobData.end_at || new Date().toISOString(),
             category: 'equipment',
           } as any)
           .select('id, title')
@@ -680,6 +804,12 @@ export default function BookItemsDialog({
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['jobs.equipment', jobId] })
       await qc.invalidateQueries({ queryKey: ['jobs', jobId, 'time_periods'] })
+      await qc.invalidateQueries({ queryKey: ['jobs-detail', jobId] })
+      // If we created a new equipment period, it will be auto-selected on next open
+      // Reset custom times state
+      setCustomStartTime(null)
+      setCustomEndTime(null)
+      setTimesTouched(false)
       onOpenChange(false)
       onSaved?.()
       setRows([])
@@ -718,14 +848,95 @@ export default function BookItemsDialog({
             alignItems: 'stretch',
           }}
         >
-          {/* LEFT: Time Period Picker */}
-          <TimePeriodPicker
-            jobId={jobId}
-            value={selectedTimePeriodId}
-            onChange={setSelectedTimePeriodId}
-            categoryFilter="equipment"
-            defaultCategory="equipment"
-          />
+          {/* LEFT: Time Period Picker or Custom Time Pickers */}
+          <div>
+            {selectedTimePeriodId ? (
+              <TimePeriodPicker
+                jobId={jobId}
+                value={selectedTimePeriodId}
+                onChange={(id) => {
+                  setSelectedTimePeriodId(id)
+                  // Clear custom times when selecting a period
+                  if (id) {
+                    setCustomStartTime(null)
+                    setCustomEndTime(null)
+                    setTimesTouched(false)
+                  }
+                }}
+                categoryFilter="equipment"
+                defaultCategory="equipment"
+              />
+            ) : (
+              <Box
+                p="3"
+                style={{
+                  border: '1px dashed var(--gray-a6)',
+                  borderRadius: 10,
+                  background: 'var(--gray-a2)',
+                }}
+              >
+                <Flex direction="column" gap="3">
+                  <Text size="2" weight="bold" color="gray">
+                    {externalOnly
+                      ? 'Set time period for external equipment'
+                      : 'Set equipment time period'}
+                  </Text>
+                  <Text size="1" color="gray">
+                    {externalOnly
+                      ? 'Each external owner will get their own time period with these times.'
+                      : job && job.start_at && job.end_at
+                        ? 'Default times match job duration. Adjust if needed.'
+                        : 'Set start and end times for equipment booking.'}
+                  </Text>
+                  <Flex gap="2" wrap="wrap" align="center">
+                    <Box style={{ flex: 1, minWidth: 200 }}>
+                      <Text size="1" color="gray" mb="1" as="div">
+                        Start time
+                      </Text>
+                      <DateTimePicker
+                        value={customStartTime || ''}
+                        onChange={(iso) => {
+                          setCustomStartTime(iso)
+                          setTimesTouched(true)
+                        }}
+                      />
+                    </Box>
+                    <Box style={{ flex: 1, minWidth: 200 }}>
+                      <Text size="1" color="gray" mb="1" as="div">
+                        End time
+                      </Text>
+                      <DateTimePicker
+                        value={customEndTime || ''}
+                        onChange={(iso) => {
+                          setCustomEndTime(iso)
+                          setTimesTouched(true)
+                        }}
+                      />
+                    </Box>
+                  </Flex>
+                  {!externalOnly && (
+                    <Button
+                      size="1"
+                      variant="soft"
+                      onClick={() => {
+                        // Switch to time period picker view
+                        const equipmentPeriod = timePeriods.find(
+                          (tp) =>
+                            tp.category === 'equipment' &&
+                            tp.title === 'Equipment period',
+                        )
+                        if (equipmentPeriod) {
+                          setSelectedTimePeriodId(equipmentPeriod.id)
+                        }
+                      }}
+                    >
+                      Use existing time period
+                    </Button>
+                  )}
+                </Flex>
+              </Box>
+            )}
+          </div>
 
           {/* RIGHT: Message Area */}
           <div
@@ -1045,7 +1256,9 @@ export default function BookItemsDialog({
             variant="classic"
             onClick={() => save.mutate()}
             disabled={
-              save.isPending || rows.length === 0 || !selectedTimePeriodId
+              save.isPending ||
+              rows.length === 0 ||
+              (!selectedTimePeriodId && !customStartTime && !customEndTime)
             }
           >
             {save.isPending ? 'Booking…' : 'Book items'}

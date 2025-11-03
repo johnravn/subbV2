@@ -5,20 +5,26 @@ import {
   Badge,
   Box,
   Button,
+  Card,
   Dialog,
   Flex,
   SegmentedControl,
   Select,
   Separator,
-  Switch,
+  Table,
   Text,
   TextField,
 } from '@radix-ui/themes'
+import { Car } from 'iconoir-react'
 import { supabase } from '@shared/api/supabase'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import DateTimePicker from '@shared/ui/components/DateTimePicker'
+import { vehiclesIndexQuery } from '@features/vehicles/api/queries'
 import { jobDetailQuery } from '@features/jobs/api/queries'
 import type { ExternalReqStatus, UUID } from '../../types'
+
+type ViewMode = 'grid' | 'list'
+type OwnerType = 'internal' | 'external'
 
 export default function BookVehicleDialog({
   open,
@@ -33,13 +39,24 @@ export default function BookVehicleDialog({
 }) {
   const qc = useQueryClient()
   const { success, error: showError } = useToast()
+
+  // Vehicle selection
   const [vehicleId, setVehicleId] = React.useState<UUID | ''>('')
-  const [status, setStatus] = React.useState<ExternalReqStatus>('planned')
-  const [note, setNote] = React.useState('')
+  const [ownerType, setOwnerType] = React.useState<OwnerType>('internal')
+  const [viewMode, setViewMode] = React.useState<ViewMode>('grid')
+  const [search, setSearch] = React.useState('')
+
+  // Time period
+  const [createNewTimePeriod, setCreateNewTimePeriod] = React.useState(false)
+  const [selectedTimePeriodId, setSelectedTimePeriodId] = React.useState<
+    UUID | ''
+  >('')
   const [timePeriodStartAt, setTimePeriodStartAt] = React.useState<string>('')
   const [timePeriodEndAt, setTimePeriodEndAt] = React.useState<string>('')
 
-  const [showExternalVehicles, setShowExternalVehicles] = React.useState(false)
+  // External fields
+  const [status, setStatus] = React.useState<ExternalReqStatus>('planned')
+  const [note, setNote] = React.useState('')
 
   // Fetch job details
   const { data: job } = useQuery({
@@ -47,131 +64,215 @@ export default function BookVehicleDialog({
     enabled: open,
   })
 
-  // Fetch vehicles with owner information
-  const { data: vehicles = [] } = useQuery({
-    queryKey: ['company', companyId, 'vehicles-with-owners'],
+  // Fetch vehicles - we need to fetch both internal and external, then filter
+  const { data: allVehicles = [] } = useQuery({
+    ...vehiclesIndexQuery({
+      companyId,
+      includeExternal: true,
+      search,
+    }),
     enabled: open,
+  })
+
+  // Filter to active vehicles only and by owner type
+  const vehicles = React.useMemo(() => {
+    return allVehicles
+      .filter((v) => !v.deleted)
+      .filter((v) => v.internally_owned === (ownerType === 'internal'))
+  }, [allVehicles, ownerType])
+
+  const selectedVehicle = vehicles.find((v) => v.id === vehicleId)
+
+  // Fetch existing transport time periods for the selected vehicle's owner
+  const { data: existingTimePeriods = [] } = useQuery({
+    queryKey: [
+      'jobs',
+      jobId,
+      'transport-periods-by-owner',
+      selectedVehicle?.external_owner_id || 'internal',
+    ],
+    enabled: open && !!selectedVehicle && !!jobId,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('vehicles')
-        .select(
-          'id, name, external_owner_id, external_owner:external_owner_id(id, name)',
+      if (!selectedVehicle || !jobId) return []
+
+      // Get all transport time periods for this job
+      const { data: timePeriods, error: tpErr } = await supabase
+        .from('time_periods')
+        .select('id, title, start_at, end_at')
+        .eq('job_id', jobId)
+        .eq('category', 'transport')
+        .eq('deleted', false)
+        .order('start_at', { ascending: true })
+
+      if (tpErr) throw tpErr
+      if (timePeriods.length === 0) return []
+
+      const timePeriodIds = timePeriods.map((tp) => tp.id)
+
+      // Get vehicles on these time periods
+      const { data: reservedVehicles, error: rvErr } = await supabase
+        .from('reserved_vehicles')
+        .select('time_period_id, vehicle:vehicle_id(id, external_owner_id)')
+        .in('time_period_id', timePeriodIds)
+
+      if (rvErr) throw rvErr
+
+      const selectedOwnerId = selectedVehicle.external_owner_id || null
+
+      // Filter to time periods that have vehicles from the same owner
+      const matchingPeriods = timePeriods.filter((tp) => {
+        const vehiclesOnPeriod = reservedVehicles.filter(
+          (rv: any) => rv.time_period_id === tp.id,
         )
-        .eq('company_id', companyId)
-        .eq('active', true)
-        .or('deleted.is.null,deleted.eq.false')
-        .order('name', { ascending: true })
-      if (error) throw error
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      return (data || []).map((v: any) => ({
-        id: v.id,
-        name: v.name,
-        external_owner_id: v.external_owner_id,
-        external_owner: Array.isArray(v.external_owner)
-          ? v.external_owner[0] || null
-          : v.external_owner || null,
-      })) as Array<{
-        id: UUID
-        name: string
-        external_owner_id: UUID | null
-        external_owner: { id: UUID; name: string } | null
-      }>
+
+        if (vehiclesOnPeriod.length === 0) return false
+
+        // Check if all vehicles have the same owner as selected vehicle
+        const owners = new Set<string | null>()
+        vehiclesOnPeriod.forEach((rv: any) => {
+          const vehicle = Array.isArray(rv.vehicle) ? rv.vehicle[0] : rv.vehicle
+          owners.add(vehicle?.external_owner_id || null)
+        })
+
+        // Must have only one owner type and it must match selected vehicle's owner
+        return owners.size === 1 && owners.has(selectedOwnerId)
+      })
+
+      return matchingPeriods
     },
   })
 
-  // Auto-generated title based on selected vehicle
-  const timePeriodTitle = React.useMemo(() => {
-    if (!vehicleId) return ''
-    const selected = vehicles.find((v) => v.id === vehicleId)
-    if (!selected) return ''
-
-    if (selected.external_owner_id && selected.external_owner) {
-      return `${selected.external_owner.name} Transport period`
-    }
-    return `${selected.name} Transport period`
-  }, [vehicleId, vehicles])
-
-  // Set default dates when vehicle changes
+  // Auto-select existing time period when vehicle is selected
   React.useEffect(() => {
-    if (!open || !vehicleId || !job) return
+    if (!selectedVehicle) {
+      setSelectedTimePeriodId('')
+      setCreateNewTimePeriod(true)
+      return
+    }
 
-    // Set default dates from job
-    if (job.start_at) {
-      setTimePeriodStartAt(job.start_at)
+    // If no existing time periods, always create new
+    if (existingTimePeriods.length === 0) {
+      setSelectedTimePeriodId('')
+      setCreateNewTimePeriod(true)
+      return
     }
-    if (job.end_at) {
-      setTimePeriodEndAt(job.end_at)
+
+    // If time periods exist and we haven't explicitly chosen to create new, use existing
+    if (existingTimePeriods.length > 0 && !createNewTimePeriod) {
+      // Only auto-select if we don't have one selected yet or if the selected one is invalid
+      if (
+        !selectedTimePeriodId ||
+        !existingTimePeriods.find((tp) => tp.id === selectedTimePeriodId)
+      ) {
+        setSelectedTimePeriodId(existingTimePeriods[0].id)
+        setTimePeriodStartAt(existingTimePeriods[0].start_at)
+        setTimePeriodEndAt(existingTimePeriods[0].end_at)
+      }
     }
-  }, [open, vehicleId, job])
+  }, [selectedVehicle, existingTimePeriods])
+
+  // Update dates when selected time period changes
+  React.useEffect(() => {
+    if (
+      !createNewTimePeriod &&
+      selectedTimePeriodId &&
+      existingTimePeriods.length > 0
+    ) {
+      const selectedPeriod = existingTimePeriods.find(
+        (tp) => tp.id === selectedTimePeriodId,
+      )
+      if (selectedPeriod) {
+        setTimePeriodStartAt(selectedPeriod.start_at)
+        setTimePeriodEndAt(selectedPeriod.end_at)
+      }
+    }
+  }, [selectedTimePeriodId, createNewTimePeriod, existingTimePeriods])
+
+  // Set default dates from job when creating new time period
+  React.useEffect(() => {
+    if (createNewTimePeriod && job) {
+      if (job.start_at) setTimePeriodStartAt(job.start_at)
+      if (job.end_at) setTimePeriodEndAt(job.end_at)
+    }
+  }, [createNewTimePeriod, job])
+
+  // Generate time period title
+  const timePeriodTitle = React.useMemo(() => {
+    if (!selectedVehicle) return ''
+    if (
+      !selectedVehicle.internally_owned &&
+      selectedVehicle.external_owner_name
+    ) {
+      return `${selectedVehicle.external_owner_name} Transport period`
+    }
+    return `${selectedVehicle.name} Transport period`
+  }, [selectedVehicle])
 
   // Reset when dialog closes
   React.useEffect(() => {
     if (!open) {
       setVehicleId('')
-      setStatus('planned')
-      setNote('')
+      setOwnerType('internal')
+      setViewMode('grid')
+      setSearch('')
+      setCreateNewTimePeriod(false)
+      setSelectedTimePeriodId('')
       setTimePeriodStartAt('')
       setTimePeriodEndAt('')
-      setShowExternalVehicles(false)
+      setStatus('planned')
+      setNote('')
     }
   }, [open])
-
-  // Filter vehicles based on toggle
-  const filteredVehicles = React.useMemo(() => {
-    if (showExternalVehicles) {
-      return vehicles.filter((v) => v.external_owner_id !== null)
-    }
-    return vehicles.filter((v) => v.external_owner_id === null)
-  }, [vehicles, showExternalVehicles])
-
-  // Clear selection if selected vehicle is not in filtered list
-  React.useEffect(() => {
-    if (vehicleId && !filteredVehicles.find((v) => v.id === vehicleId)) {
-      setVehicleId('')
-    }
-  }, [filteredVehicles, vehicleId])
 
   const save = useMutation({
     mutationFn: async () => {
       if (!vehicleId) throw new Error('Choose a vehicle')
-      if (!timePeriodTitle) throw new Error('Time period title required')
-      if (!timePeriodStartAt || !timePeriodEndAt)
-        throw new Error('Time period dates required')
       if (!job) throw new Error('Job not loaded')
 
-      const selected = vehicles.find((v) => v.id === vehicleId)
-      if (!selected) throw new Error('Vehicle not found')
+      const selectedV = vehicles.find((v) => v.id === vehicleId)
+      if (!selectedV) throw new Error('Vehicle not found')
 
-      // Always create a new time period for both internal and external vehicles
-      const startAt = timePeriodStartAt
-      const endAt = timePeriodEndAt
+      let timePeriodId: UUID
 
-      const { data: newTp, error: createErr } = await supabase
-        .from('time_periods')
-        .insert({
-          job_id: jobId,
-          company_id: companyId,
-          title: timePeriodTitle,
-          start_at: startAt,
-          end_at: endAt,
-          category: 'transport',
-        })
-        .select('id')
-        .single()
-      if (createErr) throw createErr
+      if (createNewTimePeriod) {
+        // Create new time period
+        if (!timePeriodTitle) throw new Error('Time period title required')
+        if (!timePeriodStartAt || !timePeriodEndAt)
+          throw new Error('Time period dates required')
+
+        const { data: newTp, error: createErr } = await supabase
+          .from('time_periods')
+          .insert({
+            job_id: jobId,
+            company_id: companyId,
+            title: timePeriodTitle,
+            start_at: timePeriodStartAt,
+            end_at: timePeriodEndAt,
+            category: 'transport',
+          })
+          .select('id')
+          .single()
+        if (createErr) throw createErr
+        timePeriodId = newTp.id
+      } else {
+        // Use existing time period
+        if (!selectedTimePeriodId) {
+          throw new Error('Please select a time period or create a new one')
+        }
+        timePeriodId = selectedTimePeriodId
+      }
 
       const payload: any = {
-        time_period_id: newTp.id,
+        time_period_id: timePeriodId,
         vehicle_id: vehicleId,
       }
-      if (selected.external_owner_id) {
+
+      if (selectedV.external_owner_id) {
         payload.external_status = status
         if (note.trim()) {
           payload.external_note = note.trim()
         }
       }
-      // Note is only stored for external vehicles as external_note
-      // Internal vehicles don't have a note field in reserved_vehicles
 
       const { error } = await supabase.from('reserved_vehicles').insert(payload)
       if (error) throw error
@@ -187,114 +288,198 @@ export default function BookVehicleDialog({
     },
   })
 
-  const selected = vehicles.find((v) => v.id === vehicleId)
-  const isExternal = !!selected?.external_owner_id
+  const isExternal = selectedVehicle && !selectedVehicle.internally_owned
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content maxWidth="600px">
+      <Dialog.Content maxWidth="900px" style={{ maxHeight: '90vh' }}>
         <Dialog.Title>Book vehicle</Dialog.Title>
 
-        <Flex direction="column" gap="4" mt="4">
-          <Field label="Vehicle">
-            <Flex justify="between" align="center">
-              <Flex align="center" gap="2">
-                <Box style={{ flex: 1 }}>
+        <Flex direction="column" gap="4" mt="4" style={{ overflowY: 'auto' }}>
+          {/* Vehicle Selection */}
+          <Box>
+            <Flex align="center" justify="between" mb="3" wrap="wrap" gap="3">
+              <Text size="3" weight="medium">
+                Select Vehicle
+              </Text>
+              <Flex align="center" gap="3" wrap="wrap">
+                <SegmentedControl.Root
+                  value={ownerType}
+                  onValueChange={(v) => {
+                    setOwnerType(v as OwnerType)
+                    setVehicleId('')
+                  }}
+                >
+                  <SegmentedControl.Item value="internal">
+                    Internal
+                  </SegmentedControl.Item>
+                  <SegmentedControl.Item value="external">
+                    External
+                  </SegmentedControl.Item>
+                </SegmentedControl.Root>
+
+                <SegmentedControl.Root
+                  value={viewMode}
+                  onValueChange={(v) => setViewMode(v as ViewMode)}
+                >
+                  <SegmentedControl.Item value="grid">
+                    Grid
+                  </SegmentedControl.Item>
+                  <SegmentedControl.Item value="list">
+                    List
+                  </SegmentedControl.Item>
+                </SegmentedControl.Root>
+              </Flex>
+            </Flex>
+
+            <TextField.Root
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search vehicles…"
+              size="2"
+              mb="3"
+            />
+
+            <Box style={{ maxHeight: '300px', overflowY: 'auto' }}>
+              {viewMode === 'grid' ? (
+                <VehicleGrid
+                  vehicles={vehicles}
+                  selectedId={vehicleId}
+                  onSelect={setVehicleId}
+                />
+              ) : (
+                <VehicleList
+                  vehicles={vehicles}
+                  selectedId={vehicleId}
+                  onSelect={setVehicleId}
+                />
+              )}
+            </Box>
+          </Box>
+
+          <Separator />
+
+          {/* Time Period Selection */}
+          {vehicleId && (
+            <Box>
+              <Text size="3" weight="medium" mb="3">
+                Time Period
+              </Text>
+
+              {existingTimePeriods.length > 0 && !createNewTimePeriod ? (
+                <>
+                  <Text size="2" color="gray" mb="2">
+                    Existing time period for this owner found. Use it or create
+                    a new one.
+                  </Text>
                   <Select.Root
-                    value={vehicleId}
-                    onValueChange={(v) => setVehicleId(v)}
+                    value={selectedTimePeriodId}
+                    onValueChange={setSelectedTimePeriodId}
                   >
-                    <Select.Trigger placeholder="Select vehicle…" />
+                    <Select.Trigger placeholder="Select time period…" />
                     <Select.Content>
-                      {filteredVehicles.map((v) => (
-                        <Select.Item key={v.id} value={v.id}>
-                          {v.name}
+                      {existingTimePeriods.map((tp) => (
+                        <Select.Item key={tp.id} value={tp.id}>
+                          {tp.title || 'Untitled'} (
+                          {new Date(tp.start_at).toLocaleString()} -{' '}
+                          {new Date(tp.end_at).toLocaleString()})
                         </Select.Item>
                       ))}
                     </Select.Content>
                   </Select.Root>
-                </Box>
-                {selected && isExternal && selected.external_owner && (
-                  <Flex align="center" gap="2">
-                    <Badge size="2" variant="soft">
-                      {selected.external_owner.name}
-                    </Badge>
+                  <Button
+                    variant="ghost"
+                    size="2"
+                    mt="2"
+                    onClick={() => {
+                      setCreateNewTimePeriod(true)
+                      setSelectedTimePeriodId('')
+                    }}
+                  >
+                    Create new time period
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Box
+                    p="2"
+                    style={{
+                      border: '1px solid var(--gray-a5)',
+                      borderRadius: 8,
+                      background: 'var(--gray-a2)',
+                      marginBottom: '16px',
+                    }}
+                  >
+                    <Text size="2" weight="medium">
+                      {timePeriodTitle || '—'}
+                    </Text>
+                  </Box>
+
+                  <Flex gap="3">
+                    <Box style={{ flex: 1 }}>
+                      <DateTimePicker
+                        label="Start"
+                        value={timePeriodStartAt}
+                        onChange={setTimePeriodStartAt}
+                      />
+                    </Box>
+                    <Box style={{ flex: 1 }}>
+                      <DateTimePicker
+                        label="End"
+                        value={timePeriodEndAt}
+                        onChange={setTimePeriodEndAt}
+                      />
+                    </Box>
                   </Flex>
-                )}
-              </Flex>
-              <Flex align="center" gap="2">
-                <Text size="2">Show external vehicles</Text>
-                <Switch
-                  checked={showExternalVehicles}
-                  onCheckedChange={setShowExternalVehicles}
-                />
-              </Flex>
-            </Flex>
-          </Field>
-
-          <Field label="Time Period">
-            <Box
-              p="2"
-              style={{
-                border: '1px solid var(--gray-a5)',
-                borderRadius: 8,
-                background: 'var(--gray-a2)',
-              }}
-            >
-              <Text size="2" weight="medium">
-                {timePeriodTitle || '—'}
-              </Text>
+                </>
+              )}
             </Box>
-          </Field>
+          )}
 
-          <Flex gap="3">
-            <Box style={{ flex: 1 }}>
-              <DateTimePicker
-                label="Start"
-                value={timePeriodStartAt}
-                onChange={setTimePeriodStartAt}
-              />
-            </Box>
-            <Box style={{ flex: 1 }}>
-              <DateTimePicker
-                label="End"
-                value={timePeriodEndAt}
-                onChange={setTimePeriodEndAt}
-              />
-            </Box>
-          </Flex>
-
+          {/* External Fields */}
           {vehicleId && isExternal && (
             <>
-              <Field label="Status">
-                <SegmentedControl.Root
-                  size="2"
-                  value={status}
-                  onValueChange={(v) => setStatus(v as ExternalReqStatus)}
-                >
-                  <SegmentedControl.Item value="planned">
-                    Planned
-                  </SegmentedControl.Item>
-                  <SegmentedControl.Item value="requested">
-                    Requested
-                  </SegmentedControl.Item>
-                  <SegmentedControl.Item value="confirmed">
-                    Confirmed
-                  </SegmentedControl.Item>
-                </SegmentedControl.Root>
-              </Field>
-
-              <Field label="Note">
-                <TextField.Root
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Optional note…"
-                />
-              </Field>
+              <Separator />
+              <Box>
+                <Text size="3" weight="medium" mb="3">
+                  External Details
+                </Text>
+                <Box mb="3">
+                  <Text size="2" weight="medium" mb="2" as="div">
+                    Status
+                  </Text>
+                  <SegmentedControl.Root
+                    size="2"
+                    value={status}
+                    onValueChange={(v) => setStatus(v as ExternalReqStatus)}
+                  >
+                    <SegmentedControl.Item value="planned">
+                      Planned
+                    </SegmentedControl.Item>
+                    <SegmentedControl.Item value="requested">
+                      Requested
+                    </SegmentedControl.Item>
+                    <SegmentedControl.Item value="confirmed">
+                      Confirmed
+                    </SegmentedControl.Item>
+                  </SegmentedControl.Root>
+                </Box>
+                <Box>
+                  <Text size="2" weight="medium" mb="2" as="div">
+                    Note
+                  </Text>
+                  <TextField.Root
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="Optional note…"
+                  />
+                </Box>
+              </Box>
             </>
           )}
 
-          <Flex justify="end" gap="2" mt="2">
+          {/* Actions */}
+          <Flex justify="end" gap="2" mt="4">
             <Dialog.Close>
               <Button variant="soft">Cancel</Button>
             </Dialog.Close>
@@ -304,9 +489,9 @@ export default function BookVehicleDialog({
               disabled={
                 save.isPending ||
                 !vehicleId ||
-                !timePeriodTitle ||
-                !timePeriodStartAt ||
-                !timePeriodEndAt
+                (!createNewTimePeriod && !selectedTimePeriodId) ||
+                (createNewTimePeriod &&
+                  (!timePeriodStartAt || !timePeriodEndAt))
               }
             >
               {save.isPending ? 'Saving…' : 'Book vehicle'}
@@ -318,150 +503,229 @@ export default function BookVehicleDialog({
   )
 }
 
-export function EditVehicleBookingDialog({
-  open,
-  onOpenChange,
-  row,
-  jobId,
+// Vehicle Grid Component
+function VehicleGrid({
+  vehicles,
+  selectedId,
+  onSelect,
 }: {
-  open: boolean
-  onOpenChange: (v: boolean) => void
-  row: {
-    id: UUID
-    external_status: ExternalReqStatus | null
-    external_note: string | null
-  }
-  jobId: UUID
+  vehicles: Array<{
+    id: string
+    name: string
+    registration_no: string | null
+    image_path: string | null
+    fuel: 'electric' | 'diesel' | 'petrol' | null
+    internally_owned: boolean
+    external_owner_name: string | null
+  }>
+  selectedId: string
+  onSelect: (id: string) => void
 }) {
-  const qc = useQueryClient()
-  const { success, error: showError } = useToast()
-  const isExternal = row.external_status !== null
-
-  const [status, setStatus] = React.useState<ExternalReqStatus>(
-    row.external_status ?? 'planned',
-  )
-  const [note, setNote] = React.useState(row.external_note ?? '')
-
-  React.useEffect(() => {
-    if (!open) return
-    setStatus(row.external_status ?? 'planned')
-    setNote(row.external_note ?? '')
-  }, [open, row])
-
-  const save = useMutation({
-    mutationFn: async () => {
-      if (!isExternal) {
-        // Internal vehicles have nothing to edit
-        throw new Error('Internal vehicles cannot be edited')
-      }
-
-      const { error } = await supabase
-        .from('reserved_vehicles')
-        .update({
-          external_status: status,
-          external_note: note || null,
-        })
-        .eq('id', row.id)
-      if (error) throw error
-    },
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['jobs.transport', jobId] })
-      success('Success', 'Vehicle booking updated')
-      onOpenChange(false)
-    },
-    onError: (err: any) => {
-      showError('Failed to update', err?.message || 'Please try again.')
-    },
-  })
-
-  // For internal vehicles, show message that there's nothing to edit
-  if (!isExternal) {
+  if (!vehicles.length) {
     return (
-      <Dialog.Root open={open} onOpenChange={onOpenChange}>
-        <Dialog.Content maxWidth="400px">
-          <Dialog.Title>Edit vehicle booking</Dialog.Title>
-          <Separator my="3" />
-          <Text size="2" color="gray" mb="4">
-            Internal vehicles don't have editable fields. You can delete the
-            booking if needed.
-          </Text>
-          <Flex justify="end">
-            <Dialog.Close>
-              <Button variant="soft">Close</Button>
-            </Dialog.Close>
-          </Flex>
-        </Dialog.Content>
-      </Dialog.Root>
+      <Text color="gray" style={{ display: 'block', marginTop: 16 }}>
+        No vehicles
+      </Text>
     )
   }
 
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content maxWidth="500px">
-        <Dialog.Title>Edit vehicle booking</Dialog.Title>
-        <Separator my="3" />
-
-        <Flex direction="column" gap="4">
-          <Field label="Status">
-            <SegmentedControl.Root
-              size="2"
-              value={status}
-              onValueChange={(v) => setStatus(v as ExternalReqStatus)}
-            >
-              <SegmentedControl.Item value="planned">
-                Planned
-              </SegmentedControl.Item>
-              <SegmentedControl.Item value="requested">
-                Requested
-              </SegmentedControl.Item>
-              <SegmentedControl.Item value="confirmed">
-                Confirmed
-              </SegmentedControl.Item>
-            </SegmentedControl.Root>
-          </Field>
-
-          <Field label="Note">
-            <TextField.Root
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Optional note…"
-            />
-          </Field>
-
-          <Separator my="2" />
-
-          <Flex justify="end" gap="2">
-            <Dialog.Close>
-              <Button variant="soft">Cancel</Button>
-            </Dialog.Close>
-            <Button
-              variant="classic"
-              onClick={() => save.mutate()}
-              disabled={save.isPending}
-            >
-              {save.isPending ? 'Saving…' : 'Save'}
-            </Button>
-          </Flex>
-        </Flex>
-      </Dialog.Content>
-    </Dialog.Root>
-  )
-}
-
-function Field({
-  label,
-  children,
-}: {
-  label: string
-  children: React.ReactNode
-}) {
-  return (
-    <div style={{ marginTop: 10 }}>
-      <div style={{ color: 'var(--gray-11)', fontSize: 12, marginBottom: 6 }}>
-        {label}
-      </div>
-      {children}
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+        gap: 12,
+      }}
+    >
+      {vehicles.map((v) => (
+        <VehicleCard
+          key={v.id}
+          v={v}
+          active={v.id === selectedId}
+          onClick={() => onSelect(v.id)}
+        />
+      ))}
     </div>
   )
 }
-// no local time helpers needed here
+
+function VehicleCard({
+  v,
+  active,
+  onClick,
+}: {
+  v: {
+    id: string
+    name: string
+    registration_no: string | null
+    image_path: string | null
+    fuel: 'electric' | 'diesel' | 'petrol' | null
+    internally_owned: boolean
+    external_owner_name: string | null
+  }
+  active: boolean
+  onClick: () => void
+}) {
+  const imageUrl = React.useMemo(() => {
+    if (!v.image_path) return null
+    const { data } = supabase.storage
+      .from('vehicle_images')
+      .getPublicUrl(v.image_path)
+    return data.publicUrl
+  }, [v.image_path])
+
+  const fuelColor: React.ComponentProps<typeof Badge>['color'] =
+    v.fuel === 'electric' ? 'green' : v.fuel === 'diesel' ? 'orange' : 'blue'
+
+  return (
+    <Card
+      size="2"
+      variant="surface"
+      onClick={onClick}
+      style={{
+        cursor: 'pointer',
+        background: 'var(--gray-a2)',
+        border: active
+          ? '2px solid var(--accent-9)'
+          : '1px solid var(--gray-5)',
+      }}
+    >
+      <div
+        style={{
+          height: 120,
+          borderRadius: 8,
+          overflow: 'hidden',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: 8,
+          background: 'var(--gray-a3)',
+        }}
+      >
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={v.name}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        ) : (
+          <Car style={{ width: '60px', height: '60px' }} />
+        )}
+      </div>
+
+      <Flex direction="column" gap="1">
+        <Text size="2" weight="medium">
+          {v.name}
+        </Text>
+        <Text size="1" color="gray">
+          {v.registration_no ?? '—'}
+        </Text>
+        <Flex align="center" gap="2" wrap="wrap" mt="1">
+          {v.fuel && (
+            <Badge variant="soft" color={fuelColor} size="1">
+              {v.fuel}
+            </Badge>
+          )}
+          {v.internally_owned ? (
+            <Badge variant="soft" color="indigo" size="1">
+              Internal
+            </Badge>
+          ) : (
+            <Badge variant="soft" color="violet" size="1">
+              {v.external_owner_name ?? 'External'}
+            </Badge>
+          )}
+        </Flex>
+      </Flex>
+    </Card>
+  )
+}
+
+// Vehicle List Component
+function VehicleList({
+  vehicles,
+  selectedId,
+  onSelect,
+}: {
+  vehicles: Array<{
+    id: string
+    name: string
+    registration_no: string | null
+    fuel: 'electric' | 'diesel' | 'petrol' | null
+    internally_owned: boolean
+    external_owner_name: string | null
+  }>
+  selectedId: string
+  onSelect: (id: string) => void
+}) {
+  return (
+    <Table.Root variant="surface">
+      <Table.Header>
+        <Table.Row>
+          <Table.ColumnHeaderCell>Name</Table.ColumnHeaderCell>
+          <Table.ColumnHeaderCell>Reg</Table.ColumnHeaderCell>
+          <Table.ColumnHeaderCell>Fuel</Table.ColumnHeaderCell>
+          <Table.ColumnHeaderCell>Owner</Table.ColumnHeaderCell>
+        </Table.Row>
+      </Table.Header>
+      <Table.Body>
+        {vehicles.length === 0 ? (
+          <Table.Row>
+            <Table.Cell colSpan={4}>No vehicles</Table.Cell>
+          </Table.Row>
+        ) : (
+          vehicles.map((v) => {
+            const active = v.id === selectedId
+            return (
+              <Table.Row
+                key={v.id}
+                onClick={() => onSelect(v.id)}
+                style={{
+                  cursor: 'pointer',
+                  background: active ? 'var(--accent-a3)' : undefined,
+                }}
+                data-state={active ? 'active' : undefined}
+              >
+                <Table.Cell>
+                  <Text size="2" weight="medium">
+                    {v.name}
+                  </Text>
+                </Table.Cell>
+                <Table.Cell>{v.registration_no ?? '—'}</Table.Cell>
+                <Table.Cell>
+                  {v.fuel ? (
+                    <Badge
+                      variant="soft"
+                      color={
+                        v.fuel === 'electric'
+                          ? 'green'
+                          : v.fuel === 'diesel'
+                            ? 'orange'
+                            : 'blue'
+                      }
+                    >
+                      {v.fuel}
+                    </Badge>
+                  ) : (
+                    '—'
+                  )}
+                </Table.Cell>
+                <Table.Cell>
+                  {v.internally_owned ? (
+                    <Badge variant="soft" color="indigo">
+                      Internal
+                    </Badge>
+                  ) : (
+                    <Badge variant="soft" color="violet">
+                      {v.external_owner_name ?? 'External'}
+                    </Badge>
+                  )}
+                </Table.Cell>
+              </Table.Row>
+            )
+          })
+        )}
+      </Table.Body>
+    </Table.Root>
+  )
+}

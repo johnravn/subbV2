@@ -34,7 +34,7 @@ export default function EditContactDialog({
     notes: '',
   })
   React.useEffect(() => {
-    if (!contact) return
+    if (!open || !contact) return
     setForm({
       name: contact.name,
       email: contact.email ?? '',
@@ -42,7 +42,8 @@ export default function EditContactDialog({
       title: contact.title ?? '',
       notes: contact.notes ?? '',
     })
-  }, [contact?.id])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, contact?.id])
 
   const set = (k: keyof typeof form, v: any) =>
     setForm((s) => ({ ...s, [k]: v }))

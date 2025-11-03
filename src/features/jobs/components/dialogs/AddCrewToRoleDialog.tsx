@@ -47,7 +47,6 @@ export default function AddCrewToRoleDialog({
     },
   })
 
-
   // Search crew by name/email (filters out already assigned crew)
   const existingUserIds = React.useMemo(
     () => new Set(existingCrew.map((c) => c.user_id)),
@@ -71,7 +70,7 @@ export default function AddCrewToRoleDialog({
 
       const { data, error } = await q
       if (error) throw error
-      
+
       // Filter out crew already assigned to this role
       return (data || []).filter(
         (p) => !existingUserIds.has(p.user_id),
@@ -108,15 +107,16 @@ export default function AddCrewToRoleDialog({
         notes: null,
       }))
 
-      const { error } = await supabase
-        .from('reserved_crew')
-        .insert(payload)
+      const { error } = await supabase.from('reserved_crew').insert(payload)
 
       if (error) throw error
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['jobs.crew', jobId] })
       qc.invalidateQueries({ queryKey: ['jobs', jobId, 'time_periods'] })
+      qc.invalidateQueries({
+        queryKey: ['jobs', jobId, 'time_periods', 'crew'],
+      })
       success('Success', `Added ${selectedIds.size} crew member(s) to role`)
       setSelectedIds(new Set())
       onOpenChange(false)
@@ -181,9 +181,7 @@ export default function AddCrewToRoleDialog({
                     style={{
                       cursor: 'pointer',
                       borderRadius: 6,
-                      background: isSelected
-                        ? 'var(--blue-a3)'
-                        : 'transparent',
+                      background: isSelected ? 'var(--blue-a3)' : 'transparent',
                     }}
                     onClick={() => toggleSelection(p.user_id)}
                   >
@@ -201,7 +199,11 @@ export default function AddCrewToRoleDialog({
                             {p.display_name ?? p.email}
                           </Text>
                           {p.display_name && (
-                            <Text size="1" color="gray" style={{ marginLeft: 6 }}>
+                            <Text
+                              size="1"
+                              color="gray"
+                              style={{ marginLeft: 6 }}
+                            >
                               {p.email}
                             </Text>
                           )}
@@ -237,4 +239,3 @@ export default function AddCrewToRoleDialog({
     </Dialog.Root>
   )
 }
-

@@ -1,26 +1,17 @@
 import * as React from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import {
-  Button,
-  Dialog,
-  Flex,
-  Switch,
-  Text,
-  TextArea,
-  TextField,
-} from '@radix-ui/themes'
+import { Button, Dialog, Flex, Switch, Text, TextField } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { PhoneInputField } from '@shared/phone/PhoneInputField'
-import { fmtVAT } from '@shared/lib/generalFunctions'
 import { upsertCustomer } from '../../api/queries'
+import { NorwayZipCodeField } from '@shared/lib/NorwayZipCodeField'
 
 type Initial = {
   id: string
   name: string
   email: string
   phone: string
-  vat_number: string
   address: string
   is_partner: boolean
 }
@@ -38,39 +29,67 @@ export default function EditCustomerDialog({
 }) {
   const { companyId } = useCompany()
   const qc = useQueryClient()
-  // Format VAT number on initial load
-  const formatVATForInput = (vat: string | null | undefined): string => {
-    if (!vat) return ''
-    const formatted = fmtVAT(vat)
-    return formatted === '—' ? '' : formatted
-  }
-  const [form, setForm] = React.useState<Initial>({
+
+  // Parse address from comma-separated string
+  const parseAddress = React.useCallback((addr: string | null) => {
+    if (!addr)
+      return { address_line: '', zip_code: '', city: '', country: 'Norway' }
+    const parts = addr
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    return {
+      address_line: parts[0] || '',
+      zip_code: parts[1] || '',
+      city: parts[2] || '',
+      country: parts[3] || 'Norway',
+    }
+  }, [])
+
+  const [form, setForm] = React.useState({
     ...initial,
-    vat_number: formatVATForInput(initial.vat_number),
+    ...parseAddress(initial.address),
   })
+
   React.useEffect(() => {
+    if (!open) return
     setForm({
       ...initial,
-      vat_number: formatVATForInput(initial.vat_number),
+      ...parseAddress(initial.address),
     })
-  }, [initial.id])
-  const set = (k: keyof Initial, v: any) => setForm((s) => ({ ...s, [k]: v }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initial.id])
+
+  const set = (k: keyof typeof form, v: any) =>
+    setForm((s) => ({ ...s, [k]: v }))
+  const setAddr = (
+    k: 'address_line' | 'zip_code' | 'city' | 'country',
+    v: any,
+  ) => setForm((s) => ({ ...s, [k]: v }))
   const { success, error } = useToast()
 
   const mut = useMutation({
     mutationFn: async () => {
       if (!companyId) throw new Error('No company selected')
+
+      // Build address string from components for the customer.address field
+      const addressParts = [
+        form.address_line,
+        form.zip_code,
+        form.city,
+        form.country,
+      ]
+        .filter(Boolean)
+        .join(', ')
+      const addressString = addressParts || null
+
       return upsertCustomer({
         id: form.id,
         company_id: companyId,
         name: form.name,
         email: form.email || null,
         phone: form.phone || null,
-        // Strip spaces before saving to DB
-        vat_number: form.vat_number
-          ? form.vat_number.replace(/[\s-]/g, '') || null
-          : null,
-        address: form.address || null,
+        address: addressString,
         is_partner: !!form.is_partner,
       })
     },
@@ -109,31 +128,35 @@ export default function EditCustomerDialog({
               placeholder="Enter phone number"
             />
           </Field>
-          <Field label="VAT number">
+          <Field label="Address line">
             <TextField.Root
-              value={form.vat_number}
-              onChange={(e) => {
-                const input = e.target.value.replace(/[\s-]/g, '')
-                // Only allow digits, max 9 digits
-                if (input === '' || /^\d{0,9}$/.test(input)) {
-                  // Format as "xxx xxx xxx" as user types
-                  const formatted =
-                    input.length <= 3
-                      ? input
-                      : input.length <= 6
-                        ? `${input.slice(0, 3)} ${input.slice(3)}`
-                        : `${input.slice(0, 3)} ${input.slice(3, 6)} ${input.slice(6)}`
-                  set('vat_number', formatted)
-                }
-              }}
-              placeholder="123 456 789"
+              value={form.address_line}
+              onChange={(e) => setAddr('address_line', e.target.value)}
+              placeholder="Street and number"
             />
           </Field>
-          <Field label="Address">
-            <TextArea
-              rows={2}
-              value={form.address}
-              onChange={(e) => set('address', e.target.value)}
+          <FieldRow>
+            <Flex gap={'2'} width={'100%'}>
+              <Field label="ZIP">
+                <NorwayZipCodeField
+                  value={form.zip_code}
+                  onChange={(val) => setAddr('zip_code', val)}
+                  autoCompleteCity={(city) => setAddr('city', city)}
+                />
+              </Field>
+              <Field label="City" style={{ flex: 1 }}>
+                <TextField.Root
+                  value={form.city}
+                  onChange={(e) => setAddr('city', e.target.value)}
+                  placeholder="e.g., Oslo"
+                />
+              </Field>
+            </Flex>
+          </FieldRow>
+          <Field label="Country">
+            <TextField.Root
+              value={form.country}
+              onChange={(e) => setAddr('country', e.target.value)}
             />
           </Field>
           <Flex align="center" gap="2">
@@ -166,16 +189,26 @@ export default function EditCustomerDialog({
 function Field({
   label,
   children,
+  style,
 }: {
   label: string
   children: React.ReactNode
+  style?: React.CSSProperties
 }) {
   return (
-    <div>
+    <div style={style}>
       <Text as="div" size="2" color="gray" style={{ marginBottom: 6 }}>
         {label}
       </Text>
       {children}
     </div>
+  )
+}
+
+function FieldRow({ children }: { children: React.ReactNode }) {
+  return (
+    <Flex direction="column" gap="2">
+      {children}
+    </Flex>
   )
 }

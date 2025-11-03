@@ -6,7 +6,6 @@ export type CustomerRow = {
   name: string
   email: string | null
   phone: string | null
-  vat_number: string | null
   address: string | null
   is_partner: boolean
   created_at: string
@@ -48,7 +47,7 @@ export function customersIndexQuery({
       let q = supabase
         .from('customers')
         .select(
-          'id, company_id, name, email, phone, vat_number, address, is_partner, created_at',
+          'id, company_id, name, email, phone, address, is_partner, created_at',
         )
         .eq('company_id', companyId)
         .or('deleted.is.null,deleted.eq.false')
@@ -81,7 +80,7 @@ export function customerDetailQuery({
       const { data: c, error } = await supabase
         .from('customers')
         .select(
-          'id, company_id, name, email, phone, vat_number, address, is_partner, created_at',
+          'id, company_id, name, email, phone, address, is_partner, created_at',
         )
         .eq('company_id', companyId)
         .eq('id', id)
@@ -109,7 +108,6 @@ export async function upsertCustomer(payload: {
   name: string
   email?: string | null
   phone?: string | null
-  vat_number?: string | null
   address?: string | null
   is_partner?: boolean
 }) {
@@ -118,7 +116,6 @@ export async function upsertCustomer(payload: {
     name: payload.name.trim(),
     email: payload.email ?? null,
     phone: payload.phone ?? null,
-    vat_number: payload.vat_number ?? null,
     address: payload.address ?? null,
     is_partner: !!payload.is_partner,
   }

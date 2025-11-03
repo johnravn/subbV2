@@ -10,7 +10,6 @@ import {
   Flex,
   Grid,
   Separator,
-  Spinner,
   Table,
   Text,
 } from '@radix-ui/themes'
@@ -20,8 +19,6 @@ import { useCompany } from '@shared/companies/CompanyProvider'
 import { prettyPhone } from '@shared/phone/phone'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import InspectorSkeleton from '@shared/ui/components/InspectorSkeleton'
-import { fmtVAT } from '@shared/lib/generalFunctions'
-import { CopyIconButton } from '@shared/lib/CopyIconButton'
 import MapEmbed from '@shared/maps/MapEmbed'
 import {
   customerDetailQuery,
@@ -133,6 +130,25 @@ export default function CustomerInspector({
 
   const c = data
 
+  // Parse address from comma-separated string
+  const parseAddress = (addr: string | null) => {
+    if (!addr) return null
+    const parts = addr
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (parts.length >= 4) {
+      return {
+        address_line: parts[0],
+        zip_code: parts[1],
+        city: parts[2],
+        country: parts[3],
+      }
+    }
+    return null
+  }
+  const addrParts = parseAddress(c.address)
+
   return (
     <Box>
       {/* Header */}
@@ -140,9 +156,6 @@ export default function CustomerInspector({
         <div>
           <Text as="div" size="4" weight="bold">
             {c.name}
-          </Text>
-          <Text as="div" size="2" color="gray">
-            {c.address || '—'}
           </Text>
         </div>
         <Flex gap="2" align="center">
@@ -162,7 +175,6 @@ export default function CustomerInspector({
               address: c.address ?? '',
               email: c.email ?? '',
               phone: c.phone ?? '',
-              vat_number: c.vat_number ?? '',
               is_partner: c.is_partner,
             }}
             onSaved={() => {
@@ -218,19 +230,64 @@ export default function CustomerInspector({
               )}
             </Text>
           </div>
-          <div>
-            <Text as="div" size="1" color="gray" style={{ marginBottom: 4 }}>
-              VAT
-            </Text>
-            <Flex align="center" gap="2">
-              <Text as="div" size="2">
-                {fmtVAT(c.vat_number)}
-              </Text>
-              {c.vat_number && (
-                <CopyIconButton text={c.vat_number.replace(/[\s-]/g, '')} />
-              )}
-            </Flex>
-          </div>
+          {addrParts && (
+            <>
+              <div>
+                <Text
+                  as="div"
+                  size="1"
+                  color="gray"
+                  style={{ marginBottom: 4 }}
+                >
+                  Address
+                </Text>
+                <Text as="div" size="2">
+                  {addrParts.address_line || '—'}
+                </Text>
+              </div>
+              <Grid columns="2" gap="4">
+                <div>
+                  <Text
+                    as="div"
+                    size="1"
+                    color="gray"
+                    style={{ marginBottom: 4 }}
+                  >
+                    ZIP
+                  </Text>
+                  <Text as="div" size="2">
+                    {addrParts.zip_code || '—'}
+                  </Text>
+                </div>
+                <div>
+                  <Text
+                    as="div"
+                    size="1"
+                    color="gray"
+                    style={{ marginBottom: 4 }}
+                  >
+                    City
+                  </Text>
+                  <Text as="div" size="2">
+                    {addrParts.city || '—'}
+                  </Text>
+                </div>
+              </Grid>
+              <div>
+                <Text
+                  as="div"
+                  size="1"
+                  color="gray"
+                  style={{ marginBottom: 4 }}
+                >
+                  Country
+                </Text>
+                <Text as="div" size="2">
+                  {addrParts.country || '—'}
+                </Text>
+              </div>
+            </>
+          )}
         </Flex>
 
         {/* Right column: Map */}
@@ -366,7 +423,7 @@ export default function CustomerInspector({
                   onClick={() => {
                     navigate({
                       to: '/jobs',
-                      search: { jobId: job.id },
+                      search: { jobId: job.id, tab: undefined },
                     })
                   }}
                   style={{

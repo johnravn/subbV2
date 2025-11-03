@@ -5,6 +5,7 @@ import { PhoneInputField } from '@shared/phone/PhoneInputField'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { supabase } from '@shared/api/supabase'
+import { NorwayZipCodeField } from '@shared/lib/NorwayZipCodeField'
 
 export default function AddCustomerDialog({
   open,
@@ -20,7 +21,6 @@ export default function AddCustomerDialog({
     name: '',
     email: '',
     phone: '',
-    vat_number: '',
     address_line: '',
     zip_code: '',
     city: '',
@@ -56,10 +56,6 @@ export default function AddCustomerDialog({
         name: form.name,
         email: form.email || null,
         phone: form.phone || null,
-        // Strip spaces before saving to DB
-        vat_number: form.vat_number
-          ? form.vat_number.replace(/[\s-]/g, '') || null
-          : null,
         address: addressString,
         is_partner: !!form.is_partner,
       }
@@ -107,7 +103,6 @@ export default function AddCustomerDialog({
         name: '',
         email: '',
         phone: '',
-        vat_number: '',
         address_line: '',
         zip_code: '',
         city: '',
@@ -153,26 +148,6 @@ export default function AddCustomerDialog({
               placeholder="Enter phone number"
             />
           </Field>
-          <Field label="VAT number">
-            <TextField.Root
-              value={form.vat_number}
-              onChange={(e) => {
-                const input = e.target.value.replace(/[\s-]/g, '')
-                // Only allow digits, max 9 digits
-                if (input === '' || /^\d{0,9}$/.test(input)) {
-                  // Format as "xxx xxx xxx" as user types
-                  const formatted =
-                    input.length <= 3
-                      ? input
-                      : input.length <= 6
-                        ? `${input.slice(0, 3)} ${input.slice(3)}`
-                        : `${input.slice(0, 3)} ${input.slice(3, 6)} ${input.slice(6)}`
-                  set('vat_number', formatted)
-                }
-              }}
-              placeholder="123 456 789"
-            />
-          </Field>
           <Field label="Address line">
             <TextField.Root
               value={form.address_line}
@@ -183,10 +158,10 @@ export default function AddCustomerDialog({
           <FieldRow>
             <Flex gap={'2'} width={'100%'}>
               <Field label="ZIP">
-                <TextField.Root
+                <NorwayZipCodeField
                   value={form.zip_code}
-                  onChange={(e) => setAddr('zip_code', e.target.value)}
-                  placeholder="e.g., 0361"
+                  onChange={(val) => setAddr('zip_code', val)}
+                  autoCompleteCity={(city) => setAddr('city', city)}
                 />
               </Field>
               <Field label="City" style={{ flex: 1 }}>

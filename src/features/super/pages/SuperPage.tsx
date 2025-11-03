@@ -65,6 +65,91 @@ export default function SuperPage() {
     }
   }, [])
 
+  // Resize state for Companies tab: default 40% for 2fr/3fr ratio
+  const [companiesLeftWidth, setCompaniesLeftWidth] = React.useState<number>(40)
+  const [isResizingCompanies, setIsResizingCompanies] = React.useState(false)
+  const companiesContainerRef = React.useRef<HTMLDivElement>(null)
+
+  // Resize state for Users tab: default 50% for 1fr/1fr ratio
+  const [usersLeftWidth, setUsersLeftWidth] = React.useState<number>(50)
+  const [isResizingUsers, setIsResizingUsers] = React.useState(false)
+  const usersContainerRef = React.useRef<HTMLDivElement>(null)
+
+  // Handle mouse move for resizing Companies tab
+  React.useEffect(() => {
+    if (!isResizingCompanies) return
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!companiesContainerRef.current) return
+      const containerRect =
+        companiesContainerRef.current.getBoundingClientRect()
+      const containerWidth = containerRect.width
+      const mouseX = e.clientX - containerRect.left
+      const minWidth = 25
+      const maxWidth = 75
+      const newWidthPercent = Math.max(
+        minWidth,
+        Math.min(maxWidth, (mouseX / containerWidth) * 100),
+      )
+      setCompaniesLeftWidth(newWidthPercent)
+    }
+
+    const handleMouseUp = () => {
+      setIsResizingCompanies(false)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [isResizingCompanies])
+
+  // Handle mouse move for resizing Users tab
+  React.useEffect(() => {
+    if (!isResizingUsers) return
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!usersContainerRef.current) return
+      const containerRect = usersContainerRef.current.getBoundingClientRect()
+      const containerWidth = containerRect.width
+      const mouseX = e.clientX - containerRect.left
+      const minWidth = 25
+      const maxWidth = 75
+      const newWidthPercent = Math.max(
+        minWidth,
+        Math.min(maxWidth, (mouseX / containerWidth) * 100),
+      )
+      setUsersLeftWidth(newWidthPercent)
+    }
+
+    const handleMouseUp = () => {
+      setIsResizingUsers(false)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [isResizingUsers])
+
   const handleCreate = () => {
     setEditingCompany(null)
     setDialogOpen(true)
@@ -268,109 +353,257 @@ export default function SuperPage() {
               flexDirection: 'column',
             }}
           >
-            {/* 1/3 table (left), 2/3 inspector (right) from 1024px and up */}
-            <Grid
-              columns={{ initial: '1fr', lg: '2fr 3fr' }}
-              gap="4"
-              align="stretch"
-              style={{
-                height: isLarge ? '100%' : undefined,
-                minHeight: 0,
-                flex: isLarge ? 1 : undefined,
-              }}
-            >
-              {/* LEFT: Companies table */}
-              <Card
-                size="3"
+            {!isLarge ? (
+              <Grid
+                columns="1fr"
+                gap="4"
+                align="stretch"
                 style={{
-                  display: 'flex',
-                  flexDirection: 'column',
                   height: isLarge ? '100%' : undefined,
                   minHeight: 0,
+                  flex: isLarge ? 1 : undefined,
                 }}
               >
-                <Flex align="center" justify="between" mb="3">
-                  <Heading size="5">Companies</Heading>
-                  <Button onClick={handleCreate}>
-                    <Plus width={16} height={16} />
-                    Create
-                  </Button>
-                </Flex>
-                <Separator size="4" mb="3" />
-                <Box
+                {/* LEFT: Companies table */}
+                <Card
+                  size="3"
                   style={{
-                    flex: isLarge ? 1 : undefined,
-                    minHeight: isLarge ? 0 : undefined,
-                    overflowY: isLarge ? 'auto' : 'visible',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    height: isLarge ? '100%' : undefined,
+                    minHeight: 0,
                   }}
                 >
-                  <CompaniesTable
-                    selectedId={selectedId}
-                    onSelect={setSelectedId}
-                    onEdit={handleEdit}
-                    onDelete={handleDelete}
-                  />
-                </Box>
-              </Card>
+                  <Flex align="center" justify="between" mb="3">
+                    <Heading size="5">Companies</Heading>
+                    <Button onClick={handleCreate}>
+                      <Plus width={16} height={16} />
+                      Create
+                    </Button>
+                  </Flex>
+                  <Separator size="4" mb="3" />
+                  <Box
+                    style={{
+                      flex: isLarge ? 1 : undefined,
+                      minHeight: isLarge ? 0 : undefined,
+                      overflowY: isLarge ? 'auto' : 'visible',
+                    }}
+                  >
+                    <CompaniesTable
+                      selectedId={selectedId}
+                      onSelect={setSelectedId}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
+                    />
+                  </Box>
+                </Card>
 
-              {/* RIGHT: Inspector */}
-              <Card
-                size="3"
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  height: isLarge ? '100%' : undefined,
-                  maxHeight: isLarge ? '100%' : undefined,
-                  overflow: isLarge ? 'hidden' : 'visible',
-                  minHeight: 0,
-                }}
-              >
-                <Heading size="5" mb="3">
-                  Inspector
-                </Heading>
-                <Separator size="4" mb="3" />
-                <Box
+                {/* RIGHT: Inspector */}
+                <Card
+                  size="3"
                   style={{
-                    flex: isLarge ? 1 : undefined,
-                    minHeight: isLarge ? 0 : undefined,
-                    overflowY: isLarge ? 'auto' : 'visible',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    height: isLarge ? '100%' : undefined,
+                    maxHeight: isLarge ? '100%' : undefined,
+                    overflow: isLarge ? 'hidden' : 'visible',
+                    minHeight: 0,
                   }}
                 >
-                  <CompanyInspector
-                    id={selectedId}
-                    onDeleted={() => setSelectedId(null)}
-                    onEdit={() => {
-                      if (selectedId) {
-                        // Find the company from the query cache or fetch it
-                        const companies = qc.getQueryData<
-                          Array<CompanyIndexRow>
-                        >(['companies', 'index'])
-                        const company = companies?.find(
-                          (c) => c.id === selectedId,
-                        )
-                        if (company) {
-                          setEditingCompany(company)
-                          setDialogOpen(true)
-                        }
-                      }
+                  <Heading size="5" mb="3">
+                    Inspector
+                  </Heading>
+                  <Separator size="4" mb="3" />
+                  <Box
+                    style={{
+                      flex: isLarge ? 1 : undefined,
+                      minHeight: isLarge ? 0 : undefined,
+                      overflowY: isLarge ? 'auto' : 'visible',
                     }}
-                    onDelete={() => {
-                      if (selectedId) {
-                        const companies = qc.getQueryData<
-                          Array<CompanyIndexRow>
-                        >(['companies', 'index'])
-                        const company = companies?.find(
-                          (c) => c.id === selectedId,
-                        )
-                        if (company) {
-                          setDeletingCompany(company)
+                  >
+                    <CompanyInspector
+                      id={selectedId}
+                      onDeleted={() => setSelectedId(null)}
+                      onEdit={() => {
+                        if (selectedId) {
+                          const companies = qc.getQueryData<
+                            Array<CompanyIndexRow>
+                          >(['companies', 'index'])
+                          const company = companies?.find(
+                            (c) => c.id === selectedId,
+                          )
+                          if (company) {
+                            setEditingCompany(company)
+                            setDialogOpen(true)
+                          }
                         }
-                      }
+                      }}
+                      onDelete={() => {
+                        if (selectedId) {
+                          const companies = qc.getQueryData<
+                            Array<CompanyIndexRow>
+                          >(['companies', 'index'])
+                          const company = companies?.find(
+                            (c) => c.id === selectedId,
+                          )
+                          if (company) {
+                            setDeletingCompany(company)
+                          }
+                        }
+                      }}
+                    />
+                  </Box>
+                </Card>
+              </Grid>
+            ) : (
+              <Flex
+                ref={companiesContainerRef}
+                gap="4"
+                align="stretch"
+                style={{
+                  height: isLarge ? '100%' : undefined,
+                  minHeight: 0,
+                  position: 'relative',
+                  flex: isLarge ? 1 : undefined,
+                }}
+              >
+                {/* LEFT: Companies table */}
+                <Card
+                  size="3"
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    width: `${companiesLeftWidth}%`,
+                    height: isLarge ? '100%' : undefined,
+                    minWidth: '300px',
+                    maxWidth: '75%',
+                    minHeight: 0,
+                    flexShrink: 0,
+                    transition: isResizingCompanies
+                      ? 'none'
+                      : 'width 0.1s ease-out',
+                  }}
+                >
+                  <Flex align="center" justify="between" mb="3">
+                    <Heading size="5">Companies</Heading>
+                    <Button onClick={handleCreate}>
+                      <Plus width={16} height={16} />
+                      Create
+                    </Button>
+                  </Flex>
+                  <Separator size="4" mb="3" />
+                  <Box
+                    style={{
+                      flex: isLarge ? 1 : undefined,
+                      minHeight: isLarge ? 0 : undefined,
+                      overflowY: isLarge ? 'auto' : 'visible',
                     }}
-                  />
-                </Box>
-              </Card>
-            </Grid>
+                  >
+                    <CompaniesTable
+                      selectedId={selectedId}
+                      onSelect={setSelectedId}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
+                    />
+                  </Box>
+                </Card>
+
+                {/* RESIZER */}
+                <Box
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    setIsResizingCompanies(true)
+                  }}
+                  style={{
+                    width: '8px',
+                    height: '20%',
+                    cursor: 'col-resize',
+                    backgroundColor: 'var(--gray-a4)',
+                    borderRadius: '4px',
+                    flexShrink: 0,
+                    alignSelf: 'center',
+                    userSelect: 'none',
+                    margin: '0 -4px',
+                    zIndex: 10,
+                    transition: isResizingCompanies
+                      ? 'none'
+                      : 'background-color 0.2s',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isResizingCompanies) {
+                      e.currentTarget.style.backgroundColor = 'var(--gray-a6)'
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isResizingCompanies) {
+                      e.currentTarget.style.backgroundColor = 'var(--gray-a4)'
+                    }
+                  }}
+                />
+
+                {/* RIGHT: Inspector */}
+                <Card
+                  size="3"
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    flex: 1,
+                    height: isLarge ? '100%' : undefined,
+                    maxHeight: isLarge ? '100%' : undefined,
+                    overflow: isLarge ? 'hidden' : 'visible',
+                    minWidth: '300px',
+                    minHeight: 0,
+                    transition: isResizingCompanies
+                      ? 'none'
+                      : 'flex-basis 0.1s ease-out',
+                  }}
+                >
+                  <Heading size="5" mb="3">
+                    Inspector
+                  </Heading>
+                  <Separator size="4" mb="3" />
+                  <Box
+                    style={{
+                      flex: isLarge ? 1 : undefined,
+                      minHeight: isLarge ? 0 : undefined,
+                      overflowY: isLarge ? 'auto' : 'visible',
+                    }}
+                  >
+                    <CompanyInspector
+                      id={selectedId}
+                      onDeleted={() => setSelectedId(null)}
+                      onEdit={() => {
+                        if (selectedId) {
+                          const companies = qc.getQueryData<
+                            Array<CompanyIndexRow>
+                          >(['companies', 'index'])
+                          const company = companies?.find(
+                            (c) => c.id === selectedId,
+                          )
+                          if (company) {
+                            setEditingCompany(company)
+                            setDialogOpen(true)
+                          }
+                        }
+                      }}
+                      onDelete={() => {
+                        if (selectedId) {
+                          const companies = qc.getQueryData<
+                            Array<CompanyIndexRow>
+                          >(['companies', 'index'])
+                          const company = companies?.find(
+                            (c) => c.id === selectedId,
+                          )
+                          if (company) {
+                            setDeletingCompany(company)
+                          }
+                        }
+                      }}
+                    />
+                  </Box>
+                </Card>
+              </Flex>
+            )}
           </Tabs.Content>
 
           <Tabs.Content
@@ -382,106 +615,253 @@ export default function SuperPage() {
               flexDirection: 'column',
             }}
           >
-            {/* 50/50 split for users tab */}
-            <Grid
-              columns={{ initial: '1fr', lg: '1fr 1fr' }}
-              gap="4"
-              align="stretch"
-              style={{
-                height: isLarge ? '100%' : undefined,
-                minHeight: 0,
-                flex: isLarge ? 1 : undefined,
-              }}
-            >
-              {/* LEFT: Users table */}
-              <Card
-                size="3"
+            {!isLarge ? (
+              <Grid
+                columns="1fr"
+                gap="4"
+                align="stretch"
                 style={{
-                  display: 'flex',
-                  flexDirection: 'column',
                   height: isLarge ? '100%' : undefined,
                   minHeight: 0,
+                  flex: isLarge ? 1 : undefined,
                 }}
               >
-                <Flex align="center" justify="between" mb="3">
-                  <Heading size="5">Users</Heading>
-                </Flex>
-                <Separator size="4" mb="3" />
-                <Box
+                {/* LEFT: Users table */}
+                <Card
+                  size="3"
                   style={{
-                    flex: isLarge ? 1 : undefined,
-                    minHeight: isLarge ? 0 : undefined,
-                    overflowY: isLarge ? 'auto' : 'visible',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    height: isLarge ? '100%' : undefined,
+                    minHeight: 0,
                   }}
                 >
-                  <UsersTable
-                    selectedId={selectedId}
-                    onSelect={setSelectedId}
-                    onEdit={handleEditUser}
-                    onDelete={handleDeleteUser}
-                  />
-                </Box>
-              </Card>
+                  <Flex align="center" justify="between" mb="3">
+                    <Heading size="5">Users</Heading>
+                  </Flex>
+                  <Separator size="4" mb="3" />
+                  <Box
+                    style={{
+                      flex: isLarge ? 1 : undefined,
+                      minHeight: isLarge ? 0 : undefined,
+                      overflowY: isLarge ? 'auto' : 'visible',
+                    }}
+                  >
+                    <UsersTable
+                      selectedId={selectedId}
+                      onSelect={setSelectedId}
+                      onEdit={handleEditUser}
+                      onDelete={handleDeleteUser}
+                    />
+                  </Box>
+                </Card>
 
-              {/* RIGHT: Inspector */}
-              <Card
-                size="3"
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  height: isLarge ? '100%' : undefined,
-                  maxHeight: isLarge ? '100%' : undefined,
-                  overflow: isLarge ? 'hidden' : 'visible',
-                  minHeight: 0,
-                }}
-              >
-                <Heading size="5" mb="3">
-                  Inspector
-                </Heading>
-                <Separator size="4" mb="3" />
-                <Box
+                {/* RIGHT: Inspector */}
+                <Card
+                  size="3"
                   style={{
-                    flex: isLarge ? 1 : undefined,
-                    minHeight: isLarge ? 0 : undefined,
-                    overflowY: isLarge ? 'auto' : 'visible',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    height: isLarge ? '100%' : undefined,
+                    maxHeight: isLarge ? '100%' : undefined,
+                    overflow: isLarge ? 'hidden' : 'visible',
+                    minHeight: 0,
                   }}
                 >
-                  <UserInspector
-                    id={selectedId}
-                    onDeleted={() => setSelectedId(null)}
-                    onEdit={() => {
-                      if (selectedId) {
-                        const users = qc.getQueryData<Array<UserIndexRow>>([
-                          'users',
-                          'index',
-                        ])
-                        const user = users?.find(
-                          (u) => u.user_id === selectedId,
-                        )
-                        if (user) {
-                          setEditingUser(user)
-                          setUserDialogOpen(true)
-                        }
-                      }
+                  <Heading size="5" mb="3">
+                    Inspector
+                  </Heading>
+                  <Separator size="4" mb="3" />
+                  <Box
+                    style={{
+                      flex: isLarge ? 1 : undefined,
+                      minHeight: isLarge ? 0 : undefined,
+                      overflowY: isLarge ? 'auto' : 'visible',
                     }}
-                    onDelete={() => {
-                      if (selectedId) {
-                        const users = qc.getQueryData<Array<UserIndexRow>>([
-                          'users',
-                          'index',
-                        ])
-                        const user = users?.find(
-                          (u) => u.user_id === selectedId,
-                        )
-                        if (user) {
-                          setDeletingUser(user)
+                  >
+                    <UserInspector
+                      id={selectedId}
+                      onDeleted={() => setSelectedId(null)}
+                      onEdit={() => {
+                        if (selectedId) {
+                          const users = qc.getQueryData<Array<UserIndexRow>>([
+                            'users',
+                            'index',
+                          ])
+                          const user = users?.find(
+                            (u) => u.user_id === selectedId,
+                          )
+                          if (user) {
+                            setEditingUser(user)
+                            setUserDialogOpen(true)
+                          }
                         }
-                      }
+                      }}
+                      onDelete={() => {
+                        if (selectedId) {
+                          const users = qc.getQueryData<Array<UserIndexRow>>([
+                            'users',
+                            'index',
+                          ])
+                          const user = users?.find(
+                            (u) => u.user_id === selectedId,
+                          )
+                          if (user) {
+                            setDeletingUser(user)
+                          }
+                        }
+                      }}
+                    />
+                  </Box>
+                </Card>
+              </Grid>
+            ) : (
+              <Flex
+                ref={usersContainerRef}
+                gap="4"
+                align="stretch"
+                style={{
+                  height: isLarge ? '100%' : undefined,
+                  minHeight: 0,
+                  position: 'relative',
+                  flex: isLarge ? 1 : undefined,
+                }}
+              >
+                {/* LEFT: Users table */}
+                <Card
+                  size="3"
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    width: `${usersLeftWidth}%`,
+                    height: isLarge ? '100%' : undefined,
+                    minWidth: '300px',
+                    maxWidth: '75%',
+                    minHeight: 0,
+                    flexShrink: 0,
+                    transition: isResizingUsers
+                      ? 'none'
+                      : 'width 0.1s ease-out',
+                  }}
+                >
+                  <Flex align="center" justify="between" mb="3">
+                    <Heading size="5">Users</Heading>
+                  </Flex>
+                  <Separator size="4" mb="3" />
+                  <Box
+                    style={{
+                      flex: isLarge ? 1 : undefined,
+                      minHeight: isLarge ? 0 : undefined,
+                      overflowY: isLarge ? 'auto' : 'visible',
                     }}
-                  />
-                </Box>
-              </Card>
-            </Grid>
+                  >
+                    <UsersTable
+                      selectedId={selectedId}
+                      onSelect={setSelectedId}
+                      onEdit={handleEditUser}
+                      onDelete={handleDeleteUser}
+                    />
+                  </Box>
+                </Card>
+
+                {/* RESIZER */}
+                <Box
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    setIsResizingUsers(true)
+                  }}
+                  style={{
+                    width: '8px',
+                    height: '20%',
+                    cursor: 'col-resize',
+                    backgroundColor: 'var(--gray-a4)',
+                    borderRadius: '4px',
+                    flexShrink: 0,
+                    alignSelf: 'center',
+                    userSelect: 'none',
+                    margin: '0 -4px',
+                    zIndex: 10,
+                    transition: isResizingUsers
+                      ? 'none'
+                      : 'background-color 0.2s',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isResizingUsers) {
+                      e.currentTarget.style.backgroundColor = 'var(--gray-a6)'
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isResizingUsers) {
+                      e.currentTarget.style.backgroundColor = 'var(--gray-a4)'
+                    }
+                  }}
+                />
+
+                {/* RIGHT: Inspector */}
+                <Card
+                  size="3"
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    flex: 1,
+                    height: isLarge ? '100%' : undefined,
+                    maxHeight: isLarge ? '100%' : undefined,
+                    overflow: isLarge ? 'hidden' : 'visible',
+                    minWidth: '300px',
+                    minHeight: 0,
+                    transition: isResizingUsers
+                      ? 'none'
+                      : 'flex-basis 0.1s ease-out',
+                  }}
+                >
+                  <Heading size="5" mb="3">
+                    Inspector
+                  </Heading>
+                  <Separator size="4" mb="3" />
+                  <Box
+                    style={{
+                      flex: isLarge ? 1 : undefined,
+                      minHeight: isLarge ? 0 : undefined,
+                      overflowY: isLarge ? 'auto' : 'visible',
+                    }}
+                  >
+                    <UserInspector
+                      id={selectedId}
+                      onDeleted={() => setSelectedId(null)}
+                      onEdit={() => {
+                        if (selectedId) {
+                          const users = qc.getQueryData<Array<UserIndexRow>>([
+                            'users',
+                            'index',
+                          ])
+                          const user = users?.find(
+                            (u) => u.user_id === selectedId,
+                          )
+                          if (user) {
+                            setEditingUser(user)
+                            setUserDialogOpen(true)
+                          }
+                        }
+                      }}
+                      onDelete={() => {
+                        if (selectedId) {
+                          const users = qc.getQueryData<Array<UserIndexRow>>([
+                            'users',
+                            'index',
+                          ])
+                          const user = users?.find(
+                            (u) => u.user_id === selectedId,
+                          )
+                          if (user) {
+                            setDeletingUser(user)
+                          }
+                        }
+                      }}
+                    />
+                  </Box>
+                </Card>
+              </Flex>
+            )}
           </Tabs.Content>
         </Box>
       </Tabs.Root>

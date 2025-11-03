@@ -13,7 +13,6 @@ import {
 } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { InfoCircle, Search } from 'iconoir-react'
-import { fmtVAT } from '@shared/lib/generalFunctions'
 import { customersIndexQuery } from '../api/queries'
 import AddCustomerDialog from './dialogs/AddCustomerDialog'
 
@@ -34,18 +33,21 @@ export default function CustomerTable({
   const qc = useQueryClient()
   const [search, setSearch] = React.useState('')
   const [addOpen, setAddOpen] = React.useState(false)
-  
+
   // Initialize filter state based on props
-  const [customerTypeFilter, setCustomerTypeFilter] = React.useState<CustomerTypeFilter>(() => {
-    if (showRegular && showPartner) return 'all'
-    if (showRegular && !showPartner) return 'customer'
-    if (!showRegular && showPartner) return 'partner'
-    return 'all'
-  })
+  const [customerTypeFilter, setCustomerTypeFilter] =
+    React.useState<CustomerTypeFilter>(() => {
+      if (showRegular && showPartner) return 'all'
+      if (showRegular && !showPartner) return 'customer'
+      if (!showRegular && showPartner) return 'partner'
+      return 'all'
+    })
 
   // Derive showRegular/showPartner from filter state
-  const derivedShowRegular = customerTypeFilter === 'all' || customerTypeFilter === 'customer'
-  const derivedShowPartner = customerTypeFilter === 'all' || customerTypeFilter === 'partner'
+  const derivedShowRegular =
+    customerTypeFilter === 'all' || customerTypeFilter === 'customer'
+  const derivedShowPartner =
+    customerTypeFilter === 'all' || customerTypeFilter === 'partner'
 
   const {
     data: rows = [],
@@ -88,7 +90,9 @@ export default function CustomerTable({
         <Select.Root
           value={customerTypeFilter}
           size="3"
-          onValueChange={(val) => setCustomerTypeFilter(val as CustomerTypeFilter)}
+          onValueChange={(val) =>
+            setCustomerTypeFilter(val as CustomerTypeFilter)
+          }
         >
           <Select.Trigger
             placeholder="Filter type…"
@@ -121,7 +125,6 @@ export default function CustomerTable({
           <Table.Row>
             <Table.ColumnHeaderCell>Name</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Contact</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>VAT</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>
               <Flex gap={'1'}>
                 Type
@@ -135,7 +138,7 @@ export default function CustomerTable({
         <Table.Body>
           {rows.length === 0 ? (
             <Table.Row>
-              <Table.Cell colSpan={4}>No results</Table.Cell>
+              <Table.Cell colSpan={3}>No results</Table.Cell>
             </Table.Row>
           ) : (
             rows.map((r) => {
@@ -154,11 +157,6 @@ export default function CustomerTable({
                     <Text size="2" weight="medium">
                       {r.name}
                     </Text>
-                    {r.address && (
-                      <Text as="div" size="1" color="gray">
-                        {r.address}
-                      </Text>
-                    )}
                   </Table.Cell>
                   <Table.Cell>
                     <Text size="2" color="gray">
@@ -170,7 +168,6 @@ export default function CustomerTable({
                       </Text>
                     )}
                   </Table.Cell>
-                  <Table.Cell>{fmtVAT(r.vat_number)}</Table.Cell>
                   <Table.Cell>
                     {r.is_partner ? (
                       <Badge variant="soft" color="green">

@@ -64,3 +64,31 @@
   opacity: 0.6;
   pointer-events: none;
 }
+
+/* Country picker styling for better readability in dark mode */
+.radix-phone .PhoneInputCountry {
+  color: var(--gray-12);
+}
+
+.radix-phone .PhoneInputCountrySelect {
+  color: var(--gray-12);
+}
+
+.radix-phone .PhoneInputCountryIcon {
+  /* Ensure the flag icon has proper visibility */
+}
+
+/* Country picker arrow styling with proper contrast for dark and light modes */
+.radix-phone .PhoneInputCountrySelectArrow {
+  opacity: 0.7;
+}
+
+/* Dark mode specific adjustments */
+.dark .radix-phone .PhoneInputCountrySelectArrow {
+  opacity: 0.8;
+}
+
+/* Light mode specific adjustments */
+.light .radix-phone .PhoneInputCountrySelectArrow {
+  opacity: 0.6;
+}

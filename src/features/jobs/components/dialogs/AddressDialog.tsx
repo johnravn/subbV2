@@ -20,6 +20,7 @@ import { useToast } from '@shared/ui/toast/ToastProvider'
 import MapEmbed from '@shared/maps/MapEmbed'
 import { addressIndexQuery } from '@features/jobs/api/queries'
 import type { JobDetail, UUID } from '../../types'
+import { NorwayZipCodeField } from '@shared/lib/NorwayZipCodeField'
 
 type Props = {
   open: boolean
@@ -530,10 +531,10 @@ function EditFieldGroup({
       </Field>
       <Flex gap="3" wrap="wrap">
         <Field label="ZIP">
-          <TextField.Root
+          <NorwayZipCodeField
             value={form.zip_code}
-            onChange={(e) => setFormVal('zip_code', e.target.value)}
-            placeholder="e.g., 0361"
+            onChange={(val) => setFormVal('zip_code', val)}
+            autoCompleteCity={(city) => setFormVal('city', city)}
           />
         </Field>
         <Field label="City">

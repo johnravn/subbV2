@@ -67,7 +67,6 @@ export type JobDetail = {
     name: string | null
     email: string | null
     phone: string | null
-    vat_number: string | null
   } | null
 
   project_lead?: {
@@ -208,6 +207,7 @@ export type ReservedVehicleRow = {
   vehicle?: {
     id: UUID
     name: string
+    image_path: string | null
     external_owner_id: UUID | null
   } | null
 }

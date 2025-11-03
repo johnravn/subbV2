@@ -4,33 +4,26 @@ import {
   Badge,
   Box,
   Button,
+  Card,
   Dialog,
   Flex,
   Heading,
   IconButton,
   SegmentedControl,
-  Table,
   Text,
   TextField,
 } from '@radix-ui/themes'
 import { supabase } from '@shared/api/supabase'
-import { Edit, NavArrowDown, NavArrowRight, Trash, Truck } from 'iconoir-react'
+import { Car, NavArrowDown, NavArrowRight, Trash, Truck } from 'iconoir-react'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { useAuthz } from '@shared/auth/useAuthz'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { FixedTimePeriodEditor } from '@features/calendar/components/reservations/TimePeriodPicker'
-import BookVehicleDialog, {
-  EditVehicleBookingDialog,
-} from '../dialogs/BookVehicleDialog'
+import BookVehicleDialog from '../dialogs/BookVehicleDialog'
 import type { ExternalReqStatus, ReservedVehicleRow } from '../../types'
 
 export default function TransportTab({ jobId }: { jobId: string }) {
   const [bookVehOpen, setBookVehOpen] = React.useState(false)
-  const [editingBooking, setEditingBooking] = React.useState<{
-    id: string
-    external_status: ExternalReqStatus | null
-    external_note: string | null
-  } | null>(null)
   const [deletingBooking, setDeletingBooking] = React.useState<string | null>(
     null,
   )
@@ -41,12 +34,11 @@ export default function TransportTab({ jobId }: { jobId: string }) {
 
   const qc = useQueryClient()
   const { success, error: showError } = useToast()
-  const [expandedOwners, setExpandedOwners] = React.useState<Set<string>>(
-    new Set(),
-  )
-  const [expandedInternal, setExpandedInternal] = React.useState(false)
-  const [ownerNotes, setOwnerNotes] = React.useState<Map<string, string>>(
+  const [editingNotes, setEditingNotes] = React.useState<Map<string, string>>(
     new Map(),
+  )
+  const [expandedCards, setExpandedCards] = React.useState<Set<string>>(
+    new Set(),
   )
 
   const { data } = useQuery({
@@ -65,7 +57,7 @@ export default function TransportTab({ jobId }: { jobId: string }) {
           `
           id, time_period_id, vehicle_id, external_status, external_note,
           vehicle:vehicle_id (
-            id, name, external_owner_id, deleted,
+            id, name, image_path, external_owner_id, deleted,
             external_owner:external_owner_id ( id, name )
           )
         `,
@@ -86,71 +78,29 @@ export default function TransportTab({ jobId }: { jobId: string }) {
     },
   })
 
-  // Group vehicles by external owner
-  const { internalVehicles, ownerGroups } = React.useMemo(() => {
-    const internal: Array<ReservedVehicleRow> = []
-    const groups = new Map<string, Array<ReservedVehicleRow>>()
-
-    for (const row of data ?? []) {
-      const vehicle = row.vehicle as any
-      const ownerId = vehicle?.external_owner_id
-
-      if (!ownerId) {
-        internal.push(row)
-      } else {
-        const ownerVehicles = groups.get(ownerId) || []
-        ownerVehicles.push(row)
-        groups.set(ownerId, ownerVehicles)
-      }
-    }
-
-    return { internalVehicles: internal, ownerGroups: groups }
-  }, [data])
-
-  // Sync ownerNotes when data changes
-  React.useEffect(() => {
-    setOwnerNotes((prevNotes) => {
-      const newNotes = new Map<string, string>()
-      for (const [ownerId, vehicles] of ownerGroups.entries()) {
-        const currentNote = vehicles[0]?.external_note ?? ''
-        const editedNote = prevNotes.get(ownerId)
-        if (editedNote !== undefined && editedNote !== currentNote) {
-          newNotes.set(ownerId, editedNote)
-        }
-      }
-      return newNotes
-    })
-  }, [ownerGroups])
-
-  const toggleOwner = (ownerId: string) => {
-    setExpandedOwners((prev) => {
-      const next = new Set(prev)
-      if (next.has(ownerId)) {
-        next.delete(ownerId)
-      } else {
-        next.add(ownerId)
-      }
-      return next
-    })
-  }
-
-  const handleUpdateOwnerVehicles = async (
-    ownerVehicles: Array<ReservedVehicleRow>,
+  const handleUpdateBooking = async (
+    bookingId: string,
     updates: {
       external_status?: ExternalReqStatus
       external_note?: string
     },
   ) => {
     try {
-      const vehicleIds = ownerVehicles.map((r) => r.id)
       const { error: updateErr } = await supabase
         .from('reserved_vehicles')
         .update(updates)
-        .in('id', vehicleIds)
+        .eq('id', bookingId)
       if (updateErr) throw updateErr
 
       await qc.invalidateQueries({ queryKey: ['jobs.transport', jobId] })
-      success('Updated', 'All vehicles for this owner updated')
+      success('Updated', 'Vehicle booking updated')
+
+      // Clear the edited note
+      if (updates.external_note !== undefined) {
+        const newNotes = new Map(editingNotes)
+        newNotes.delete(bookingId)
+        setEditingNotes(newNotes)
+      }
     } catch (e: any) {
       showError('Failed to update', e?.message || 'Please try again.')
     }
@@ -232,383 +182,96 @@ export default function TransportTab({ jobId }: { jobId: string }) {
         )}
       </Box>
 
-      {/* Internal Vehicles */}
-      {internalVehicles.length > 0 && (
-        <Box
-          mb="4"
-          style={{
-            border: '1px solid var(--gray-a5)',
-            borderRadius: 8,
-            overflow: 'hidden',
-            background: 'var(--gray-a1)',
-          }}
-        >
-          {/* Internal Header */}
-          <Box
-            p="3"
-            style={{
-              background: 'var(--gray-a2)',
-              cursor: 'pointer',
-              borderBottom: expandedInternal
-                ? '1px solid var(--gray-a5)'
-                : 'none',
-            }}
-            onClick={() => setExpandedInternal(!expandedInternal)}
-          >
-            <Flex align="center" gap="3">
-              {expandedInternal ? (
-                <NavArrowDown width={18} height={18} />
-              ) : (
-                <NavArrowRight width={18} height={18} />
-              )}
-              <Text weight="medium">Internal vehicles</Text>
-              <Text size="2" color="gray">
-                ({internalVehicles.length}{' '}
-                {internalVehicles.length === 1 ? 'vehicle' : 'vehicles'})
-              </Text>
-            </Flex>
-          </Box>
+      {/* Vehicle Cards List */}
+      {data && data.length > 0 ? (
+        <Flex direction="column" gap="3">
+          {data.map((row) => {
+            const vehicle = row.vehicle as any
+            const vehicleObj = Array.isArray(vehicle) ? vehicle[0] : vehicle
+            const owner = Array.isArray(vehicleObj?.external_owner)
+              ? vehicleObj?.external_owner[0]
+              : vehicleObj?.external_owner
+            const ownerName = owner?.name
+            const isInternal = !vehicleObj?.external_owner_id
+            const currentNote = row.external_note ?? ''
+            const editedNote = editingNotes.get(row.id) ?? currentNote
+            const noteChanged = editedNote !== currentNote
 
-          {/* Expanded Details */}
-          {expandedInternal && (
-            <Box
-              p="3"
-              style={{
-                background: 'var(--gray-a1)',
-                borderTop: '1px solid var(--gray-a4)',
-              }}
-            >
-              <Flex direction="column" gap="3">
-                {/* Time Period Editor */}
-                {internalVehicles.length > 0 && (
-                  <Box>
-                    <Text size="1" weight="medium" mb="1">
-                      Time Period
-                    </Text>
-                    {(() => {
-                      // Get time period from first internal vehicle
-                      // Since each booking creates its own time period, we show the first one
-                      // Users can edit individual time periods if they differ
-                      const firstTimePeriod =
-                        internalVehicles[0]?.time_period_id
-                      if (!firstTimePeriod) {
-                        return (
-                          <Box
-                            p="2"
-                            style={{
-                              border: '1px dashed var(--amber-a6)',
-                              borderRadius: 8,
-                              background: 'var(--amber-a2)',
-                            }}
-                          >
-                            <Text size="2" color="amber">
-                              No time period set
-                            </Text>
-                          </Box>
-                        )
-                      }
-
-                      // Check if all internal vehicles share the same time period
-                      const allSamePeriod = internalVehicles.every(
-                        (v) => v.time_period_id === firstTimePeriod,
-                      )
-
-                      return (
-                        <>
-                          <FixedTimePeriodEditor
-                            jobId={jobId}
-                            timePeriodId={firstTimePeriod}
-                            readOnly={isReadOnly}
-                          />
-                          {!allSamePeriod && (
-                            <Text size="1" color="amber" mt="1">
-                              Note: Internal vehicles use different time
-                              periods. Editing will only update this time
-                              period.
-                            </Text>
-                          )}
-                        </>
-                      )
-                    })()}
-                  </Box>
-                )}
-
-                {/* Vehicles Table */}
-                <Table.Root variant="surface">
-                  <Table.Header>
-                    <Table.Row>
-                      <Table.ColumnHeaderCell>Vehicle</Table.ColumnHeaderCell>
-                      {!isReadOnly && (
-                        <Table.ColumnHeaderCell style={{ width: '120px' }}>
-                          Actions
-                        </Table.ColumnHeaderCell>
-                      )}
-                    </Table.Row>
-                  </Table.Header>
-                  <Table.Body>
-                    {internalVehicles.map((r) => (
-                      <Table.Row key={r.id}>
-                        <Table.Cell>
-                          {(r.vehicle as any)?.name ?? '—'}
-                        </Table.Cell>
-                        {!isReadOnly && (
-                          <Table.Cell>
-                            <Flex gap="2">
-                              <IconButton
-                                size="1"
-                                variant="ghost"
-                                onClick={() =>
-                                  setEditingBooking({
-                                    id: r.id,
-                                    external_status: null,
-                                    external_note: null,
-                                  })
-                                }
-                              >
-                                <Edit />
-                              </IconButton>
-                              <IconButton
-                                size="1"
-                                variant="ghost"
-                                color="red"
-                                onClick={() => setDeletingBooking(r.id)}
-                              >
-                                <Trash />
-                              </IconButton>
-                            </Flex>
-                          </Table.Cell>
-                        )}
-                      </Table.Row>
-                    ))}
-                  </Table.Body>
-                </Table.Root>
-              </Flex>
-            </Box>
-          )}
-        </Box>
-      )}
-
-      {/* External Vehicles by Owner */}
-      {ownerGroups.size === 0 && internalVehicles.length === 0 && (
+            return (
+              <VehicleBookingCard
+                key={row.id}
+                row={row}
+                vehicle={vehicleObj}
+                ownerName={ownerName}
+                isInternal={isInternal}
+                editedNote={editedNote}
+                noteChanged={noteChanged}
+                isReadOnly={isReadOnly}
+                jobId={jobId}
+                isExpanded={expandedCards.has(row.id)}
+                onToggleExpand={() => {
+                  setExpandedCards((prev) => {
+                    const next = new Set(prev)
+                    if (next.has(row.id)) {
+                      next.delete(row.id)
+                    } else {
+                      next.add(row.id)
+                    }
+                    return next
+                  })
+                }}
+                onNoteChange={(note) => {
+                  const newNotes = new Map(editingNotes)
+                  newNotes.set(row.id, note)
+                  setEditingNotes(newNotes)
+                }}
+                onSaveNote={() => {
+                  handleUpdateBooking(row.id, {
+                    external_note: editedNote,
+                  })
+                }}
+                onStatusChange={(status) => {
+                  handleUpdateBooking(row.id, {
+                    external_status: status,
+                  })
+                }}
+                onDelete={() => setDeletingBooking(row.id)}
+              />
+            )
+          })}
+        </Flex>
+      ) : (
+        /* Empty State */
         <Box
           p="4"
           style={{
-            border: '1px solid var(--gray-a6)',
+            border: '2px dashed var(--gray-a6)',
             borderRadius: 8,
             textAlign: 'center',
+            cursor: canBook ? 'pointer' : 'default',
+            transition: 'all 100ms',
+          }}
+          onClick={() => canBook && setBookVehOpen(true)}
+          onMouseEnter={(e) => {
+            if (canBook) {
+              e.currentTarget.style.borderColor = 'var(--gray-a8)'
+              e.currentTarget.style.background = 'var(--gray-a2)'
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (canBook) {
+              e.currentTarget.style.borderColor = 'var(--gray-a6)'
+              e.currentTarget.style.background = 'transparent'
+            }
           }}
         >
-          <Text color="gray">No vehicles</Text>
+          <Flex direction="column" align="center" gap="2">
+            <Truck width={24} height={24} />
+            <Text size="2" color="gray">
+              {canBook ? 'Book vehicle' : 'No vehicles'}
+            </Text>
+          </Flex>
         </Box>
-      )}
-
-      {Array.from(ownerGroups.entries()).map(([ownerId, ownerVehicles]) => {
-        const firstRow = ownerVehicles[0]
-        const vehicle = firstRow.vehicle as any
-        const owner = Array.isArray(vehicle?.external_owner)
-          ? vehicle?.external_owner[0]
-          : vehicle?.external_owner
-        const ownerName = owner?.name ?? ownerId
-        const currentStatus = firstRow.external_status as ExternalReqStatus
-        const currentNote = firstRow.external_note ?? ''
-        const currentTimePeriod = firstRow.time_period_id
-        const isExpanded = expandedOwners.has(ownerId)
-        const editedNote = ownerNotes.get(ownerId) ?? currentNote
-        const noteChanged = editedNote !== currentNote
-
-        return (
-          <Box
-            key={ownerId}
-            mb="4"
-            style={{
-              border: '1px solid var(--gray-a5)',
-              borderRadius: 8,
-              overflow: 'hidden',
-              background: 'var(--gray-a1)',
-            }}
-          >
-            {/* Owner Header */}
-            <Box
-              p="3"
-              style={{
-                background: 'var(--gray-a2)',
-                cursor: 'pointer',
-                borderBottom: isExpanded ? '1px solid var(--gray-a5)' : 'none',
-              }}
-              onClick={() => toggleOwner(ownerId)}
-            >
-              <Flex align="center" justify="between">
-                <Flex align="center" gap="3">
-                  {isExpanded ? (
-                    <NavArrowDown width={18} height={18} />
-                  ) : (
-                    <NavArrowRight width={18} height={18} />
-                  )}
-                  <Text weight="medium">{ownerName}</Text>
-                  <Text size="2" color="gray">
-                    ({ownerVehicles.length}{' '}
-                    {ownerVehicles.length === 1 ? 'vehicle' : 'vehicles'})
-                  </Text>
-                </Flex>
-                {isReadOnly ? (
-                  <Badge radius="full" highContrast>
-                    {currentStatus}
-                  </Badge>
-                ) : (
-                  <Box onClick={(e) => e.stopPropagation()}>
-                    <StatusBadge
-                      value={currentStatus}
-                      onChange={(v) =>
-                        handleUpdateOwnerVehicles(ownerVehicles, {
-                          external_status: v,
-                        })
-                      }
-                    />
-                  </Box>
-                )}
-              </Flex>
-            </Box>
-
-            {/* Expanded Details */}
-            {isExpanded && (
-              <Box
-                p="3"
-                style={{
-                  background: 'var(--gray-a1)',
-                  borderTop: '1px solid var(--gray-a4)',
-                }}
-              >
-                <Flex direction="column" gap="3">
-                  <Box>
-                    <Text size="1" weight="medium" mb="1">
-                      Time Period
-                    </Text>
-                    {currentTimePeriod ? (
-                      <FixedTimePeriodEditor
-                        jobId={jobId}
-                        timePeriodId={currentTimePeriod}
-                        readOnly={isReadOnly}
-                      />
-                    ) : (
-                      <Box
-                        p="2"
-                        style={{
-                          border: '1px dashed var(--amber-a6)',
-                          borderRadius: 8,
-                          background: 'var(--amber-a2)',
-                        }}
-                      >
-                        <Text size="2" color="amber">
-                          No time period set
-                        </Text>
-                      </Box>
-                    )}
-                  </Box>
-
-                  <Box>
-                    <Text size="1" weight="medium" mb="1">
-                      Note
-                    </Text>
-                    {isReadOnly ? (
-                      <Text size="2">{editedNote || '—'}</Text>
-                    ) : (
-                      <TextField.Root
-                        placeholder="Add note for all vehicles from this owner…"
-                        value={editedNote}
-                        onChange={(e) => {
-                          const newNotes = new Map(ownerNotes)
-                          newNotes.set(ownerId, e.target.value)
-                          setOwnerNotes(newNotes)
-                        }}
-                      >
-                        {noteChanged && (
-                          <TextField.Slot side="right">
-                            <Button
-                              size="2"
-                              variant="ghost"
-                              onClick={() => {
-                                handleUpdateOwnerVehicles(ownerVehicles, {
-                                  external_note: editedNote,
-                                })
-                                const newNotes = new Map(ownerNotes)
-                                newNotes.delete(ownerId)
-                                setOwnerNotes(newNotes)
-                              }}
-                            >
-                              Save
-                            </Button>
-                          </TextField.Slot>
-                        )}
-                      </TextField.Root>
-                    )}
-                  </Box>
-                </Flex>
-
-                {/* Vehicles Table */}
-                <Box mt="3">
-                  <Table.Root variant="surface">
-                    <Table.Header>
-                      <Table.Row>
-                        <Table.ColumnHeaderCell>Vehicle</Table.ColumnHeaderCell>
-                        {!isReadOnly && (
-                          <Table.ColumnHeaderCell style={{ width: '120px' }}>
-                            Actions
-                          </Table.ColumnHeaderCell>
-                        )}
-                      </Table.Row>
-                    </Table.Header>
-                    <Table.Body>
-                      {ownerVehicles.map((r) => (
-                        <Table.Row key={r.id}>
-                          <Table.Cell>
-                            {(r.vehicle as any)?.name ?? '—'}
-                          </Table.Cell>
-                          {!isReadOnly && (
-                            <Table.Cell>
-                              <Flex gap="2">
-                                <IconButton
-                                  size="1"
-                                  variant="ghost"
-                                  onClick={() =>
-                                    setEditingBooking({
-                                      id: r.id,
-                                      external_status: r.external_status,
-                                      external_note: r.external_note,
-                                    })
-                                  }
-                                >
-                                  <Edit />
-                                </IconButton>
-                                <IconButton
-                                  size="1"
-                                  variant="ghost"
-                                  color="red"
-                                  onClick={() => setDeletingBooking(r.id)}
-                                >
-                                  <Trash />
-                                </IconButton>
-                              </Flex>
-                            </Table.Cell>
-                          )}
-                        </Table.Row>
-                      ))}
-                    </Table.Body>
-                  </Table.Root>
-                </Box>
-              </Box>
-            )}
-          </Box>
-        )
-      })}
-
-      {/* Edit Dialog */}
-      {editingBooking && (
-        <EditVehicleBookingDialog
-          open={!!editingBooking}
-          onOpenChange={(open) => !open && setEditingBooking(null)}
-          row={editingBooking}
-          jobId={jobId}
-        />
       )}
 
       {/* Delete Confirmation Dialog */}
@@ -642,6 +305,226 @@ export default function TransportTab({ jobId }: { jobId: string }) {
   )
 }
 
+function VehicleBookingCard({
+  row,
+  vehicle,
+  ownerName,
+  isInternal,
+  editedNote,
+  noteChanged,
+  isReadOnly,
+  jobId,
+  isExpanded,
+  onToggleExpand,
+  onNoteChange,
+  onSaveNote,
+  onStatusChange,
+  onDelete,
+}: {
+  row: ReservedVehicleRow
+  vehicle: any
+  ownerName?: string
+  isInternal: boolean
+  editedNote: string
+  noteChanged: boolean
+  isReadOnly: boolean
+  jobId: string
+  isExpanded: boolean
+  onToggleExpand: () => void
+  onNoteChange: (note: string) => void
+  onSaveNote: () => void
+  onStatusChange: (status: ExternalReqStatus) => void
+  onDelete: () => void
+}) {
+  const vehicleName = vehicle?.name ?? '—'
+  const currentStatus = row.external_status
+
+  const imageUrl = React.useMemo(() => {
+    if (!vehicle?.image_path) return null
+    const { data } = supabase.storage
+      .from('vehicle_images')
+      .getPublicUrl(vehicle.image_path)
+    return data.publicUrl
+  }, [vehicle?.image_path])
+
+  return (
+    <Card
+      size="2"
+      variant="surface"
+      style={{
+        background: 'var(--gray-a1)',
+        border: '1px solid var(--gray-a5)',
+      }}
+    >
+      <Flex
+        direction="row"
+        gap="3"
+        align="start"
+        onClick={onToggleExpand}
+        style={{ cursor: 'pointer' }}
+      >
+        {/* Vehicle Image */}
+        <Box
+          style={{
+            width: '120px',
+            height: '120px',
+            borderRadius: 8,
+            overflow: 'hidden',
+            background: 'var(--gray-a2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}
+        >
+          {imageUrl ? (
+            <img
+              src={imageUrl}
+              alt={vehicleName}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
+              }}
+            />
+          ) : (
+            <Car
+              style={{
+                width: '40px',
+                height: '40px',
+                color: 'var(--gray-a9)',
+              }}
+            />
+          )}
+        </Box>
+
+        {/* Vehicle Info */}
+        <Flex direction="column" gap="2" style={{ flex: 1 }}>
+          <Flex align="center" justify="between">
+            <Flex align="center" gap="2" style={{ flex: 1 }}>
+              {isExpanded ? (
+                <NavArrowDown width={16} height={16} />
+              ) : (
+                <NavArrowRight width={16} height={16} />
+              )}
+              <Text size="3" weight="medium">
+                {vehicleName}
+              </Text>
+            </Flex>
+            {!isReadOnly && (
+              <Flex gap="1" onClick={(e) => e.stopPropagation()}>
+                <IconButton
+                  size="1"
+                  variant="ghost"
+                  color="red"
+                  onClick={onDelete}
+                >
+                  <Trash />
+                </IconButton>
+              </Flex>
+            )}
+          </Flex>
+
+          <Flex gap="2" wrap="wrap">
+            {ownerName && (
+              <Badge variant="soft" color="violet">
+                {ownerName}
+              </Badge>
+            )}
+
+            {isInternal && (
+              <Badge variant="soft" color="indigo">
+                Internal
+              </Badge>
+            )}
+
+            {!isInternal && currentStatus && (
+              <Box onClick={(e) => e.stopPropagation()}>
+                {isReadOnly ? (
+                  <Badge radius="full" highContrast>
+                    {currentStatus}
+                  </Badge>
+                ) : (
+                  <StatusBadge
+                    value={currentStatus}
+                    onChange={onStatusChange}
+                  />
+                )}
+              </Box>
+            )}
+          </Flex>
+        </Flex>
+      </Flex>
+
+      {/* Expanded Content */}
+      {isExpanded && (
+        <Box
+          pt="3"
+          mt="3"
+          style={{
+            borderTop: '1px solid var(--gray-a5)',
+          }}
+        >
+          <Flex direction="column" gap="3">
+            {/* Time Period */}
+            <Box>
+              <Text size="1" weight="medium" mb="1">
+                Time Period
+              </Text>
+              {row.time_period_id ? (
+                <FixedTimePeriodEditor
+                  jobId={jobId}
+                  timePeriodId={row.time_period_id}
+                  readOnly={isReadOnly}
+                />
+              ) : (
+                <Box
+                  p="2"
+                  style={{
+                    border: '1px dashed var(--amber-a6)',
+                    borderRadius: 8,
+                    background: 'var(--amber-a2)',
+                  }}
+                >
+                  <Text size="2" color="amber">
+                    No time period set
+                  </Text>
+                </Box>
+              )}
+            </Box>
+
+            {/* Note */}
+            {!isInternal && (
+              <Box>
+                <Text size="1" weight="medium" mb="1">
+                  Note
+                </Text>
+                {isReadOnly ? (
+                  <Text size="2">{editedNote || '—'}</Text>
+                ) : (
+                  <TextField.Root
+                    placeholder="Add note…"
+                    value={editedNote}
+                    onChange={(e) => onNoteChange(e.target.value)}
+                  >
+                    {noteChanged && (
+                      <TextField.Slot side="right">
+                        <Button size="2" variant="ghost" onClick={onSaveNote}>
+                          Save
+                        </Button>
+                      </TextField.Slot>
+                    )}
+                  </TextField.Root>
+                )}
+              </Box>
+            )}
+          </Flex>
+        </Box>
+      )}
+    </Card>
+  )
+}
+
 function StatusBadge({
   value,
   onChange,
@@ -656,8 +539,22 @@ function StatusBadge({
       onValueChange={(v) => onChange(v as ExternalReqStatus)}
     >
       <SegmentedControl.Item value="planned">Planned</SegmentedControl.Item>
-      <SegmentedControl.Item value="requested">Requested</SegmentedControl.Item>
-      <SegmentedControl.Item value="confirmed">Confirmed</SegmentedControl.Item>
+      <SegmentedControl.Item
+        value="requested"
+        style={{
+          color: 'var(--blue-9)',
+        }}
+      >
+        Requested
+      </SegmentedControl.Item>
+      <SegmentedControl.Item
+        value="confirmed"
+        style={{
+          color: 'var(--green-9)',
+        }}
+      >
+        Confirmed
+      </SegmentedControl.Item>
     </SegmentedControl.Root>
   )
 }

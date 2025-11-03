@@ -306,7 +306,7 @@ export function jobDetailQuery({ jobId }: { jobId: string }) {
           `
           id, company_id, title, description, status, start_at, end_at,
           project_lead_user_id, customer_id, customer_contact_id, job_address_id,
-          customer:customer_id ( id, name, email, phone, vat_number ),
+          customer:customer_id ( id, name, email, phone ),
           project_lead:project_lead_user_id ( user_id, display_name, email ),
           customer_contact:customer_contact_id ( id, name, email, phone, title ),
           address:job_address_id ( id, name, address_line, zip_code, city, country )
