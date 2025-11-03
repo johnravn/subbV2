@@ -86,7 +86,7 @@ export default function LandingPage() {
                   size="6"
                   style={{ fontWeight: 700, color: 'var(--gray-12)' }}
                 >
-                  Subb
+                  Driven
                 </Heading>
               </Flex>
             </motion.div>
@@ -310,7 +310,7 @@ export default function LandingPage() {
                   size="8"
                   style={{ marginBottom: '1rem', color: 'var(--gray-12)' }}
                 >
-                  Why Subb?
+                  Why Driven?
                 </Heading>
                 <Text
                   size="4"
@@ -322,7 +322,7 @@ export default function LandingPage() {
                 >
                   Running a company means juggling multiple systems and
                   spreadsheets, leading to missed deadlines, double-bookings,
-                  and frustrated teams. Subb brings everything together in one
+                  and frustrated teams. Driven brings everything together in one
                   intuitive platform.
                 </Text>
                 <Box
@@ -485,7 +485,7 @@ export default function LandingPage() {
                       margin: '0 auto 2rem',
                     }}
                   >
-                    Join companies already using Subb to streamline their
+                    Join companies already using Driven to streamline their
                     operations and boost productivity.
                   </Text>
                   <motion.div
@@ -600,7 +600,7 @@ export default function LandingPage() {
                 }}
               />
               <Text size="3" style={{ color: 'var(--gray-11)' }}>
-                © 2025 Subb. All rights reserved.
+                © 2025 Driven. All rights reserved.
               </Text>
             </Flex>
             <Flex gap="4">
