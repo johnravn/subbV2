@@ -55,6 +55,25 @@ export default function InventoryInspector({ id }: { id: string | null }) {
         .eq('company_id', companyId)
         .eq('id', id)
       if (error) throw error
+
+      // Log activity
+      try {
+        const { logActivity } = await import('@features/latest/api/queries')
+        await logActivity({
+          companyId,
+          activityType:
+            entry.type === 'item'
+              ? 'inventory_item_deleted'
+              : 'inventory_group_deleted',
+          metadata: {
+            [entry.type === 'item' ? 'item_id' : 'group_id']: id,
+            [entry.type === 'item' ? 'item_name' : 'group_name']: entry.name,
+          },
+          title: entry.name,
+        })
+      } catch (logErr) {
+        console.error('Failed to log activity:', logErr)
+      }
     },
     onSuccess: async () => {
       await Promise.all([
@@ -64,6 +83,10 @@ export default function InventoryInspector({ id }: { id: string | null }) {
         }),
         qc.invalidateQueries({
           queryKey: ['company', companyId, 'inventory-detail'],
+          exact: false,
+        }),
+        qc.invalidateQueries({
+          queryKey: ['company', companyId, 'latest-feed'],
           exact: false,
         }),
       ])

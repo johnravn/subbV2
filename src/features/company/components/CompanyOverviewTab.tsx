@@ -13,11 +13,12 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import MapEmbed from '@shared/maps/MapEmbed'
-import { Edit } from 'iconoir-react'
+import { Edit, MessageText } from 'iconoir-react'
 import { fmtVAT } from '@shared/lib/generalFunctions'
 import { prettyPhone } from '@shared/phone/phone'
 import { companyDetailQuery } from '../api/queries'
 import EditCompanyDialog from './dialogs/EditCompanyDialog'
+import CreateAnnouncementDialog from '@features/latest/components/CreateAnnouncementDialog'
 
 const FIELD_MAX = 420
 
@@ -25,6 +26,7 @@ export default function CompanyOverviewTab() {
   const { companyId } = useCompany()
   const qc = useQueryClient()
   const [editOpen, setEditOpen] = React.useState(false)
+  const [announcementOpen, setAnnouncementOpen] = React.useState(false)
 
   const { data, isLoading, isError, error } = useQuery({
     ...(companyId
@@ -98,17 +100,24 @@ export default function CompanyOverviewTab() {
     .join(', ')
 
   return (
-    <Card
-      size="4"
-      style={{ minHeight: 0, overflow: 'auto' }}
-    >
+    <Card size="4" style={{ minHeight: 0, overflow: 'auto' }}>
       {/* Header */}
       <Flex align="center" justify="between" wrap="wrap" gap="3" mb="4">
         <Heading size="4">{data.name}</Heading>
-        <Button size="2" variant="soft" onClick={() => setEditOpen(true)}>
-          <Edit />
-          Edit
-        </Button>
+        <Flex gap="2">
+          <Button
+            size="2"
+            variant="soft"
+            onClick={() => setAnnouncementOpen(true)}
+          >
+            <MessageText />
+            New Announcement
+          </Button>
+          <Button size="2" variant="soft" onClick={() => setEditOpen(true)}>
+            <Edit />
+            Edit
+          </Button>
+        </Flex>
       </Flex>
 
       <EditCompanyDialog
@@ -120,6 +129,11 @@ export default function CompanyOverviewTab() {
             queryKey: ['company', companyId, 'company-detail'],
           })
         }}
+      />
+
+      <CreateAnnouncementDialog
+        open={announcementOpen}
+        onOpenChange={setAnnouncementOpen}
       />
 
       {/* Main content in columns */}

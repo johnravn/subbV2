@@ -15,7 +15,8 @@
     "db:types:remote": "supabase gen types typescript --linked > src/shared/types/database.types.ts",
     "db:diff": "supabase db diff --use-migra -f",
     "db:reset": "supabase db reset",
-    "db:push": "supabase db push"
+    "db:push": "supabase db push",
+    "conta:types": "openapi-typescript src/shared/api/conta/conta-external-api.json -o src/shared/api/conta/types.ts"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.19",
@@ -32,6 +33,7 @@
     "@tanstack/react-router": "^1.130.2",
     "@tanstack/react-router-devtools": "^1.131.5",
     "@tanstack/react-table": "^8.21.3",
+    "date-fns": "^4.1.0",
     "framer-motion": "^12.23.22",
     "iconoir-react": "^7.11.0",
     "libphonenumber-js": "^1.12.23",
@@ -41,6 +43,7 @@
     "react-dom": "^19.0.0",
     "react-icons": "^5.5.0",
     "react-phone-number-input": "^3.4.12",
+    "recharts": "^3.3.0",
     "tailwindcss": "^4.0.6",
     "temporal-polyfill": "^0.3.0"
   },
@@ -53,6 +56,7 @@
     "@types/react-phone-number-input": "^3.0.17",
     "@vitejs/plugin-react": "^4.3.4",
     "jsdom": "^26.0.0",
+    "openapi-typescript": "^7.10.1",
     "prettier": "^3.5.3",
     "supabase": "^2.54.11",
     "typescript": "^5.7.2",

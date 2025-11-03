@@ -283,7 +283,9 @@ export type CompanyExpansion = {
   id: string
   company_id: string
   accounting_software: 'none' | 'conta' | null
-  accounting_api_key_encrypted: Uint8Array | null
+  accounting_api_key_encrypted: string | null
+  accounting_organization_id: string | null
+  accounting_api_read_only: boolean
   created_at: string
   updated_at: string
 }
@@ -308,10 +310,14 @@ export async function updateCompanyExpansion({
   companyId,
   accountingSoftware,
   apiKey,
+  organizationId,
+  readOnly,
 }: {
   companyId: string
   accountingSoftware?: 'none' | 'conta'
   apiKey?: string | null
+  organizationId?: string | null
+  readOnly?: boolean
 }) {
   const { data: auth, error: authErr } = await supabase.auth.getUser()
   if (authErr) throw authErr
@@ -319,14 +325,14 @@ export async function updateCompanyExpansion({
   if (!actorId) throw new Error('Not authenticated')
 
   // Encrypt the API key if provided
-  let encryptedKey: Uint8Array | null = null
+  let encryptedKey: string | null = null
   if (apiKey && accountingSoftware !== 'none') {
     const { data, error } = await supabase.rpc('encrypt_api_key', {
       p_company_id: companyId,
       p_api_key: apiKey,
     })
     if (error) throw error
-    encryptedKey = data
+    encryptedKey = data as string | null
   }
 
   // Get current expansion to preserve existing values if not provided
@@ -351,6 +357,14 @@ export async function updateCompanyExpansion({
           apiKey !== undefined
             ? encryptedKey
             : (current?.accounting_api_key_encrypted ?? null),
+        accounting_organization_id:
+          organizationId !== undefined
+            ? organizationId
+            : ((current as any)?.accounting_organization_id ?? null),
+        accounting_api_read_only:
+          readOnly !== undefined
+            ? readOnly
+            : (current?.accounting_api_read_only ?? true),
       },
       { onConflict: 'company_id' },
     )

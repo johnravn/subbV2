@@ -67,7 +67,13 @@ export default function AppShell() {
     queryKey: ['profile', authUser?.id, 'animated-background-preference'],
     enabled: !!authUser?.id,
     queryFn: async () => {
-      if (!authUser?.id) return { enabled: false, intensity: 1.0 }
+      if (!authUser?.id)
+        return {
+          enabled: false,
+          intensity: 1.0,
+          shapeType: 'circles' as const,
+          speed: 1.0,
+        }
       const { data } = await supabase
         .from('profiles')
         .select('preferences')
@@ -78,6 +84,8 @@ export default function AppShell() {
       return {
         enabled: prefs?.animated_background_enabled ?? false,
         intensity: prefs?.animated_background_intensity ?? 1.0,
+        shapeType: prefs?.animated_background_shape_type ?? 'circles',
+        speed: prefs?.animated_background_speed ?? 1.0,
       }
     },
     staleTime: 0, // Always refetch when invalidated
@@ -86,6 +94,8 @@ export default function AppShell() {
 
   const backgroundEnabled = backgroundPrefs?.enabled ?? false
   const backgroundIntensity = backgroundPrefs?.intensity ?? 1.0
+  const backgroundShapeType = backgroundPrefs?.shapeType ?? 'circles'
+  const backgroundSpeed = backgroundPrefs?.speed ?? 1.0
 
   React.useEffect(() => {
     if (isMobile) setOpen(false)
@@ -112,7 +122,11 @@ export default function AppShell() {
     >
       {/* Animated background - only on authenticated pages and if enabled */}
       {!isPublic && backgroundEnabled === true && (
-        <AnimatedBackground intensity={backgroundIntensity} />
+        <AnimatedBackground
+          intensity={backgroundIntensity}
+          shapeType={backgroundShapeType}
+          speed={backgroundSpeed}
+        />
       )}
 
       {!isPublic && (
@@ -225,9 +239,39 @@ export default function AppShell() {
 }
 
 /* ------- Animated Background Component ------- */
-function AnimatedBackground({ intensity = 1.0 }: { intensity?: number }) {
+type ShapeType = 'circles' | 'triangles' | 'rectangles'
+
+function AnimatedBackground({
+  intensity = 1.0,
+  shapeType = 'circles',
+  speed = 1.0,
+}: {
+  intensity?: number
+  shapeType?: ShapeType
+  speed?: number
+}) {
   // Clamp intensity between 0 and 1
   const clampedIntensity = Math.max(0, Math.min(1, intensity))
+  // Clamp speed between 0.1 and 3.0, use as multiplier (inverse for duration)
+  const speedMultiplier = Math.max(0.1, Math.min(3.0, speed))
+  // Base durations (in seconds) - slower speed = longer duration
+  const baseDurations = [120, 150, 180, 100, 200]
+  const durations = baseDurations.map((d) => d / speedMultiplier)
+  // Rotation durations (in seconds) - much slower for subtle rotation, also affected by speed multiplier
+  // Each shape rotates at a different speed for variety
+  const baseRotationDurations = [300, 420, 360, 380, 400]
+  const rotationDurations = baseRotationDurations.map(
+    (d) => d / speedMultiplier,
+  )
+
+  // Initial rotation angles (degrees) - each shape starts at a different angle
+  const initialRotations = [15, 30, 45, 60, 75]
+
+  // Calculate rotation amounts (degrees per slide cycle) for triangles/rectangles
+  // Much more subtle - only partial rotations per slide cycle
+  const rotationAmounts = durations.map((slideDur, idx) =>
+    Math.round((slideDur / rotationDurations[idx]) * 360),
+  )
 
   return (
     <Box
@@ -261,6 +305,69 @@ function AnimatedBackground({ intensity = 1.0 }: { intensity?: number }) {
           }
         }
         
+        @keyframes slideSlowWithRotate1 {
+          0% {
+            transform: translateX(-100%) rotate(${initialRotations[0]}deg);
+          }
+          100% {
+            transform: translateX(calc(100vw + 100%)) rotate(${initialRotations[0] + rotationAmounts[0]}deg);
+          }
+        }
+        
+        @keyframes slideSlowReverseWithRotate2 {
+          0% {
+            transform: translateX(calc(100vw + 100%)) rotate(${initialRotations[1]}deg);
+          }
+          100% {
+            transform: translateX(-100%) rotate(${initialRotations[1] - rotationAmounts[1]}deg);
+          }
+        }
+        
+        @keyframes slideSlowWithRotate3 {
+          0% {
+            transform: translateX(-100%) rotate(${initialRotations[2]}deg);
+          }
+          100% {
+            transform: translateX(calc(100vw + 100%)) rotate(${initialRotations[2] + rotationAmounts[2]}deg);
+          }
+        }
+        
+        @keyframes slideSlowReverseWithRotate4 {
+          0% {
+            transform: translateX(calc(100vw + 100%)) rotate(${initialRotations[3]}deg);
+          }
+          100% {
+            transform: translateX(-100%) rotate(${initialRotations[3] - rotationAmounts[3]}deg);
+          }
+        }
+        
+        @keyframes slideSlowWithRotate5 {
+          0% {
+            transform: translateX(-100%) rotate(${initialRotations[4]}deg);
+          }
+          100% {
+            transform: translateX(calc(100vw + 100%)) rotate(${initialRotations[4] + rotationAmounts[4]}deg);
+          }
+        }
+        
+        @keyframes rotateSlow {
+          0% {
+            transform: rotate(0deg);
+          }
+          100% {
+            transform: rotate(360deg);
+          }
+        }
+        
+        @keyframes rotateSlowReverse {
+          0% {
+            transform: rotate(360deg);
+          }
+          100% {
+            transform: rotate(0deg);
+          }
+        }
+        
         .bg-shape {
           position: absolute;
           opacity: ${clampedIntensity};
@@ -270,51 +377,81 @@ function AnimatedBackground({ intensity = 1.0 }: { intensity?: number }) {
         .bg-shape-1 {
           width: 800px;
           height: 800px;
-          border-radius: 50%;
           background: var(--accent-a3);
           top: -200px;
           left: 0;
-          animation: slideSlow 120s linear infinite;
+          animation: ${
+            shapeType === 'triangles' || shapeType === 'rectangles'
+              ? `slideSlowWithRotate1 ${durations[0]}s linear infinite`
+              : `slideSlow ${durations[0]}s linear infinite`
+          };
+          ${shapeType === 'circles' ? 'border-radius: 50%;' : ''}
+          ${shapeType === 'triangles' ? 'clip-path: polygon(50% 0%, 0% 100%, 100% 100%);' : ''}
+          ${shapeType === 'rectangles' ? 'border-radius: 10px;' : ''}
         }
         
         .bg-shape-2 {
           width: 600px;
           height: 600px;
-          border-radius: 50%;
           background: var(--accent-a2);
           top: 20%;
           left: 0;
-          animation: slideSlowReverse 150s linear infinite;
+          animation: ${
+            shapeType === 'triangles' || shapeType === 'rectangles'
+              ? `slideSlowReverseWithRotate2 ${durations[1]}s linear infinite`
+              : `slideSlowReverse ${durations[1]}s linear infinite`
+          };
+          ${shapeType === 'circles' ? 'border-radius: 50%;' : ''}
+          ${shapeType === 'triangles' ? 'clip-path: polygon(50% 0%, 0% 100%, 100% 100%);' : ''}
+          ${shapeType === 'rectangles' ? 'border-radius: 20px;' : ''}
         }
         
         .bg-shape-3 {
           width: 1000px;
           height: 1000px;
-          border-radius: 50%;
           background: var(--accent-a3);
           bottom: -300px;
           left: 0;
-          animation: slideSlow 180s linear infinite;
+          animation: ${
+            shapeType === 'triangles' || shapeType === 'rectangles'
+              ? `slideSlowWithRotate3 ${durations[2]}s linear infinite`
+              : `slideSlow ${durations[2]}s linear infinite`
+          };
+          ${shapeType === 'circles' ? 'border-radius: 50%;' : ''}
+          ${shapeType === 'triangles' ? 'clip-path: polygon(50% 0%, 0% 100%, 100% 100%);' : ''}
+          ${shapeType === 'rectangles' ? 'border-radius: 10px;' : ''}
         }
         
         .bg-shape-4 {
           width: 400px;
           height: 400px;
-          border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%;
           background: var(--accent-a2);
           top: 50%;
           left: 0;
-          animation: slideSlowReverse 100s linear infinite;
+          animation: ${
+            shapeType === 'triangles' || shapeType === 'rectangles'
+              ? `slideSlowReverseWithRotate4 ${durations[3]}s linear infinite`
+              : `slideSlowReverse ${durations[3]}s linear infinite`
+          };
+          ${shapeType === 'circles' ? 'border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%;' : ''}
+          ${shapeType === 'triangles' ? 'clip-path: polygon(50% 0%, 0% 100%, 100% 100%);' : ''}
+          ${shapeType === 'rectangles' ? 'border-radius: 40px;' : ''}
         }
         
         .bg-shape-5 {
           width: 700px;
           height: 700px;
-          border-radius: 40% 60% 60% 40% / 60% 30% 70% 40%;
           background: var(--accent-a3);
           top: 10%;
           left: 0;
-          animation: slideSlow 200s linear infinite;
+          animation: ${
+            shapeType === 'triangles' || shapeType === 'rectangles'
+              ? `slideSlowWithRotate5 ${durations[4]}s linear infinite`
+              : `slideSlow ${durations[4]}s linear infinite`
+          };
+          ${shapeType === 'circles' ? 'border-radius: 40% 60% 60% 40% / 60% 30% 70% 40%;' : ''}
+          ${shapeType === 'triangles' ? 'clip-path: polygon(50% 0%, 0% 100%, 100% 100%);' : ''}
+          ${shapeType === 'rectangles' ? 'border-radius: 15px;' : ''}
         }
         
         /* Increase contrast for light mode */

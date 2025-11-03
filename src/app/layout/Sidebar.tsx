@@ -2,7 +2,8 @@
 import * as React from 'react'
 import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import logoWhite from '@shared/assets/subbLogo/svg/white/LogoWhite.svg'
+import logoBlack from '@shared/assets/drivenLogo/driven_logo_black.svg'
+import logoWhite from '@shared/assets/drivenLogo/driven_logo_white.svg'
 import {
   Avatar,
   Badge,
@@ -36,6 +37,8 @@ import { canVisit } from '@shared/auth/permissions'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { unreadMattersCountQuery } from '@features/matters/api/queries'
 import { useMediaQuery } from '../hooks/useMediaQuery'
+import { useTheme } from '../hooks/useTheme'
+import { APP_VERSION } from '../config/version'
 
 const SIDEBAR_EXPANDED = 200
 const SIDEBAR_COLLAPSED = 64
@@ -52,9 +55,9 @@ export const NAV: Array<Array<NavItem>> = [
     { to: '/jobs', label: 'Jobs', icon: <GoogleDocs /> },
     { to: '/calendar', label: 'Calendar', icon: <Calendar /> },
     { to: '/customers', label: 'Customers', icon: <UserLove /> },
-    { to: '/matters', label: 'Matters', icon: <Message /> },
   ],
   [
+    { to: '/matters', label: 'Matters', icon: <Message /> },
     { to: '/company', label: 'Company', icon: <Building /> },
     { to: '/profile', label: 'Profile', icon: <User /> },
   ],
@@ -194,10 +197,12 @@ function SidebarContent({
 }) {
   const { companies, companyId, setCompanyId, loading } = useCompany()
   const { caps, loading: authzLoading } = useAuthz()
+  const { isDark } = useTheme()
   const companiesSorted = React.useMemo(
     () => [...companies].sort((a, b) => a.name.localeCompare(b.name)),
     [companies],
   )
+  const logo = isDark ? logoWhite : logoBlack
 
   const PUBLIC_LABELS = new Set(['Home', 'Calendar', 'Matters', 'Profile'])
 
@@ -225,6 +230,7 @@ function SidebarContent({
     }
 
     // Once loaded, use real capabilities
+    // Note: 'visit:latest' is conditionally granted to freelancers in useAuthz
     return cap ? canVisit(caps, cap as any) : true
   }
 
@@ -375,6 +381,11 @@ function SidebarContent({
                         currentPath={currentPath}
                         isMobile={isMobile}
                         onCloseMobile={() => onToggle(false)}
+                        badge={
+                          n.label === 'Matters' ? (
+                            <MattersUnreadBadge />
+                          ) : undefined
+                        }
                       />
                     ))}
                   </>
@@ -412,12 +423,23 @@ function SidebarContent({
       {/* Footer image (only when open) */}
       {open && (
         <Box px="3" py="3">
-          <Flex align="center" justify="center">
+          <Flex direction="column" align="center" justify="center" gap="2">
             <img
-              src={logoWhite}
-              alt="Footer illustration"
-              style={{ maxWidth: '50%', borderRadius: 6 }}
+              src={logo}
+              alt="Driven Logo"
+              style={{ maxWidth: '70%', height: 'auto', borderRadius: 6 }}
             />
+            <Text
+              size="1"
+              style={{
+                color: 'var(--gray-9)',
+                opacity: 0.6,
+                fontSize: '10px',
+                letterSpacing: '0.5px',
+              }}
+            >
+              v{APP_VERSION}
+            </Text>
           </Flex>
         </Box>
       )}

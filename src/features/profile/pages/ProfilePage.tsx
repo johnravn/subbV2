@@ -139,6 +139,8 @@ export default function ProfilePage() {
     notes: '',
     animatedBackground: false,
     backgroundIntensity: 1.0,
+    backgroundShapeType: 'circles' as 'circles' | 'triangles' | 'rectangles',
+    backgroundSpeed: 1.0,
   })
 
   const [addr, setAddr] = React.useState<AddressForm>({
@@ -178,6 +180,12 @@ export default function ProfilePage() {
       backgroundIntensity:
         (data.preferences as Record<string, any> | null)
           ?.animated_background_intensity ?? 1.0,
+      backgroundShapeType:
+        (data.preferences as Record<string, any> | null)
+          ?.animated_background_shape_type ?? 'circles',
+      backgroundSpeed:
+        (data.preferences as Record<string, any> | null)
+          ?.animated_background_speed ?? 1.0,
     }))
 
     const a = data.addresses
@@ -274,6 +282,8 @@ export default function ProfilePage() {
         notes: form.notes || null,
         animated_background_enabled: form.animatedBackground,
         animated_background_intensity: form.backgroundIntensity,
+        animated_background_shape_type: form.backgroundShapeType,
+        animated_background_speed: form.backgroundSpeed,
       }
 
       const { error: rpcErr } = await supabase.rpc('update_my_profile', {
@@ -350,10 +360,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <Card
-      size="4"
-      style={{ minHeight: 0, overflow: 'auto' }}
-    >
+    <Card size="4" style={{ minHeight: 0, overflow: 'auto' }}>
       {/* Header */}
       <Flex align="center" justify="between" wrap="wrap" gap="3">
         <Flex align="center" wrap="wrap" gap="3">
@@ -429,7 +436,12 @@ export default function ProfilePage() {
             <HoverCard.Content size="2" style={{ maxWidth: 400 }}>
               <Flex direction="column" gap="4">
                 <Box>
-                  <Text size="2" weight="bold" mb="3" style={{ display: 'block' }}>
+                  <Text
+                    size="2"
+                    weight="bold"
+                    mb="3"
+                    style={{ display: 'block' }}
+                  >
                     Theme
                   </Text>
                   <ThemeToggle />
@@ -438,7 +450,12 @@ export default function ProfilePage() {
                 <Separator />
 
                 <Box>
-                  <Text size="2" weight="bold" mb="3" style={{ display: 'block' }}>
+                  <Text
+                    size="2"
+                    weight="bold"
+                    mb="3"
+                    style={{ display: 'block' }}
+                  >
                     Background style
                   </Text>
                   <Flex gap="3" align="center" mb="3">
@@ -446,6 +463,8 @@ export default function ProfilePage() {
                       label="Animated"
                       isAnimated={true}
                       selected={form.animatedBackground}
+                      shapeType={form.backgroundShapeType}
+                      speed={form.backgroundSpeed}
                       onSelect={async () => {
                         if (mut.isPending) return
                         set('animatedBackground', true)
@@ -464,6 +483,8 @@ export default function ProfilePage() {
                       label="Solid"
                       isAnimated={false}
                       selected={!form.animatedBackground}
+                      shapeType={form.backgroundShapeType}
+                      speed={form.backgroundSpeed}
                       onSelect={async () => {
                         if (mut.isPending) return
                         set('animatedBackground', false)
@@ -480,9 +501,29 @@ export default function ProfilePage() {
                     />
                   </Flex>
                   <Flex direction="column" gap="2">
-                    <Text size="2" weight="medium">
-                      Background intensity
-                    </Text>
+                    <Flex align="center" justify="between">
+                      <Text size="2" weight="medium">
+                        Background intensity
+                      </Text>
+                      <Button
+                        size="1"
+                        variant="soft"
+                        onClick={async () => {
+                          if (mut.isPending || !form.animatedBackground) return
+                          set('backgroundIntensity', 0.1)
+                          set('backgroundShapeType', 'circles')
+                          set('backgroundSpeed', 0.5)
+                          try {
+                            await mut.mutateAsync()
+                          } catch (error) {
+                            // Error is handled by mutation's onError
+                          }
+                        }}
+                        disabled={!form.animatedBackground || mut.isPending}
+                      >
+                        Recommended settings
+                      </Button>
+                    </Flex>
                     <Flex gap="3" align="center">
                       <Slider
                         value={[form.backgroundIntensity]}
@@ -517,6 +558,98 @@ export default function ProfilePage() {
                         {Math.round(form.backgroundIntensity * 100)}%
                       </Text>
                     </Flex>
+                  </Flex>
+
+                  <Separator />
+
+                  <Flex direction="column" gap="2">
+                    <Text size="2" weight="medium">
+                      Shape type
+                    </Text>
+                    <Flex gap="2" wrap="wrap">
+                      {(['circles', 'triangles', 'rectangles'] as const).map(
+                        (shape) => (
+                          <Button
+                            key={shape}
+                            size="2"
+                            variant={
+                              form.backgroundShapeType === shape
+                                ? 'solid'
+                                : 'soft'
+                            }
+                            onClick={async () => {
+                              if (mut.isPending || !form.animatedBackground)
+                                return
+                              set('backgroundShapeType', shape)
+                              try {
+                                await mut.mutateAsync()
+                              } catch (error) {
+                                // Error is handled by mutation's onError
+                              }
+                            }}
+                            disabled={!form.animatedBackground || mut.isPending}
+                            style={{ textTransform: 'capitalize' }}
+                          >
+                            {shape}
+                          </Button>
+                        ),
+                      )}
+                    </Flex>
+                  </Flex>
+
+                  <Separator />
+
+                  <Flex direction="column" gap="2">
+                    <Text size="2" weight="medium">
+                      Animation speed
+                    </Text>
+                    <Flex gap="3" align="center">
+                      <Slider
+                        value={[form.backgroundSpeed]}
+                        onValueChange={([value]) => {
+                          set('backgroundSpeed', value)
+                        }}
+                        onValueCommit={async () => {
+                          // Save when user finishes dragging
+                          if (!mut.isPending && form.animatedBackground) {
+                            try {
+                              await mut.mutateAsync()
+                            } catch (error) {
+                              // Error is handled by mutation's onError
+                            }
+                          }
+                        }}
+                        min={0.1}
+                        max={3.0}
+                        step={0.1}
+                        disabled={!form.animatedBackground || mut.isPending}
+                        style={{ flex: 1 }}
+                      />
+                      <Text
+                        size="2"
+                        color={!form.animatedBackground ? 'gray' : undefined}
+                        style={{
+                          minWidth: 50,
+                          textAlign: 'right',
+                          opacity: !form.animatedBackground ? 0.5 : 1,
+                        }}
+                      >
+                        {form.backgroundSpeed.toFixed(1)}x
+                      </Text>
+                    </Flex>
+                    <Text
+                      size="1"
+                      color="gray"
+                      style={{
+                        opacity: !form.animatedBackground ? 0.5 : 1,
+                      }}
+                    >
+                      {form.backgroundSpeed < 1.0
+                        ? 'Slower'
+                        : form.backgroundSpeed > 1.0
+                          ? 'Faster'
+                          : 'Normal'}
+                    </Text>
                   </Flex>
                 </Box>
               </Flex>
@@ -770,12 +903,16 @@ function BackgroundOption({
   selected,
   onSelect,
   disabled,
+  shapeType,
+  speed,
 }: {
   label: string
   isAnimated: boolean
   selected: boolean
   onSelect: () => void
   disabled?: boolean
+  shapeType?: 'circles' | 'triangles' | 'rectangles'
+  speed?: number
 }) {
   return (
     <Box
@@ -796,7 +933,10 @@ function BackgroundOption({
     >
       {/* Background preview */}
       {isAnimated ? (
-        <AnimatedBackgroundPreview />
+        <AnimatedBackgroundPreview
+          shapeType={shapeType || 'circles'}
+          speed={speed || 1.0}
+        />
       ) : (
         <Box
           style={{
@@ -814,9 +954,7 @@ function BackgroundOption({
           left: 0,
           right: 0,
           padding: '6px 8px',
-          backgroundColor: selected
-            ? 'var(--accent-9)'
-            : 'rgba(0, 0, 0, 0.6)',
+          backgroundColor: selected ? 'var(--accent-9)' : 'rgba(0, 0, 0, 0.6)',
           backdropFilter: 'blur(4px)',
           transition: 'background-color 0.2s',
         }}
@@ -837,7 +975,32 @@ function BackgroundOption({
   )
 }
 
-function AnimatedBackgroundPreview() {
+function AnimatedBackgroundPreview({
+  shapeType = 'circles',
+  speed = 1.0,
+}: {
+  shapeType?: 'circles' | 'triangles' | 'rectangles'
+  speed?: number
+}) {
+  // Calculate durations based on speed (similar to main background)
+  const speedMultiplier = Math.max(0.1, Math.min(3.0, speed))
+  const baseDurations = [6, 8, 10, 7]
+  const durations = baseDurations.map((d) => d / speedMultiplier)
+
+  // Rotation durations - much slower for subtle rotation
+  const baseRotationDurations = [15, 21, 18, 19]
+  const rotationDurations = baseRotationDurations.map(
+    (d) => d / speedMultiplier,
+  )
+
+  // Initial rotation angles
+  const initialRotations = [15, 30, 45, 60]
+
+  // Calculate rotation amounts (degrees per slide cycle)
+  const rotationAmounts = durations.map((slideDur, idx) =>
+    Math.round((slideDur / rotationDurations[idx]) * 360),
+  )
+
   return (
     <Box
       style={{
@@ -854,10 +1017,34 @@ function AnimatedBackgroundPreview() {
           100% { transform: translateX(calc(120px + 100%)); }
         }
         
+        @keyframes previewSlideReverse {
+          0% { transform: translateX(calc(120px + 100%)); }
+          100% { transform: translateX(-100%); }
+        }
+        
+        @keyframes previewSlideWithRotate1 {
+          0% { transform: translateX(-100%) rotate(${initialRotations[0]}deg); }
+          100% { transform: translateX(calc(120px + 100%)) rotate(${initialRotations[0] + rotationAmounts[0]}deg); }
+        }
+        
+        @keyframes previewSlideReverseWithRotate2 {
+          0% { transform: translateX(calc(120px + 100%)) rotate(${initialRotations[1]}deg); }
+          100% { transform: translateX(-100%) rotate(${initialRotations[1] - rotationAmounts[1]}deg); }
+        }
+        
+        @keyframes previewSlideWithRotate3 {
+          0% { transform: translateX(-100%) rotate(${initialRotations[2]}deg); }
+          100% { transform: translateX(calc(120px + 100%)) rotate(${initialRotations[2] + rotationAmounts[2]}deg); }
+        }
+        
+        @keyframes previewSlideReverseWithRotate4 {
+          0% { transform: translateX(calc(120px + 100%)) rotate(${initialRotations[3]}deg); }
+          100% { transform: translateX(-100%) rotate(${initialRotations[3] - rotationAmounts[3]}deg); }
+        }
+        
         .preview-shape {
           position: absolute;
           opacity: 0.4;
-          border-radius: 50%;
         }
         
         .preview-shape-1 {
@@ -866,7 +1053,14 @@ function AnimatedBackgroundPreview() {
           background: var(--accent-a3);
           top: -15px;
           left: 0;
-          animation: previewSlide 6s linear infinite;
+          animation: ${
+            shapeType === 'triangles' || shapeType === 'rectangles'
+              ? `previewSlideWithRotate1 ${durations[0]}s linear infinite`
+              : `previewSlide ${durations[0]}s linear infinite`
+          };
+          ${shapeType === 'circles' ? 'border-radius: 50%;' : ''}
+          ${shapeType === 'triangles' ? 'clip-path: polygon(50% 0%, 0% 100%, 100% 100%);' : ''}
+          ${shapeType === 'rectangles' ? 'border-radius: 8px;' : ''}
         }
         
         .preview-shape-2 {
@@ -875,7 +1069,14 @@ function AnimatedBackgroundPreview() {
           background: var(--accent-a2);
           top: 15px;
           left: 0;
-          animation: previewSlide 8s linear infinite reverse;
+          animation: ${
+            shapeType === 'triangles' || shapeType === 'rectangles'
+              ? `previewSlideReverseWithRotate2 ${durations[1]}s linear infinite`
+              : `previewSlideReverse ${durations[1]}s linear infinite`
+          };
+          ${shapeType === 'circles' ? 'border-radius: 50%;' : ''}
+          ${shapeType === 'triangles' ? 'clip-path: polygon(50% 0%, 0% 100%, 100% 100%);' : ''}
+          ${shapeType === 'rectangles' ? 'border-radius: 10px;' : ''}
         }
         
         .preview-shape-3 {
@@ -884,7 +1085,14 @@ function AnimatedBackgroundPreview() {
           background: var(--accent-a3);
           bottom: -10px;
           left: 0;
-          animation: previewSlide 10s linear infinite;
+          animation: ${
+            shapeType === 'triangles' || shapeType === 'rectangles'
+              ? `previewSlideWithRotate3 ${durations[2]}s linear infinite`
+              : `previewSlide ${durations[2]}s linear infinite`
+          };
+          ${shapeType === 'circles' ? 'border-radius: 50%;' : ''}
+          ${shapeType === 'triangles' ? 'clip-path: polygon(50% 0%, 0% 100%, 100% 100%);' : ''}
+          ${shapeType === 'rectangles' ? 'border-radius: 8px;' : ''}
         }
         
         .preview-shape-4 {
@@ -893,8 +1101,15 @@ function AnimatedBackgroundPreview() {
           background: var(--accent-a2);
           top: 50%;
           left: 0;
-          transform: translateY(-50%);
-          animation: previewSlide 7s linear infinite reverse;
+          margin-top: -22.5px;
+          animation: ${
+            shapeType === 'triangles' || shapeType === 'rectangles'
+              ? `previewSlideReverseWithRotate4 ${durations[3]}s linear infinite`
+              : `previewSlideReverse ${durations[3]}s linear infinite`
+          };
+          ${shapeType === 'circles' ? 'border-radius: 50%;' : ''}
+          ${shapeType === 'triangles' ? 'clip-path: polygon(50% 0%, 0% 100%, 100% 100%);' : ''}
+          ${shapeType === 'rectangles' ? 'border-radius: 12px;' : ''}
         }
       `}</style>
       <div className="preview-shape preview-shape-1" />

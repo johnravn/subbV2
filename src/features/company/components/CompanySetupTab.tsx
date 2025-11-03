@@ -11,6 +11,7 @@ import {
   IconButton,
   Separator,
   Spinner,
+  Switch,
   Text,
   TextField,
 } from '@radix-ui/themes'
@@ -264,7 +265,50 @@ function CategoriesDialogContent({
 
 export default function CompanySetupTab() {
   const { companyId } = useCompany()
+  const qc = useQueryClient()
   const [editCategoriesOpen, setEditCategoriesOpen] = React.useState(false)
+
+  // Fetch company_expansions for latest_feed_open_to_freelancers setting
+  const { data: expansions, isLoading: expansionsLoading } = useQuery({
+    queryKey: ['company', companyId, 'expansions'] as const,
+    enabled: !!companyId,
+    queryFn: async () => {
+      if (!companyId) return null
+      const { data, error } = await supabase
+        .from('company_expansions')
+        .select('id, latest_feed_open_to_freelancers')
+        .eq('company_id', companyId)
+        .maybeSingle()
+      if (error) throw error
+      return data
+    },
+  })
+
+  const updateFeedAccessMutation = useMutation({
+    mutationFn: async (openToFreelancers: boolean) => {
+      if (!companyId) throw new Error('No company selected')
+
+      // Upsert: create if doesn't exist, update if exists
+      if (expansions?.id) {
+        const { error } = await supabase
+          .from('company_expansions')
+          .update({ latest_feed_open_to_freelancers: openToFreelancers })
+          .eq('id', expansions.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('company_expansions').insert({
+          company_id: companyId,
+          latest_feed_open_to_freelancers: openToFreelancers,
+        })
+        if (error) throw error
+      }
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({
+        queryKey: ['company', companyId, 'expansions'],
+      })
+    },
+  })
 
   if (!companyId) return <div>No company selected.</div>
 
@@ -276,17 +320,14 @@ export default function CompanySetupTab() {
         companyId={companyId}
       />
 
-      <Card
-        size="4"
-        style={{ minHeight: 0, overflow: 'auto' }}
-      >
+      <Card size="4" style={{ minHeight: 0, overflow: 'auto' }}>
         <Box p="4">
           {/* Inventory Setup Section */}
           <Heading size="4" mb="4">
             Inventory setup
           </Heading>
 
-          <Flex direction="column" gap="3">
+          <Flex direction="column" gap="3" mb="6">
             <Button
               size="3"
               variant="outline"
@@ -294,6 +335,43 @@ export default function CompanySetupTab() {
             >
               <Edit /> Manage Categories
             </Button>
+          </Flex>
+
+          <Separator size="4" mb="6" />
+
+          {/* Latest Feed Settings */}
+          <Heading size="4" mb="4">
+            Latest Feed Settings
+          </Heading>
+
+          <Flex direction="column" gap="3">
+            <Flex align="center" justify="between" gap="4">
+              <Flex direction="column">
+                <Text size="3" weight="medium" mb="1">
+                  Allow freelancers to view Latest feed
+                </Text>
+                <Text size="2" color="gray">
+                  When enabled, freelancers in your company can view the Latest
+                  feed. They will have read-only access and can like and
+                  comment.
+                </Text>
+              </Flex>
+              {expansionsLoading ? (
+                <Spinner size="2" />
+              ) : (
+                <Switch
+                  checked={
+                    updateFeedAccessMutation.isPending
+                      ? !expansions?.latest_feed_open_to_freelancers
+                      : (expansions?.latest_feed_open_to_freelancers ?? false)
+                  }
+                  onCheckedChange={(checked) => {
+                    updateFeedAccessMutation.mutate(checked)
+                  }}
+                  disabled={updateFeedAccessMutation.isPending}
+                />
+              )}
+            </Flex>
           </Flex>
         </Box>
       </Card>

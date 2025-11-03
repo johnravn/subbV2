@@ -212,6 +212,26 @@ export default function AddItemDialog({
           })
           .eq('id', itemId)
         if (updateError) throw updateError
+
+        // Log activity
+        try {
+          const { logActivity } = await import('@features/latest/api/queries')
+          await logActivity({
+            companyId,
+            activityType: 'inventory_item_created',
+            metadata: {
+              item_id: itemId,
+              item_name: f.name,
+              category: f.categoryId
+                ? categories.find((c) => c.id === f.categoryId)?.name
+                : null,
+            },
+            title: f.name,
+          })
+        } catch (logErr) {
+          // Don't fail the mutation if logging fails
+          console.error('Failed to log activity:', logErr)
+        }
       }
     },
     onSuccess: async () => {
@@ -222,6 +242,10 @@ export default function AddItemDialog({
         }),
         qc.invalidateQueries({
           queryKey: ['company', companyId, 'items'],
+          exact: false,
+        }),
+        qc.invalidateQueries({
+          queryKey: ['company', companyId, 'latest-feed'],
           exact: false,
         }),
       ])

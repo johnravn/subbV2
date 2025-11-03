@@ -18,18 +18,25 @@ import {
   Sparks,
   User,
 } from 'iconoir-react'
-import logoWhite from '@shared/assets/subbLogo/svg/white/LogoWhite.svg'
+import logoBlack from '@shared/assets/drivenLogo/driven_logo_black.svg'
+import logoWhite from '@shared/assets/drivenLogo/driven_logo_white.svg'
+import { useTheme } from '@app/hooks/useTheme'
+import { useMediaQuery } from '@app/hooks/useMediaQuery'
 
 export default function LandingPage() {
   const navigate = useNavigate()
   const containerRef = useRef<HTMLDivElement>(null)
   const { scrollY } = useScroll()
+  const { isDark } = useTheme()
+  const isMd = useMediaQuery('(min-width: 768px)')
+  const isSm = useMediaQuery('(min-width: 640px)')
   const headerOpacity = useTransform(scrollY, [0, 100], [0.95, 1])
   const headerBackground = useTransform(
     scrollY,
     [0, 100],
     ['var(--color-panel-translucent)', 'var(--color-panel-solid)'],
   )
+  const logo = isDark ? logoWhite : logoBlack
 
   return (
     <Box
@@ -40,6 +47,7 @@ export default function LandingPage() {
         position: 'relative',
         overflow: 'hidden',
         background: 'var(--color-background)',
+        maxWidth: '100vw',
       }}
     >
       {/* Background geometrics with parallax */}
@@ -53,7 +61,7 @@ export default function LandingPage() {
           left: 0,
           right: 0,
           zIndex: 100,
-          padding: '1rem 2rem',
+          padding: isMd ? '1rem 2rem' : '0.75rem 1rem',
           background: headerBackground,
           backdropFilter: 'blur(10px)',
           borderBottom: '1px solid var(--gray-3)',
@@ -71,28 +79,19 @@ export default function LandingPage() {
               transition={{ type: 'spring', stiffness: 400, damping: 17 }}
             >
               <Flex align="center" gap="3" style={{ cursor: 'pointer' }}>
-                <Box
+                <img
+                  src={logo}
+                  alt="Driven Logo"
                   style={{
-                    width: '40px',
-                    height: '40px',
-                    backgroundImage: `url(${logoWhite})`,
-                    backgroundSize: 'contain',
-                    backgroundRepeat: 'no-repeat',
-                    backgroundPosition: 'center',
-                    filter: 'invert(1)',
+                    height: isMd ? '40px' : '32px',
+                    width: 'auto',
                   }}
                 />
-                <Heading
-                  size="6"
-                  style={{ fontWeight: 700, color: 'var(--gray-12)' }}
-                >
-                  Driven
-                </Heading>
               </Flex>
             </motion.div>
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Button
-                size="3"
+                size={isMd ? '3' : '2'}
                 variant="classic"
                 onClick={() => navigate({ to: '/login' })}
               >
@@ -111,28 +110,36 @@ export default function LandingPage() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          paddingTop: '80px',
+          paddingTop: isMd ? '80px' : '60px',
+          paddingBottom: '2rem',
+          paddingLeft: isMd ? 0 : '1rem',
+          paddingRight: isMd ? 0 : '1rem',
+          width: '100%',
+          overflow: 'hidden',
         }}
       >
-        <Container size="4">
+        <Container size="4" style={{ width: '100%', maxWidth: '100%' }}>
           <Flex
             direction="column"
             align="center"
             justify="center"
-            gap="6"
-            style={{ textAlign: 'center' }}
+            gap={{ initial: '4', md: '6' }}
+            style={{ textAlign: 'center', width: '100%' }}
           >
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, ease: 'easeOut' }}
+              style={{ width: '100%', padding: isMd ? 0 : '0 0.5rem' }}
             >
               <Heading
-                size="9"
+                size={{ initial: '7', sm: '8', md: '9' }}
                 style={{
                   fontWeight: 800,
                   lineHeight: 1.2,
                   marginBottom: '1rem',
+                  wordBreak: 'break-word',
+                  overflowWrap: 'break-word',
                 }}
               >
                 <motion.div
@@ -148,6 +155,9 @@ export default function LandingPage() {
                       WebkitTextFillColor: 'transparent',
                       backgroundClip: 'text',
                       backgroundSize: '200% auto',
+                      display: 'block',
+                      wordBreak: 'break-word',
+                      overflowWrap: 'break-word',
                     }}
                   >
                     Complete Operations Management
@@ -159,7 +169,13 @@ export default function LandingPage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.8, delay: 0.4, ease: 'easeOut' }}
                 >
-                  <Text style={{ color: 'var(--gray-12)' }}>
+                  <Text
+                    style={{
+                      color: 'var(--gray-12)',
+                      wordBreak: 'break-word',
+                      overflowWrap: 'break-word',
+                    }}
+                  >
                     for Modern Companies
                   </Text>
                 </motion.div>
@@ -170,13 +186,20 @@ export default function LandingPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.6, ease: 'easeOut' }}
+              style={{
+                width: '100%',
+                maxWidth: '700px',
+                padding: isMd ? 0 : '0 0.5rem',
+              }}
             >
               <Text
-                size="5"
+                size={{ initial: '3', sm: '4', md: '5' }}
                 style={{
                   color: 'var(--gray-11)',
                   maxWidth: '700px',
                   lineHeight: 1.6,
+                  wordBreak: 'break-word',
+                  overflowWrap: 'break-word',
                 }}
               >
                 Streamline your entire operation with a unified platform for
@@ -189,18 +212,32 @@ export default function LandingPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.8, ease: 'easeOut' }}
+              style={{ width: '100%' }}
             >
-              <Flex gap="3" align="center">
+              <Flex
+                gap="3"
+                align="center"
+                direction={{ initial: 'column', sm: 'row' }}
+                style={{
+                  width: '100%',
+                  maxWidth: '500px',
+                  padding: isMd ? 0 : '0 0.5rem',
+                }}
+              >
                 <motion.div
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+                  style={{ width: isSm ? 'auto' : '100%' }}
                 >
                   <Button
-                    size="4"
+                    size={isMd ? '4' : '3'}
                     variant="classic"
                     onClick={() => navigate({ to: '/signup' })}
-                    style={{ padding: '0.75rem 2rem' }}
+                    style={{
+                      padding: '0.75rem 2rem',
+                      width: isSm ? 'auto' : '100%',
+                    }}
                   >
                     Get Started
                     <motion.span
@@ -220,12 +257,16 @@ export default function LandingPage() {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+                  style={{ width: isSm ? 'auto' : '100%' }}
                 >
                   <Button
-                    size="4"
+                    size={isMd ? '4' : '3'}
                     variant="outline"
                     onClick={() => navigate({ to: '/login' })}
-                    style={{ padding: '0.75rem 2rem' }}
+                    style={{
+                      padding: '0.75rem 2rem',
+                      width: isSm ? 'auto' : '100%',
+                    }}
                   >
                     Sign In
                   </Button>
@@ -237,7 +278,12 @@ export default function LandingPage() {
       </Box>
 
       {/* Features Grid Section */}
-      <Box style={{ position: 'relative', padding: '6rem 0' }}>
+      <Box
+        style={{
+          position: 'relative',
+          padding: isMd ? '6rem 0' : '3rem 1rem',
+        }}
+      >
         <Container size="4">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
@@ -246,7 +292,7 @@ export default function LandingPage() {
             transition={{ duration: 0.4 }}
           >
             <Heading
-              size="8"
+              size={isMd ? '8' : isSm ? '7' : '6'}
               style={{
                 textAlign: 'center',
                 marginBottom: '1rem',
@@ -256,11 +302,11 @@ export default function LandingPage() {
               Everything You Need
             </Heading>
             <Text
-              size="4"
+              size={isSm ? '4' : '3'}
               style={{
                 textAlign: 'center',
                 color: 'var(--gray-11)',
-                marginBottom: '4rem',
+                marginBottom: isMd ? '4rem' : '2rem',
               }}
             >
               Powerful tools designed to simplify your workflow
@@ -270,8 +316,10 @@ export default function LandingPage() {
           <Box
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-              gap: '2rem',
+              gridTemplateColumns: isSm
+                ? 'repeat(auto-fit, minmax(280px, 1fr))'
+                : '1fr',
+              gap: isSm ? '2rem' : '1.5rem',
             }}
           >
             {features.map((feature, index) => (
@@ -289,7 +337,7 @@ export default function LandingPage() {
       <Box
         style={{
           position: 'relative',
-          padding: '6rem 0',
+          padding: isMd ? '6rem 0' : '3rem 1rem',
           background: 'var(--gray-2)',
         }}
       >
@@ -299,7 +347,7 @@ export default function LandingPage() {
             gap="6"
             align="center"
           >
-            <Box style={{ flex: 1 }}>
+            <Box style={{ flex: 1, width: '100%' }}>
               <motion.div
                 initial={{ opacity: 0, x: -30 }}
                 whileInView={{ opacity: 1, x: 0 }}
@@ -307,13 +355,13 @@ export default function LandingPage() {
                 transition={{ duration: 0.4 }}
               >
                 <Heading
-                  size="8"
+                  size={isMd ? '8' : isSm ? '7' : '6'}
                   style={{ marginBottom: '1rem', color: 'var(--gray-12)' }}
                 >
                   Why Driven?
                 </Heading>
                 <Text
-                  size="4"
+                  size={isSm ? '4' : '3'}
                   style={{
                     color: 'var(--gray-11)',
                     lineHeight: 1.8,
@@ -328,8 +376,10 @@ export default function LandingPage() {
                 <Box
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                    gap: '1.5rem',
+                    gridTemplateColumns: isSm
+                      ? 'repeat(auto-fit, minmax(200px, 1fr))'
+                      : '1fr',
+                    gap: isSm ? '1.5rem' : '1rem',
                   }}
                 >
                   {benefits.map((benefit, index) => (
@@ -427,7 +477,7 @@ export default function LandingPage() {
       <Box
         style={{
           position: 'relative',
-          padding: '6rem 0',
+          padding: isMd ? '6rem 0' : '3rem 1rem',
         }}
       >
         <Container size="4">
@@ -439,7 +489,7 @@ export default function LandingPage() {
           >
             <motion.div
               style={{
-                padding: '4rem',
+                padding: isMd ? '4rem' : '2rem 1.5rem',
                 background:
                   'linear-gradient(135deg, var(--accent-9) 0%, var(--accent-11) 100%)',
                 borderRadius: '24px',
@@ -470,19 +520,20 @@ export default function LandingPage() {
               />
               <Box style={{ position: 'relative', zIndex: 1 }}>
                 <Heading
-                  size="8"
+                  size={isMd ? '8' : isSm ? '7' : '6'}
                   style={{ color: 'white', marginBottom: '1rem' }}
                 >
                   Ready to Transform Your Operations?
                 </Heading>
                 <Flex direction="column" gap="1" align="center">
                   <Text
-                    size="5"
+                    size={isMd ? '5' : isSm ? '4' : '3'}
                     style={{
                       color: 'rgba(255,255,255,0.9)',
-                      marginBottom: '2rem',
+                      marginBottom: isMd ? '2rem' : '1rem',
                       maxWidth: '600px',
-                      margin: '0 auto 2rem',
+                      marginLeft: 'auto',
+                      marginRight: 'auto',
                     }}
                   >
                     Join companies already using Driven to streamline their
@@ -509,17 +560,19 @@ export default function LandingPage() {
                       style={{
                         borderRadius: 'var(--radius-3)',
                         display: 'inline-block',
+                        width: '100%',
+                        maxWidth: '300px',
                       }}
                     >
                       <Button
-                        size="4"
+                        size={isMd ? '4' : '3'}
                         variant="classic"
                         onClick={() => navigate({ to: '/signup' })}
                         style={{
                           background: 'var(--accent-9)',
                           color: 'var(--accent-contrast)',
                           padding: '0.75rem 2rem',
-                          width: '300px',
+                          width: isSm ? '300px' : '100%',
                           position: 'relative',
                           overflow: 'hidden',
                         }}
@@ -575,7 +628,7 @@ export default function LandingPage() {
       {/* Footer */}
       <Box
         style={{
-          padding: '3rem 0',
+          padding: isMd ? '3rem 0' : '2rem 1rem',
           borderTop: '1px solid var(--gray-4)',
           background: 'var(--gray-2)',
         }}
@@ -587,25 +640,30 @@ export default function LandingPage() {
             justify="between"
             gap="4"
           >
-            <Flex align="center" gap="2">
-              <Box
+            <Flex
+              align="center"
+              gap="2"
+              direction={{ initial: 'column', sm: 'row' }}
+            >
+              <img
+                src={logo}
+                alt="Driven Logo"
                 style={{
-                  width: '32px',
-                  height: '32px',
-                  backgroundImage: `url(${logoWhite})`,
-                  backgroundSize: 'contain',
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'center',
-                  filter: 'invert(1)',
+                  height: isMd ? '32px' : '28px',
+                  width: 'auto',
                 }}
               />
-              <Text size="3" style={{ color: 'var(--gray-11)' }}>
+              <Text
+                size={isSm ? '3' : '2'}
+                style={{ color: 'var(--gray-11)', textAlign: 'center' }}
+              >
                 © 2025 Driven. All rights reserved.
               </Text>
             </Flex>
             <Flex gap="4">
               <Button
                 variant="ghost"
+                size={isSm ? '3' : '2'}
                 onClick={() => navigate({ to: '/legal' })}
                 style={{
                   cursor: 'pointer',
@@ -746,6 +804,7 @@ function FeatureCard({
   feature: (typeof features)[number]
   index: number
 }) {
+  const isMd = useMediaQuery('(min-width: 768px)')
   return (
     <motion.div
       initial={{ opacity: 0, y: 30 }}
@@ -764,7 +823,7 @@ function FeatureCard({
       >
         <Box
           style={{
-            padding: '2rem',
+            padding: isMd ? '2rem' : '1.5rem',
             background: 'var(--color-panel-translucent)',
             backdropFilter: 'blur(8px)',
             borderRadius: '16px',

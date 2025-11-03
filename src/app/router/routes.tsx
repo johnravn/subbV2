@@ -35,7 +35,7 @@ const rootRoute = createRootRoute({
   component: () => (
     <>
       <AppShell />
-      <TanStackRouterDevtools />
+      {/* <TanStackRouterDevtools /> */}
     </>
   ),
 })
@@ -165,6 +165,9 @@ const customersRoute = createRoute({
 const latestRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: 'latest',
+  validateSearch: (search: Record<string, unknown>) => ({
+    activityId: (search.activityId as string | undefined) || undefined,
+  }),
   component: guarded('visit:latest', LatestPage),
 })
 

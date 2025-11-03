@@ -266,6 +266,8 @@ export default function AddGroupDialog({
       if (!companyId) throw new Error('No company selected')
       if (!f.name.trim()) throw new Error('Name is required')
 
+      let groupId: string | undefined
+
       const { error: rpcErr } = await supabase.rpc(
         'create_group_with_price_and_parts',
         {
@@ -284,25 +286,36 @@ export default function AddGroupDialog({
           p_external_owner_id: f.internally_owned ? null : f.external_owner_id,
         },
       )
-      if (!rpcErr) return
-
-      // Fallback (rare)
-      const { data: g, error: gErr } = await supabase
-        .from('item_groups')
-        .insert({
-          company_id: companyId,
-          name: f.name.trim(),
-          category_id: f.categoryId,
-          description: f.description || null,
-          active: f.active,
-          unique: f.unique,
-          internally_owned: f.internally_owned,
-          external_owner_id: f.internally_owned ? null : f.external_owner_id,
-        })
-        .select('id')
-        .single()
-      if (gErr) throw gErr
-      const groupId = g.id as string
+      if (!rpcErr) {
+        // Get the created group ID
+        const { data: groupData } = await supabase
+          .from('item_groups')
+          .select('id')
+          .eq('company_id', companyId)
+          .eq('name', f.name.trim())
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single()
+        groupId = groupData?.id
+      } else {
+        // Fallback (rare)
+        const { data: g, error: gErr } = await supabase
+          .from('item_groups')
+          .insert({
+            company_id: companyId,
+            name: f.name.trim(),
+            category_id: f.categoryId,
+            description: f.description || null,
+            active: f.active,
+            unique: f.unique,
+            internally_owned: f.internally_owned,
+            external_owner_id: f.internally_owned ? null : f.external_owner_id,
+          })
+          .select('id')
+          .single()
+        if (gErr) throw gErr
+        groupId = g.id as string
+      }
 
       if (f.parts.length) {
         const { error: giErr } = await supabase.from('group_items').insert(
@@ -331,6 +344,27 @@ export default function AddGroupDialog({
           throw gpErr
         }
       }
+
+      // Log activity
+      if (groupId) {
+        try {
+          const { logActivity } = await import('@features/latest/api/queries')
+          await logActivity({
+            companyId,
+            activityType: 'inventory_group_created',
+            metadata: {
+              group_id: groupId,
+              group_name: f.name.trim(),
+              category: f.categoryId
+                ? categories.find((c) => c.id === f.categoryId)?.name
+                : null,
+            },
+            title: f.name.trim(),
+          })
+        } catch (logErr) {
+          console.error('Failed to log activity:', logErr)
+        }
+      }
     },
     onSuccess: async () => {
       await Promise.all([
@@ -344,6 +378,10 @@ export default function AddGroupDialog({
         }),
         qc.invalidateQueries({
           queryKey: ['company', companyId, 'groups'],
+          exact: false,
+        }),
+        qc.invalidateQueries({
+          queryKey: ['company', companyId, 'latest-feed'],
           exact: false,
         }),
       ])

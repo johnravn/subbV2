@@ -56,6 +56,23 @@ export function useAuthz() {
 
       const caps = capabilitiesFor({ isGlobalSuperuser, companyRole })
 
+      // Special case: Grant 'visit:latest' to freelancers when toggle is enabled
+      if (
+        companyId &&
+        companyRole === 'freelancer' &&
+        !caps.has('visit:latest')
+      ) {
+        const { data: expansions, error: expErr } = await supabase
+          .from('company_expansions')
+          .select('latest_feed_open_to_freelancers')
+          .eq('company_id', companyId)
+          .maybeSingle()
+
+        if (!expErr && expansions?.latest_feed_open_to_freelancers === true) {
+          caps.add('visit:latest')
+        }
+      }
+
       return {
         isGlobalSuperuser,
         companyRole,

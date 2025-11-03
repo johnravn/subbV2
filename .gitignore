@@ -8,3 +8,6 @@ count.txt
 .nitro
 .tanstack
 .sql
+
+# Large API specifications
+src/shared/api/conta/conta-external-api.json
