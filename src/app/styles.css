@@ -46,3 +46,35 @@ code {
   backdrop-filter: blur(16px) saturate(180%);
   -webkit-backdrop-filter: blur(16px) saturate(180%);
 }
+
+/* Ensure toasts appear above dialogs */
+/* Target Radix UI Toast elements */
+[data-radix-toast-viewport] {
+  z-index: 2147483647 !important; /* Maximum z-index value */
+}
+
+[data-radix-toast-root] {
+  z-index: 2147483647 !important;
+}
+
+/* Ensure Radix UI Dialog overlays/backdrops are below toasts */
+[data-radix-dialog-overlay],
+[class*='rt-DialogOverlay'] {
+  z-index: 100 !important;
+}
+
+[data-radix-dialog-content],
+[class*='rt-DialogContent'] {
+  z-index: 101 !important;
+}
+
+/* Ensure AlertDialog is also below toasts */
+[data-radix-alert-dialog-overlay],
+[class*='rt-AlertDialogOverlay'] {
+  z-index: 100 !important;
+}
+
+[data-radix-alert-dialog-content],
+[class*='rt-AlertDialogContent'] {
+  z-index: 101 !important;
+}

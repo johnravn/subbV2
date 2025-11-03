@@ -27,6 +27,10 @@ import TimelineTab from './tabs/TimelineTab'
 import ContactsTab from './tabs/ContactsTab'
 import CalendarTab from './tabs/CalendarTab'
 import FilesTab from './tabs/FilesTab'
+import OffersTab from './tabs/OffersTab'
+import InvoiceTab from './tabs/InvoiceTab'
+import MoneyTab from './tabs/MoneyTab'
+import ToDoTab from './tabs/ToDoTab'
 import JobDialog from './dialogs/JobDialog'
 import type { JobDetail, JobStatus } from '../types'
 import type { FilesTabHandle } from './tabs/FilesTab'
@@ -147,7 +151,14 @@ export default function JobInspector({
           justifyContent: 'space-between',
         }}
       >
-        <Heading size="4">{job.title}</Heading>
+        <Flex align="center" gap="3">
+          <Heading size="4">{job.title}</Heading>
+          {job.jobnr && (
+            <Text size="3" color="gray" weight="medium">
+              #{String(job.jobnr).padStart(6, '0')}
+            </Text>
+          )}
+        </Flex>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {(() => {
             const displayStatus = getDisplayStatus(job.status, companyRole)
@@ -165,7 +176,7 @@ export default function JobInspector({
                 radius="full"
                 highContrast
               >
-                {displayStatus}
+                {makeWordPresentable(displayStatus)}
               </Badge>
             )
           })()}
@@ -226,6 +237,10 @@ export default function JobInspector({
           <Tabs.Trigger value="equipment">Equipment</Tabs.Trigger>
           <Tabs.Trigger value="crew">Crew</Tabs.Trigger>
           <Tabs.Trigger value="transport">Transportation</Tabs.Trigger>
+          <Tabs.Trigger value="offers">Offers</Tabs.Trigger>
+          <Tabs.Trigger value="invoice">Invoice</Tabs.Trigger>
+          <Tabs.Trigger value="money">Money</Tabs.Trigger>
+          <Tabs.Trigger value="todo">To Do</Tabs.Trigger>
           <Tabs.Trigger value="contacts">Contacts</Tabs.Trigger>
           <Tabs.Trigger value="files">Files</Tabs.Trigger>
         </Tabs.List>
@@ -252,6 +267,18 @@ export default function JobInspector({
         </Tabs.Content>
         <Tabs.Content value="transport" mt={'10px'}>
           <TransportTab jobId={job.id} />
+        </Tabs.Content>
+        <Tabs.Content value="offers" mt={'10px'}>
+          <OffersTab jobId={job.id} companyId={job.company_id} />
+        </Tabs.Content>
+        <Tabs.Content value="invoice" mt={'10px'}>
+          <InvoiceTab jobId={job.id} job={job} />
+        </Tabs.Content>
+        <Tabs.Content value="money" mt={'10px'}>
+          <MoneyTab jobId={job.id} />
+        </Tabs.Content>
+        <Tabs.Content value="todo" mt={'10px'}>
+          <ToDoTab jobId={job.id} job={job} />
         </Tabs.Content>
         <Tabs.Content value="contacts" mt={'10px'}>
           <ContactsTab jobId={job.id} companyId={job.company_id} />

@@ -217,11 +217,14 @@ export default function LandingPage() {
               <Flex
                 gap="3"
                 align="center"
+                justify="center"
                 direction={{ initial: 'column', sm: 'row' }}
                 style={{
                   width: '100%',
                   maxWidth: '500px',
                   padding: isMd ? 0 : '0 0.5rem',
+                  marginLeft: 'auto',
+                  marginRight: 'auto',
                 }}
               >
                 <motion.div

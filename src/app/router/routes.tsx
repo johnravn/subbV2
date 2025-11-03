@@ -25,6 +25,7 @@ import ProfilePage from '@features/profile/pages/ProfilePage'
 import MattersPage from '@features/matters/pages/MattersPage'
 import CustomerPage from '@features/customers/pages/CostumerPage'
 import LatestPage from '@features/latest/pages/LatestPage'
+import PublicOfferPage from '@features/jobs/pages/PublicOfferPage'
 import AppShell from '../layout/AppShell'
 import RequireCap from './guards/RequireCap'
 import type { Capability } from '@shared/auth/permissions'
@@ -79,6 +80,13 @@ const legalRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/legal',
   component: TermsPrivacyPage,
+})
+
+// --- PUBLIC: Offer viewing route (no auth required) --------------------------
+const publicOfferRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/offer/$accessToken',
+  component: PublicOfferPage,
 })
 
 // --- AUTH GUARD: Parent route that protects children -------------------------
@@ -196,6 +204,7 @@ const routeTree = rootRoute.addChildren([
   signupRoute,
   authCallbackRoute,
   legalRoute,
+  publicOfferRoute,
   authedRoute.addChildren([
     // protected
     homeRoute,

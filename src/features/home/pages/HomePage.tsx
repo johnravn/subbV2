@@ -657,7 +657,7 @@ function RevenueSection({
             size="2"
             variant="soft"
             onClick={() =>
-              navigate({ to: '/company', search: { tab: 'setup' } })
+              navigate({ to: '/company', search: { tab: 'expansions' } })
             }
           >
             Configure

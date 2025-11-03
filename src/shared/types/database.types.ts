@@ -229,6 +229,7 @@ export type Database = {
           created_at: string
           general_email: string | null
           id: string
+          job_number_counter: number | null
           name: string
           vat_number: string | null
         }
@@ -239,6 +240,7 @@ export type Database = {
           created_at?: string
           general_email?: string | null
           id?: string
+          job_number_counter?: number | null
           name: string
           vat_number?: string | null
         }
@@ -249,6 +251,7 @@ export type Database = {
           created_at?: string
           general_email?: string | null
           id?: string
+          job_number_counter?: number | null
           name?: string
           vat_number?: string | null
         }
@@ -1042,6 +1045,139 @@ export type Database = {
           },
         ]
       }
+      job_offers: {
+        Row: {
+          accepted_at: string | null
+          accepted_by_email: string | null
+          accepted_by_name: string | null
+          accepted_by_phone: string | null
+          access_token: string
+          based_on_offer_id: string | null
+          company_id: string
+          created_at: string
+          crew_subtotal: number
+          days_of_use: number
+          discount_percent: number
+          equipment_subtotal: number
+          id: string
+          job_id: string
+          locked: boolean
+          offer_type: Database["public"]["Enums"]["offer_type"]
+          sent_at: string | null
+          status: Database["public"]["Enums"]["offer_status"]
+          title: string
+          total_after_discount: number
+          total_before_discount: number
+          total_with_vat: number
+          transport_subtotal: number
+          updated_at: string
+          vat_percent: number
+          version_number: number
+          viewed_at: string | null
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by_email?: string | null
+          accepted_by_name?: string | null
+          accepted_by_phone?: string | null
+          access_token: string
+          based_on_offer_id?: string | null
+          company_id: string
+          created_at?: string
+          crew_subtotal?: number
+          days_of_use?: number
+          discount_percent?: number
+          equipment_subtotal?: number
+          id?: string
+          job_id: string
+          locked?: boolean
+          offer_type: Database["public"]["Enums"]["offer_type"]
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["offer_status"]
+          title: string
+          total_after_discount?: number
+          total_before_discount?: number
+          total_with_vat?: number
+          transport_subtotal?: number
+          updated_at?: string
+          vat_percent?: number
+          version_number?: number
+          viewed_at?: string | null
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by_email?: string | null
+          accepted_by_name?: string | null
+          accepted_by_phone?: string | null
+          access_token?: string
+          based_on_offer_id?: string | null
+          company_id?: string
+          created_at?: string
+          crew_subtotal?: number
+          days_of_use?: number
+          discount_percent?: number
+          equipment_subtotal?: number
+          id?: string
+          job_id?: string
+          locked?: boolean
+          offer_type?: Database["public"]["Enums"]["offer_type"]
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["offer_status"]
+          title?: string
+          total_after_discount?: number
+          total_before_discount?: number
+          total_with_vat?: number
+          transport_subtotal?: number
+          updated_at?: string
+          vat_percent?: number
+          version_number?: number
+          viewed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_job_offers_based_on"
+            columns: ["based_on_offer_id"]
+            isOneToOne: false
+            referencedRelation: "job_offers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_job_offers_company"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_job_offers_job"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_offers_based_on_offer_id_fkey"
+            columns: ["based_on_offer_id"]
+            isOneToOne: false
+            referencedRelation: "job_offers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_offers_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_offers_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       job_status_history: {
         Row: {
           changed_at: string
@@ -1084,6 +1220,7 @@ export type Database = {
           end_at: string | null
           id: string
           job_address_id: string | null
+          jobnr: number | null
           project_lead_user_id: string | null
           start_at: string | null
           status: Database["public"]["Enums"]["job_status"]
@@ -1099,6 +1236,7 @@ export type Database = {
           end_at?: string | null
           id?: string
           job_address_id?: string | null
+          jobnr?: number | null
           project_lead_user_id?: string | null
           start_at?: string | null
           status: Database["public"]["Enums"]["job_status"]
@@ -1114,6 +1252,7 @@ export type Database = {
           end_at?: string | null
           id?: string
           job_address_id?: string | null
+          jobnr?: number | null
           project_lead_user_id?: string | null
           start_at?: string | null
           status?: Database["public"]["Enums"]["job_status"]
@@ -1422,6 +1561,341 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "vehicle_detail"
             referencedColumns: ["next_reservation_id"]
+          },
+        ]
+      }
+      offer_crew_items: {
+        Row: {
+          crew_count: number
+          daily_rate: number
+          end_date: string
+          id: string
+          offer_id: string
+          role_title: string
+          sort_order: number
+          start_date: string
+          total_price: number
+        }
+        Insert: {
+          crew_count?: number
+          daily_rate?: number
+          end_date: string
+          id?: string
+          offer_id: string
+          role_title: string
+          sort_order?: number
+          start_date: string
+          total_price?: number
+        }
+        Update: {
+          crew_count?: number
+          daily_rate?: number
+          end_date?: string
+          id?: string
+          offer_id?: string
+          role_title?: string
+          sort_order?: number
+          start_date?: string
+          total_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_offer_crew_items_offer"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "job_offers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "offer_crew_items_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "job_offers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      offer_equipment_groups: {
+        Row: {
+          created_at: string
+          group_name: string
+          id: string
+          offer_id: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          group_name: string
+          id?: string
+          offer_id: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          group_name?: string
+          id?: string
+          offer_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_offer_equipment_groups_offer"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "job_offers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "offer_equipment_groups_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "job_offers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      offer_equipment_items: {
+        Row: {
+          id: string
+          is_internal: boolean
+          item_id: string | null
+          offer_group_id: string
+          quantity: number
+          sort_order: number
+          total_price: number
+          unit_price: number
+        }
+        Insert: {
+          id?: string
+          is_internal?: boolean
+          item_id?: string | null
+          offer_group_id: string
+          quantity?: number
+          sort_order?: number
+          total_price?: number
+          unit_price?: number
+        }
+        Update: {
+          id?: string
+          is_internal?: boolean
+          item_id?: string | null
+          offer_group_id?: string
+          quantity?: number
+          sort_order?: number
+          total_price?: number
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_offer_equipment_items_group"
+            columns: ["offer_group_id"]
+            isOneToOne: false
+            referencedRelation: "offer_equipment_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_offer_equipment_items_item"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "item_index_ext"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_offer_equipment_items_item"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_offer_equipment_items_item"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items_with_price"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "offer_equipment_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "item_index_ext"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "offer_equipment_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "offer_equipment_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items_with_price"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "offer_equipment_items_offer_group_id_fkey"
+            columns: ["offer_group_id"]
+            isOneToOne: false
+            referencedRelation: "offer_equipment_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      offer_pretty_sections: {
+        Row: {
+          content: string | null
+          id: string
+          image_url: string | null
+          offer_id: string
+          section_type: Database["public"]["Enums"]["pretty_section_type"]
+          sort_order: number
+          title: string | null
+        }
+        Insert: {
+          content?: string | null
+          id?: string
+          image_url?: string | null
+          offer_id: string
+          section_type: Database["public"]["Enums"]["pretty_section_type"]
+          sort_order?: number
+          title?: string | null
+        }
+        Update: {
+          content?: string | null
+          id?: string
+          image_url?: string | null
+          offer_id?: string
+          section_type?: Database["public"]["Enums"]["pretty_section_type"]
+          sort_order?: number
+          title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_offer_pretty_sections_offer"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "job_offers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "offer_pretty_sections_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "job_offers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      offer_transport_items: {
+        Row: {
+          daily_rate: number
+          end_date: string
+          id: string
+          is_internal: boolean
+          offer_id: string
+          sort_order: number
+          start_date: string
+          total_price: number
+          vehicle_id: string | null
+          vehicle_name: string
+        }
+        Insert: {
+          daily_rate?: number
+          end_date: string
+          id?: string
+          is_internal?: boolean
+          offer_id: string
+          sort_order?: number
+          start_date: string
+          total_price?: number
+          vehicle_id?: string | null
+          vehicle_name: string
+        }
+        Update: {
+          daily_rate?: number
+          end_date?: string
+          id?: string
+          is_internal?: boolean
+          offer_id?: string
+          sort_order?: number
+          start_date?: string
+          total_price?: number
+          vehicle_id?: string | null
+          vehicle_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_offer_transport_items_offer"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "job_offers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_offer_transport_items_vehicle"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_detail"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_offer_transport_items_vehicle"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_index"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_offer_transport_items_vehicle"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_index_mat"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_offer_transport_items_vehicle"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "offer_transport_items_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "job_offers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "offer_transport_items_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_detail"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "offer_transport_items_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_index"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "offer_transport_items_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_index_mat"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "offer_transport_items_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -2575,6 +3049,20 @@ export type Database = {
         | "declined"
         | "accepted"
       matter_type: "crew_invite" | "vote" | "announcement" | "chat"
+      offer_status:
+        | "draft"
+        | "sent"
+        | "viewed"
+        | "accepted"
+        | "rejected"
+        | "superseded"
+      offer_type: "technical" | "pretty"
+      pretty_section_type:
+        | "hero"
+        | "problem"
+        | "solution"
+        | "benefits"
+        | "testimonial"
       reservation_source_kind: "direct" | "group"
       reservation_status:
         | "tentative"
@@ -2756,6 +3244,22 @@ export const Constants = {
         "accepted",
       ],
       matter_type: ["crew_invite", "vote", "announcement", "chat"],
+      offer_status: [
+        "draft",
+        "sent",
+        "viewed",
+        "accepted",
+        "rejected",
+        "superseded",
+      ],
+      offer_type: ["technical", "pretty"],
+      pretty_section_type: [
+        "hero",
+        "problem",
+        "solution",
+        "benefits",
+        "testimonial",
+      ],
       reservation_source_kind: ["direct", "group"],
       reservation_status: [
         "tentative",

@@ -52,7 +52,7 @@ export function jobsIndexQuery({
         .from('jobs')
         .select(
           `
-          id, company_id, title, status, start_at, end_at,
+          id, company_id, title, jobnr, status, start_at, end_at,
           customer:customer_id ( id, name ),
           project_lead:project_lead_user_id ( user_id, display_name, email, avatar_url )
         `,
@@ -302,7 +302,7 @@ export function jobDetailQuery({ jobId }: { jobId: string }) {
         .from('jobs')
         .select(
           `
-          id, company_id, title, description, status, start_at, end_at,
+          id, company_id, title, jobnr, description, status, start_at, end_at,
           project_lead_user_id, customer_id, customer_contact_id, job_address_id,
           customer:customer_id ( id, name, email, phone ),
           project_lead:project_lead_user_id ( user_id, display_name, email ),

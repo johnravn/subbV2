@@ -27,22 +27,17 @@ async function getContaApiKey(): Promise<string | null> {
  * Get the read-only setting for the Conta API
  * Returns true if API should only allow read operations
  */
-function getAccountingReadOnly(): boolean {
-  // TODO: Uncomment once migration is applied and convert back to async
-  // const { data, error } = await supabase.rpc('get_accounting_read_only')
-  // if (error) return true // Default to read-only on error
-  // return data as boolean
-
-  // For now, hardcode to true (read-only) for safety
-  return true
+async function getAccountingReadOnly(): Promise<boolean> {
+  const { data, error } = await supabase.rpc('get_accounting_read_only')
+  if (error) return true // Default to read-only on error
+  return data
 }
 
 /**
  * Basic fetch wrapper for Conta API
  * Fetches the API key from the database for the given company
  *
- * TODO: Replace with a proper typed client once npm run conta:types is executed
- * and types are generated
+ * Note: Types are generated from the OpenAPI spec in types.ts
  */
 export async function contaRequest(
   endpoint: string,
@@ -96,7 +91,7 @@ export const contaClient = {
   },
   post: async (endpoint: string, data?: unknown) => {
     // Check if read-only mode is enabled
-    const readOnly = getAccountingReadOnly()
+    const readOnly = await getAccountingReadOnly()
     if (readOnly) {
       throw new Error(
         'Write operations (POST) are not allowed when API is in read-only mode',
@@ -122,7 +117,7 @@ export const contaClient = {
   },
   put: async (endpoint: string, data?: unknown) => {
     // Check if read-only mode is enabled
-    const readOnly = getAccountingReadOnly()
+    const readOnly = await getAccountingReadOnly()
     if (readOnly) {
       throw new Error(
         'Write operations (PUT) are not allowed when API is in read-only mode',
@@ -148,7 +143,7 @@ export const contaClient = {
   },
   delete: async (endpoint: string) => {
     // Check if read-only mode is enabled
-    const readOnly = getAccountingReadOnly()
+    const readOnly = await getAccountingReadOnly()
     if (readOnly) {
       throw new Error(
         'Write operations (DELETE) are not allowed when API is in read-only mode',

@@ -21,6 +21,8 @@ import { useCompany } from '@shared/companies/CompanyProvider'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { getAvailableOrganizations } from '@features/home/api/queries'
 import { companyExpansionQuery, updateCompanyExpansion } from '../api/queries'
+import DeleteAccountingConfigDialog from './dialogs/DeleteAccountingConfigDialog'
+import RemoveApiKeyDialog from './dialogs/RemoveApiKeyDialog'
 
 type AccountingSoftware = 'none' | 'conta'
 
@@ -51,6 +53,10 @@ export default function CompanyExpansionsTab() {
   const [isConfiguring, setIsConfiguring] = React.useState(false)
   // Track if user is in edit mode (when fully configured, they need to click Edit)
   const [isEditing, setIsEditing] = React.useState(false)
+  // Track delete confirmation dialog state
+  const [deleteConfigOpen, setDeleteConfigOpen] = React.useState(false)
+  // Track remove API key dialog state
+  const [removeApiKeyOpen, setRemoveApiKeyOpen] = React.useState(false)
 
   // Local form state for API key input (always start fresh for security)
   const [apiKeyInput, setApiKeyInput] = React.useState<string>('')
@@ -230,6 +236,7 @@ export default function CompanyExpansionsTab() {
       )
       setApiKeyInput('')
       setForm((s) => ({ ...s, accounting_organization_id: null }))
+      setRemoveApiKeyOpen(false)
     },
     onError: (e: any) => {
       toastError('Failed to remove API key', e?.message ?? 'Please try again.')
@@ -263,6 +270,7 @@ export default function CompanyExpansionsTab() {
       setApiKeyInput('')
       setIsEditing(false)
       setIsConfiguring(false)
+      setDeleteConfigOpen(false)
     },
     onError: (e: any) => {
       toastError(
@@ -296,6 +304,41 @@ export default function CompanyExpansionsTab() {
       )
     },
   })
+
+  // Cancel configuration - set to 'none'
+  const handleCancelConfig = () => {
+    if (!companyId) return
+
+    setForm((s) => ({ ...s, accounting_software: 'none' }))
+    setIsConfiguring(false)
+    setIsEditing(false)
+    setApiKeyInput('')
+    setPermissionsChanged(false)
+
+    // Save 'none' selection
+    updateCompanyExpansion({
+      companyId,
+      accountingSoftware: 'none',
+      apiKey: undefined, // Preserve existing if any
+      organizationId: undefined, // Preserve existing if any
+      readOnly: undefined, // Preserve existing if any
+    })
+      .then(() => {
+        qc.invalidateQueries({
+          queryKey: ['company', companyId, 'expansion'],
+        })
+        success(
+          'Configuration Cancelled',
+          'Accounting software has been set to None.',
+        )
+      })
+      .catch((e) => {
+        toastError(
+          'Failed to cancel configuration',
+          e?.message ?? 'Please try again.',
+        )
+      })
+  }
 
   // Update accounting software selection
   const handleSoftwareChange = (value: AccountingSoftware) => {
@@ -423,9 +466,21 @@ export default function CompanyExpansionsTab() {
         >
           {/* Accounting Software Section */}
           <Box mb="6">
-            <Flex align="center" gap="3" mb="3">
-              <Heading size="3">Accounting Software</Heading>
-              {getStatusBadge()}
+            <Flex align="center" justify="between" gap="3" mb="3">
+              <Flex align="center" gap="3">
+                <Heading size="3">Accounting Software</Heading>
+                {getStatusBadge()}
+              </Flex>
+              {(isConfiguring || isEditing) && (
+                <Button
+                  variant="outline"
+                  color="red"
+                  size="2"
+                  onClick={handleCancelConfig}
+                >
+                  Cancel Config
+                </Button>
+              )}
             </Flex>
             <Text as="div" size="2" color="gray" mb="4">
               Connect your accounting software to sync data automatically.
@@ -495,15 +550,7 @@ export default function CompanyExpansionsTab() {
                       <Button
                         variant="soft"
                         color="red"
-                        onClick={() => {
-                          if (
-                            confirm(
-                              'Are you sure you want to delete the entire accounting software configuration? This will remove the API key and organization selection.',
-                            )
-                          ) {
-                            deleteConfigurationMutation.mutate()
-                          }
-                        }}
+                        onClick={() => setDeleteConfigOpen(true)}
                         disabled={deleteConfigurationMutation.isPending}
                         size="2"
                       >
@@ -587,15 +634,7 @@ export default function CompanyExpansionsTab() {
                                   size="1"
                                   variant="soft"
                                   color="red"
-                                  onClick={() => {
-                                    if (
-                                      confirm(
-                                        'Are you sure you want to remove the API key? This will also remove the organization selection.',
-                                      )
-                                    ) {
-                                      removeApiKeyMutation.mutate()
-                                    }
-                                  }}
+                                  onClick={() => setRemoveApiKeyOpen(true)}
                                   disabled={removeApiKeyMutation.isPending}
                                 >
                                   <Trash width={12} height={12} />
@@ -889,6 +928,26 @@ export default function CompanyExpansionsTab() {
           </Box>
         </Box>
       </Box>
+
+      {/* Delete Configuration Dialog */}
+      <DeleteAccountingConfigDialog
+        open={deleteConfigOpen}
+        onOpenChange={setDeleteConfigOpen}
+        onConfirm={() => {
+          deleteConfigurationMutation.mutate()
+        }}
+        isDeleting={deleteConfigurationMutation.isPending}
+      />
+
+      {/* Remove API Key Dialog */}
+      <RemoveApiKeyDialog
+        open={removeApiKeyOpen}
+        onOpenChange={setRemoveApiKeyOpen}
+        onConfirm={() => {
+          removeApiKeyMutation.mutate()
+        }}
+        isRemoving={removeApiKeyMutation.isPending}
+      />
     </Card>
   )
 }

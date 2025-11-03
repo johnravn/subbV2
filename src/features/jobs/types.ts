@@ -19,6 +19,7 @@ export type JobListRow = {
   id: UUID
   company_id: UUID
   title: string
+  jobnr: number | null
   status: JobStatus
   start_at: string | null
   end_at: string | null
@@ -50,6 +51,7 @@ export type JobDetail = {
   id: UUID
   company_id: UUID
   title: string
+  jobnr: number | null
   description: string | null
   status: JobStatus
   start_at: string | null
@@ -210,4 +212,134 @@ export type ReservedVehicleRow = {
     image_path: string | null
     external_owner_id: UUID | null
   } | null
+}
+
+/* ---------- Offers system ---------- */
+
+export type OfferType = 'technical' | 'pretty'
+export type OfferStatus =
+  | 'draft'
+  | 'sent'
+  | 'viewed'
+  | 'accepted'
+  | 'rejected'
+  | 'superseded'
+
+export type PrettySectionType =
+  | 'hero'
+  | 'problem'
+  | 'solution'
+  | 'benefits'
+  | 'testimonial'
+
+export type JobOffer = {
+  id: UUID
+  job_id: UUID
+  company_id: UUID
+  offer_type: OfferType
+  version_number: number
+  status: OfferStatus
+  access_token: string
+  title: string
+  days_of_use: number
+  discount_percent: number
+  vat_percent: number
+  equipment_subtotal: number
+  crew_subtotal: number
+  transport_subtotal: number
+  total_before_discount: number
+  total_after_discount: number
+  total_with_vat: number
+  based_on_offer_id: UUID | null
+  locked: boolean
+  created_at: string
+  updated_at: string
+  sent_at: string | null
+  viewed_at: string | null
+  accepted_at: string | null
+  accepted_by_name: string | null
+  accepted_by_email: string | null
+  accepted_by_phone: string | null
+}
+
+export type OfferEquipmentGroup = {
+  id: UUID
+  offer_id: UUID
+  group_name: string
+  sort_order: number
+  created_at: string
+}
+
+export type OfferEquipmentItem = {
+  id: UUID
+  offer_group_id: UUID
+  item_id: UUID | null
+  quantity: number
+  unit_price: number
+  total_price: number
+  is_internal: boolean
+  sort_order: number
+  // Joined relation
+  item?: {
+    id: UUID
+    name: string
+    externally_owned?: boolean | null
+    external_owner_id?: UUID | null
+  } | null
+}
+
+export type OfferCrewItem = {
+  id: UUID
+  offer_id: UUID
+  role_title: string
+  crew_count: number
+  start_date: string
+  end_date: string
+  daily_rate: number
+  total_price: number
+  sort_order: number
+}
+
+export type OfferTransportItem = {
+  id: UUID
+  offer_id: UUID
+  vehicle_name: string
+  vehicle_id: UUID | null
+  start_date: string
+  end_date: string
+  daily_rate: number
+  total_price: number
+  is_internal: boolean
+  sort_order: number
+  // Joined relation
+  vehicle?: {
+    id: UUID
+    name: string
+    external_owner_id?: UUID | null
+  } | null
+}
+
+export type OfferPrettySection = {
+  id: UUID
+  offer_id: UUID
+  section_type: PrettySectionType
+  title: string | null
+  content: string | null
+  image_url: string | null
+  sort_order: number
+}
+
+// Detail with joined relations
+export type OfferDetail = JobOffer & {
+  groups?: Array<OfferEquipmentGroup & { items: Array<OfferEquipmentItem> }>
+  crew_items?: Array<OfferCrewItem>
+  transport_items?: Array<OfferTransportItem>
+  pretty_sections?: Array<OfferPrettySection>
+}
+
+// Acceptance data
+export type OfferAcceptance = {
+  name: string
+  email: string
+  phone: string
 }

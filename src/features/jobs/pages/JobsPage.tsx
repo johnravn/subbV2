@@ -249,10 +249,37 @@ export default function JobsPage() {
           }}
         >
           {isMinimized ? (
-            <>
+            <Box
+              onClick={handleGlowingBarClick}
+              onMouseEnter={(e) => {
+                const bar = e.currentTarget.querySelector(
+                  '[data-glowing-bar]',
+                ) as HTMLElement
+                if (bar) {
+                  bar.style.width = '24px'
+                }
+              }}
+              onMouseLeave={(e) => {
+                const bar = e.currentTarget.querySelector(
+                  '[data-glowing-bar]',
+                ) as HTMLElement
+                if (bar) {
+                  bar.style.width = '12px'
+                }
+              }}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                cursor: 'pointer',
+                zIndex: 1,
+              }}
+            >
               {/* Glowing vertical bar skeleton with animation */}
               <Box
-                onClick={handleGlowingBarClick}
+                data-glowing-bar
                 style={{
                   position: 'absolute',
                   left: '50%',
@@ -263,16 +290,10 @@ export default function JobsPage() {
                   borderRadius: '4px',
                   background:
                     'linear-gradient(180deg, var(--accent-9), var(--accent-6))',
-                  cursor: 'pointer',
+                  pointerEvents: 'none',
                   zIndex: 5,
                   transition: 'all 0.2s ease-out',
                   animation: 'glow-pulse 5s ease-in-out infinite',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.width = '24px'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.width = '12px'
                 }}
               />
               <style>{`
@@ -285,7 +306,7 @@ export default function JobsPage() {
                   }
                 }
               `}</style>
-            </>
+            </Box>
           ) : (
             <>
               <Flex align="center" justify="between" mb="3">
