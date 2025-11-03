@@ -185,7 +185,7 @@ export default function CrewPage() {
     <section style={{ height: isLarge ? '100%' : undefined, minHeight: 0 }}>
       <Flex
         ref={containerRef}
-        gap="4"
+        gap="2"
         align="stretch"
         style={{
           height: isLarge ? '100%' : undefined,
@@ -244,7 +244,7 @@ export default function CrewPage() {
             setIsResizing(true)
           }}
           style={{
-            width: '8px',
+            width: '6px',
             height: '20%',
             cursor: 'col-resize',
             backgroundColor: 'var(--gray-a4)',

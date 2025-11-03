@@ -12,6 +12,7 @@ import {
   Separator,
   Text,
 } from '@radix-ui/themes'
+import { useLocation } from '@tanstack/react-router'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { NavArrowDown } from 'iconoir-react'
 import PageSkeleton from '@shared/ui/components/PageSkeleton'
@@ -19,7 +20,21 @@ import InventoryTable from '../components/InventoryTable'
 import InventoryInspector from '../components/InventoryInspector'
 
 export default function InventoryPage() {
-  const [selectedId, setSelectedId] = React.useState<string | null>(null)
+  const { companyId } = useCompany()
+  const location = useLocation()
+  const search = location.search as { inventoryId?: string }
+  const inventoryId = search?.inventoryId
+
+  const [selectedId, setSelectedId] = React.useState<string | null>(
+    inventoryId || null,
+  )
+
+  // Update selectedId when inventoryId from URL changes
+  React.useEffect(() => {
+    if (inventoryId) {
+      setSelectedId(inventoryId)
+    }
+  }, [inventoryId])
   const [showActive, setShowActive] = React.useState(true)
   const [showInactive, setShowInactive] = React.useState(false)
   const [showInternal, setShowInternal] = React.useState(true)
@@ -27,7 +42,6 @@ export default function InventoryPage() {
   const [showGroupOnlyItems, setShowGroupOnlyItems] = React.useState(false)
   const [showGroups, setShowGroups] = React.useState(true)
   const [showItems, setShowItems] = React.useState(true)
-  const { companyId } = useCompany()
 
   // Responsive toggle for >= 1024px (large screens)
   const [isLarge, setIsLarge] = React.useState<boolean>(() =>
@@ -217,7 +231,7 @@ export default function InventoryPage() {
     >
       <Flex
         ref={containerRef}
-        gap="4"
+        gap="2"
         align="stretch"
         style={{
           height: isLarge ? '100%' : undefined,
@@ -291,7 +305,7 @@ export default function InventoryPage() {
             setIsResizing(true)
           }}
           style={{
-            width: '8px',
+            width: '6px',
             height: '20%',
             cursor: 'col-resize',
             backgroundColor: 'var(--gray-a4)',

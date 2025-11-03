@@ -17,7 +17,14 @@ import {
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { useAuthz } from '@shared/auth/useAuthz'
 import DateTimePicker from '@shared/ui/components/DateTimePicker'
-import { ArrowDown, ArrowUp, CalendarXmark, Plus, Search, Xmark } from 'iconoir-react'
+import {
+  ArrowDown,
+  ArrowUp,
+  CalendarXmark,
+  Plus,
+  Search,
+  Xmark,
+} from 'iconoir-react'
 import { makeWordPresentable } from '@shared/lib/generalFunctions'
 import { supabase } from '@shared/api/supabase'
 import { customersForFilterQuery, jobsIndexQuery } from '../api/queries'
@@ -70,7 +77,7 @@ export default function JobsTable({
   const customerSearchRef = React.useRef<HTMLDivElement>(null)
   const [statusFilter, setStatusFilter] = React.useState<string | null>(null)
   const [sortBy, setSortBy] = React.useState<SortBy>('start_at')
-  const [sortDir, setSortDir] = React.useState<SortDir>('desc')
+  const [sortDir, setSortDir] = React.useState<SortDir>('asc')
 
   const [createOpen, setCreateOpen] = React.useState(false)
 
@@ -108,9 +115,7 @@ export default function JobsTable({
     if (!customers) return []
     if (!customerSearchQuery.trim()) return customers
     const query = customerSearchQuery.toLowerCase().trim()
-    return customers.filter((c) =>
-      c.name.toLowerCase().includes(query),
-    )
+    return customers.filter((c) => c.name.toLowerCase().includes(query))
   }, [customers, customerSearchQuery])
 
   // Get selected customer name
@@ -204,7 +209,9 @@ export default function JobsTable({
           >
             <TextField.Root
               value={
-                customerIdFilter && selectedCustomerName && !customerInputFocused
+                customerIdFilter &&
+                selectedCustomerName &&
+                !customerInputFocused
                   ? selectedCustomerName
                   : customerSearchQuery
               }
@@ -298,7 +305,10 @@ export default function JobsTable({
                       }
                     }}
                   >
-                    <Text size="2" weight={customerIdFilter === null ? 'medium' : 'regular'}>
+                    <Text
+                      size="2"
+                      weight={customerIdFilter === null ? 'medium' : 'regular'}
+                    >
                       All customers
                     </Text>
                   </Box>
@@ -333,19 +343,22 @@ export default function JobsTable({
                   >
                     <Text
                       size="2"
-                      weight={customerIdFilter === customer.id ? 'medium' : 'regular'}
+                      weight={
+                        customerIdFilter === customer.id ? 'medium' : 'regular'
+                      }
                     >
                       {customer.name}
                     </Text>
                   </Box>
                 ))}
-                {customerSearchQuery.trim() && filteredCustomers.length === 0 && (
-                  <Box p="3">
-                    <Text size="2" color="gray">
-                      No customers found
-                    </Text>
-                  </Box>
-                )}
+                {customerSearchQuery.trim() &&
+                  filteredCustomers.length === 0 && (
+                    <Box p="3">
+                      <Text size="2" color="gray">
+                        No customers found
+                      </Text>
+                    </Box>
+                  )}
               </Box>
             )}
           </div>
@@ -544,8 +557,7 @@ export default function JobsTable({
                         color={
                           displayStatus === 'canceled'
                             ? 'red'
-                            : displayStatus === 'paid' ||
-                                displayStatus === 'completed'
+                            : displayStatus === 'paid'
                               ? 'green'
                               : displayStatus === 'in_progress'
                                 ? 'amber'

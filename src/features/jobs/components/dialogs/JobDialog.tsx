@@ -13,9 +13,13 @@ import {
 } from '@radix-ui/themes'
 import { supabase } from '@shared/api/supabase'
 import { upsertTimePeriod } from '@features/jobs/api/queries'
-import { makeWordPresentable } from '@shared/lib/generalFunctions'
+import {
+  addThreeHours,
+  makeWordPresentable,
+} from '@shared/lib/generalFunctions'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import DateTimePicker from '@shared/ui/components/DateTimePicker'
+import { logActivity } from '@features/latest/api/queries'
 import type { JobDetail, JobStatus, UUID } from '../../types'
 
 type Props = {
@@ -48,6 +52,7 @@ export default function JobDialog({
   )
   const [startAt, setStartAt] = React.useState(initialData?.start_at ?? '')
   const [endAt, setEndAt] = React.useState(initialData?.end_at ?? '')
+  const [autoSetEndTime, setAutoSetEndTime] = React.useState(true)
   const [projectLead, setProjectLead] = React.useState<UUID | ''>(
     initialData?.project_lead_user_id ?? '',
   )
@@ -65,10 +70,17 @@ export default function JobDialog({
     setStatus(initialData.status)
     setStartAt(initialData.start_at ?? '')
     setEndAt(initialData.end_at ?? '')
+    setAutoSetEndTime(false) // Don't auto-set when loading existing data
     setProjectLead(initialData.project_lead_user_id ?? '')
     setCustomerId(initialData.customer_id ?? '')
     setContactId(initialData.customer_contact_id ?? '')
   }, [open, mode, initialData])
+
+  // Auto-set end time when start time changes (only in create mode or when manually setting)
+  React.useEffect(() => {
+    if (!startAt || mode === 'edit' || !autoSetEndTime) return
+    setEndAt(addThreeHours(startAt))
+  }, [startAt, mode, autoSetEndTime])
 
   React.useEffect(() => {
     setContactId('') // clear previous selection if customer changes
@@ -192,9 +204,27 @@ export default function JobDialog({
           // and we don't want to confuse the user with an error after showing success
         }
 
+        // Log activity for job creation
+        try {
+          await logActivity({
+            companyId,
+            activityType: 'job_created',
+            metadata: {
+              job_id: data.id,
+              job_title: title.trim(),
+              status: status,
+            },
+            title: title.trim(),
+          })
+        } catch (logErr) {
+          console.error('Failed to log job creation activity:', logErr)
+          // Don't fail the whole job create if logging fails
+        }
+
         return data.id
       } else {
         if (!initialData) throw new Error('Missing initial data')
+        const previousStatus = initialData.status
         const { error } = await supabase
           .from('jobs')
           .update({
@@ -236,6 +266,29 @@ export default function JobDialog({
           end_at: periodEnd,
         })
 
+        // Log activity if status changed to confirmed, canceled, or paid
+        if (
+          previousStatus !== status &&
+          (status === 'confirmed' || status === 'canceled' || status === 'paid')
+        ) {
+          try {
+            await logActivity({
+              companyId,
+              activityType: 'job_status_changed',
+              metadata: {
+                job_id: initialData.id,
+                job_title: title.trim(),
+                previous_status: previousStatus,
+                new_status: status,
+              },
+              title: title.trim(),
+            })
+          } catch (logErr) {
+            console.error('Failed to log job status change activity:', logErr)
+            // Don't fail the whole job update if logging fails
+          }
+        }
+
         return initialData.id
       }
     },
@@ -249,6 +302,15 @@ export default function JobDialog({
         qc.invalidateQueries({ queryKey: ['jobs-detail', id], exact: false }),
         qc.invalidateQueries({
           queryKey: ['jobs', id, 'time_periods'],
+          exact: false,
+        }),
+        qc.invalidateQueries({
+          queryKey: ['company', companyId, 'latest-feed'],
+          exact: false,
+        }),
+        // Force refetch of latest feed to ensure new activity appears immediately
+        qc.refetchQueries({
+          queryKey: ['company', companyId, 'latest-feed'],
           exact: false,
         }),
       ])
@@ -394,9 +456,19 @@ export default function JobDialog({
             <DateTimePicker
               label="Start"
               value={startAt}
-              onChange={setStartAt}
+              onChange={(value) => {
+                setStartAt(value)
+                setAutoSetEndTime(true)
+              }}
             />
-            <DateTimePicker label="End" value={endAt} onChange={setEndAt} />
+            <DateTimePicker
+              label="End"
+              value={endAt}
+              onChange={(value) => {
+                setEndAt(value)
+                setAutoSetEndTime(false)
+              }}
+            />
             <Field label="Notes">
               <TextArea
                 rows={5}

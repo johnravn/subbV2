@@ -196,7 +196,7 @@ export default function CompanyUsersTab() {
   return (
     <Flex
       ref={containerRef}
-      gap="4"
+      gap="2"
       align="stretch"
       style={{
         height: isLarge ? '100%' : undefined,
@@ -258,7 +258,7 @@ export default function CompanyUsersTab() {
           setIsResizing(true)
         }}
         style={{
-          width: '8px',
+          width: '6px',
           height: '20%',
           cursor: 'col-resize',
           backgroundColor: 'var(--gray-a4)',

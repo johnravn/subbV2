@@ -17,6 +17,7 @@ import {
 } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { supabase } from '@shared/api/supabase'
+import { useToast } from '@shared/ui/toast/ToastProvider'
 import { Check, Edit, Trash, Xmark } from 'iconoir-react'
 
 type ItemCategory = {
@@ -266,6 +267,7 @@ function CategoriesDialogContent({
 export default function CompanySetupTab() {
   const { companyId } = useCompany()
   const qc = useQueryClient()
+  const { success, error: toastError } = useToast()
   const [editCategoriesOpen, setEditCategoriesOpen] = React.useState(false)
 
   // Fetch company_expansions for latest_feed_open_to_freelancers setting
@@ -283,6 +285,10 @@ export default function CompanySetupTab() {
       return data
     },
   })
+
+  const [pendingToggleValue, setPendingToggleValue] = React.useState<
+    boolean | null
+  >(null)
 
   const updateFeedAccessMutation = useMutation({
     mutationFn: async (openToFreelancers: boolean) => {
@@ -307,6 +313,25 @@ export default function CompanySetupTab() {
       await qc.invalidateQueries({
         queryKey: ['company', companyId, 'expansions'],
       })
+      if (pendingToggleValue) {
+        success(
+          'Latest feed enabled for freelancers',
+          'Freelancers can now view the Latest feed',
+        )
+      } else {
+        success(
+          'Latest feed disabled for freelancers',
+          'Freelancers can no longer view the Latest feed',
+        )
+      }
+      setPendingToggleValue(null)
+    },
+    onError: (error: any) => {
+      toastError(
+        'Failed to update setting',
+        error?.message ?? 'Please try again.',
+      )
+      setPendingToggleValue(null)
     },
   })
 
@@ -366,6 +391,7 @@ export default function CompanySetupTab() {
                       : (expansions?.latest_feed_open_to_freelancers ?? false)
                   }
                   onCheckedChange={(checked) => {
+                    setPendingToggleValue(checked)
                     updateFeedAccessMutation.mutate(checked)
                   }}
                   disabled={updateFeedAccessMutation.isPending}

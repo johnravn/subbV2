@@ -109,8 +109,27 @@ export default function VehicleInspector({ id }: { id: string | null }) {
 
   const del = useMutation({
     mutationFn: async () => {
-      if (!companyId || !id) throw new Error('Missing ids')
-      return markVehicleDeleted({ companyId, id })
+      if (!companyId || !id || !data) throw new Error('Missing ids or data')
+
+      await markVehicleDeleted({ companyId, id })
+
+      // Log activity
+      try {
+        const { logActivity } = await import('@features/latest/api/queries')
+        await logActivity({
+          companyId,
+          activityType: 'vehicle_removed',
+          metadata: {
+            vehicle_id: id,
+            vehicle_name: data.name,
+            license_plate: data.registration_no || null,
+          },
+          title: data.name,
+        })
+      } catch (logErr) {
+        console.error('Failed to log activity:', logErr)
+        // Don't fail the whole operation if logging fails
+      }
     },
     onSuccess: async () => {
       await Promise.all([
@@ -120,6 +139,10 @@ export default function VehicleInspector({ id }: { id: string | null }) {
         }),
         qc.invalidateQueries({
           queryKey: ['company', companyId, 'vehicle-detail'],
+          exact: false,
+        }),
+        qc.invalidateQueries({
+          queryKey: ['company', companyId, 'latest-feed'],
           exact: false,
         }),
       ])

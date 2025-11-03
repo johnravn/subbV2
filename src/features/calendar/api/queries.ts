@@ -144,6 +144,25 @@ export function itemCalendarQuery({
 
       if (error) throw error
 
+      if (!data || data.length === 0) return []
+
+      // Fetch all items for each time period to populate itemIds array
+      const { data: allItemsRes, error: itemsError } = await supabase
+        .from('reserved_items')
+        .select('time_period_id, item_id')
+        .in('time_period_id', timePeriodIds)
+
+      if (itemsError) throw itemsError
+
+      // Create a map of time_period_id to array of item_ids
+      const itemMap = new Map<string, string[]>()
+      ;(allItemsRes || []).forEach((i: any) => {
+        if (!itemMap.has(i.time_period_id)) {
+          itemMap.set(i.time_period_id, [])
+        }
+        itemMap.get(i.time_period_id)!.push(i.item_id)
+      })
+
       return (data || []).map(
         (tp: any): CalendarRecord => ({
           id: tp.id,
@@ -152,7 +171,8 @@ export function itemCalendarQuery({
           end: tp.end_at ?? undefined,
           kind: 'item',
           ref: {
-            itemId,
+            itemId, // Keep backward compatibility
+            itemIds: itemMap.get(tp.id) || [], // All items in this period
             jobId: tp.job_id || undefined,
           },
           notes: undefined,
@@ -364,9 +384,13 @@ export function companyCalendarQuery({
         vehicleMap.set(v.time_period_id, v.vehicle_id)
       })
 
-      const itemMap = new Map<string, string>()
+      // Map time_period_id to array of item_ids (equipment periods can have multiple items)
+      const itemMap = new Map<string, string[]>()
       ;(itemsRes.data || []).forEach((i: any) => {
-        itemMap.set(i.time_period_id, i.item_id)
+        if (!itemMap.has(i.time_period_id)) {
+          itemMap.set(i.time_period_id, [])
+        }
+        itemMap.get(i.time_period_id)!.push(i.item_id)
       })
 
       // Map time_period_id to set of user_ids and their statuses
@@ -400,7 +424,12 @@ export function companyCalendarQuery({
           } else if (tp.category === 'equipment') {
             kind = 'item'
             if (itemMap.has(tp.id)) {
-              ref.itemId = itemMap.get(tp.id)!
+              const itemIds = itemMap.get(tp.id)!
+              ref.itemIds = itemIds
+              // Keep backward compatibility with itemId for single-item lookups
+              if (itemIds.length > 0) {
+                ref.itemId = itemIds[0]
+              }
             }
           } else if (tp.category === 'crew') {
             kind = 'crew'

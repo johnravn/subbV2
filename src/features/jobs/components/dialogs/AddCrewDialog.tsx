@@ -39,10 +39,22 @@ export default function AddCrewDialog({
         .select('user_id, display_name, email')
         .limit(20)
 
+      // Apply fuzzy search using multiple patterns
       if (search.trim()) {
-        q = q.or(
-          `display_name.ilike.%${search.trim()}%,email.ilike.%${search.trim()}%`,
-        )
+        const term = search.trim()
+        const patterns = [
+          `%${term}%`,
+          term.length > 2 ? `%${term.split('').join('%')}%` : null,
+        ].filter(Boolean) as string[]
+        
+        const conditions = patterns
+          .flatMap((pattern) => [
+            `display_name.ilike.${pattern}`,
+            `email.ilike.${pattern}`,
+          ])
+          .join(',')
+        
+        q = q.or(conditions)
       }
 
       const { data, error } = await q

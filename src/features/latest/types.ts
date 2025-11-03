@@ -12,6 +12,7 @@ export type ActivityType =
   | 'crew_added'
   | 'crew_removed'
   | 'job_created'
+  | 'job_status_changed'
   | 'job_deleted'
   | 'announcement'
 
@@ -70,3 +71,24 @@ export type LatestInspectorData = {
   activity: ActivityFeedItem
   comments: Array<ActivityCommentWithAuthor>
 }
+
+// Grouped inventory activities
+export type GroupedInventoryActivity = {
+  id: string // Composite ID based on grouped items
+  isGrouped: true
+  activity_type:
+    | 'inventory_items_grouped'
+    | 'inventory_groups_grouped'
+    | 'inventory_mixed_grouped'
+  created_by_user_id: string
+  created_at: string // Earliest timestamp in the group
+  created_by: ActivityFeedItem['created_by']
+  items: Array<ActivityFeedItem> // The individual activities in this group
+  item_count: number
+  group_count: number
+  like_count: number
+  comment_count: number
+  user_liked: boolean
+}
+
+export type DisplayActivityItem = ActivityFeedItem | GroupedInventoryActivity

@@ -1,12 +1,14 @@
 // src/features/latest/components/LatestFeed.tsx
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Avatar, Box, Flex, Separator, Spinner, Text } from '@radix-ui/themes'
+import { Avatar, Box, Flex, Spinner, Text } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { supabase } from '@shared/api/supabase'
 import { formatDistanceToNow } from 'date-fns'
 import { latestFeedQuery } from '../api/queries'
-import type { ActivityFeedItem, ActivityType } from '../types'
+import { groupInventoryActivities } from '../utils/groupInventoryActivities'
+import { getActivityGenericMessage } from '../utils/activityNavigation'
+import type { ActivityType, GroupedInventoryActivity } from '../types'
 
 function getInitials(name: string | null, email: string): string {
   if (name) {
@@ -19,48 +21,20 @@ function getInitials(name: string | null, email: string): string {
   return email.substring(0, 2).toUpperCase()
 }
 
-function formatActivityDescription(activity: ActivityFeedItem): string {
-  const metadata = activity.metadata
-
-  switch (activity.activity_type) {
-    case 'inventory_item_created':
-      return `Added item "${metadata.item_name || 'Unknown'}" to inventory`
-    case 'inventory_item_deleted':
-      return `Removed item "${metadata.item_name || 'Unknown'}" from inventory`
-    case 'inventory_group_created':
-      return `Created inventory group "${metadata.group_name || 'Unknown'}"`
-    case 'inventory_group_deleted':
-      return `Removed inventory group "${metadata.group_name || 'Unknown'}"`
-    case 'vehicle_added':
-      return `Added vehicle "${metadata.vehicle_name || metadata.license_plate || 'Unknown'}"`
-    case 'vehicle_removed':
-      return `Removed vehicle "${metadata.vehicle_name || metadata.license_plate || 'Unknown'}"`
-    case 'customer_added':
-      return `Added customer "${metadata.customer_name || 'Unknown'}"`
-    case 'customer_removed':
-      return `Removed customer "${metadata.customer_name || 'Unknown'}"`
-    case 'crew_added':
-      return `Added crew member "${metadata.user_name || metadata.email || 'Unknown'}"`
-    case 'crew_removed':
-      return `Removed crew member "${metadata.user_name || metadata.email || 'Unknown'}"`
-    case 'job_created':
-      return `Created job "${metadata.job_title || activity.title || 'Unknown'}"`
-    case 'job_deleted':
-      return `Deleted job "${metadata.job_title || activity.title || 'Unknown'}"`
-    case 'announcement':
-      return activity.title || activity.description || 'Announcement'
-    default:
-      return activity.title || activity.description || 'Activity'
-  }
-}
-
-function getActivityIcon(activityType: ActivityType): string {
+function getActivityIcon(
+  activityType: ActivityType | GroupedInventoryActivity['activity_type'],
+): string {
   switch (activityType) {
     case 'inventory_item_created':
     case 'inventory_item_deleted':
+    case 'inventory_items_grouped':
+      return '📦'
     case 'inventory_group_created':
     case 'inventory_group_deleted':
-      return '📦'
+    case 'inventory_groups_grouped':
+      return '📁'
+    case 'inventory_mixed_grouped':
+      return '📦' // Mixed groups default to box icon
     case 'vehicle_added':
     case 'vehicle_removed':
       return '🚗'
@@ -71,6 +45,7 @@ function getActivityIcon(activityType: ActivityType): string {
     case 'crew_removed':
       return '👷'
     case 'job_created':
+    case 'job_status_changed':
     case 'job_deleted':
       return '📋'
     case 'announcement':
@@ -126,9 +101,12 @@ export default function LatestFeed({
     )
   }
 
+  // Group inventory activities
+  const groupedActivities = groupInventoryActivities(data.items)
+
   return (
     <Box>
-      {data.items.map((activity, idx) => {
+      {groupedActivities.map((activity) => {
         // Calculate avatar URL without using hooks
         const avatarUrl = activity.created_by.avatar_url
           ? supabase.storage
@@ -153,16 +131,19 @@ export default function LatestFeed({
                   selectedId === activity.id
                     ? 'var(--accent-3)'
                     : 'transparent',
+                border: '1px solid transparent',
               }}
               onClick={() => onSelect(activity.id)}
               onMouseEnter={(e) => {
                 if (selectedId !== activity.id) {
                   e.currentTarget.style.backgroundColor = 'var(--gray-2)'
+                  e.currentTarget.style.borderColor = 'var(--gray-a6)'
                 }
               }}
               onMouseLeave={(e) => {
                 if (selectedId !== activity.id) {
                   e.currentTarget.style.backgroundColor = 'transparent'
+                  e.currentTarget.style.borderColor = 'transparent'
                 }
               }}
             >
@@ -202,11 +183,17 @@ export default function LatestFeed({
                     </Text>
                   </Flex>
 
+                  {/* Title only */}
                   <Text size="2" style={{ lineHeight: 1.5 }}>
-                    {formatActivityDescription(activity)}
+                    {getActivityGenericMessage(
+                      'isGrouped' in activity
+                        ? 'grouped_inventory'
+                        : activity.activity_type,
+                    )}
                   </Text>
 
-                  {activity.description &&
+                  {'description' in activity &&
+                    activity.description &&
                     activity.activity_type === 'announcement' && (
                       <Box
                         mt="2"
@@ -235,8 +222,6 @@ export default function LatestFeed({
                 </Box>
               </Flex>
             </Box>
-
-            {idx < data.items.length - 1 && <Separator my="2" />}
           </React.Fragment>
         )
       })}

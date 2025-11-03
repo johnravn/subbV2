@@ -146,7 +146,7 @@ export default function LatestPage() {
     >
       <Flex
         direction="row"
-        gap="4"
+        gap="2"
         align="stretch"
         style={{
           height: '100%',
@@ -200,7 +200,7 @@ export default function LatestPage() {
             setIsResizing(true)
           }}
           style={{
-            width: '8px',
+            width: '6px',
             height: '20%',
             cursor: 'col-resize',
             backgroundColor: 'var(--gray-a4)',

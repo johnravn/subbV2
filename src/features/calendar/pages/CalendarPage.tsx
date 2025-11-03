@@ -95,16 +95,20 @@ export default function CalendarPage() {
       page: 1,
       pageSize: 100,
       search: searchQuery,
-      activeOnly: true,
-      allow_individual_booking: true,
+      showActive: true,
+      showInactive: false,
+      showInternal: true,
+      showExternal: true,
+      showGroupOnlyItems: false,
+      showGroups: false,
+      showItems: true,
       category: null,
       sortBy: 'name',
       sortDir: 'asc',
-      includeExternal: true,
     }),
     enabled: shouldFetchSuggestions && category === 'equipment',
   })
-  const items = itemsData?.rows.filter((r) => !r.is_group) || []
+  const items = itemsData?.rows || []
 
   // Crew for crew
   const { data: crew = [] } = useQuery({
@@ -124,24 +128,24 @@ export default function CalendarPage() {
     enabled: shouldFetchSuggestions && category === 'jobDuration',
   })
 
-  // Get suggestions based on category
+  // Get suggestions based on category with fuzzy search filtering
   const suggestions = React.useMemo(() => {
+    let allSuggestions: Array<{ id: string; name: string; subtitle?: string }> = []
+    
     if (category === 'transport') {
-      return vehicles.map((v) => ({
+      allSuggestions = vehicles.map((v) => ({
         id: v.id,
         name: v.name,
         subtitle: v.registration_no || undefined,
       }))
-    }
-    if (category === 'equipment') {
-      return items.map((item) => ({
+    } else if (category === 'equipment') {
+      allSuggestions = items.map((item) => ({
         id: item.id,
         name: item.name,
         subtitle: item.category_name || undefined,
       }))
-    }
-    if (category === 'crew') {
-      return crew.map((c) => ({
+    } else if (category === 'crew') {
+      allSuggestions = crew.map((c) => ({
         id: c.user_id,
         name:
           c.display_name ||
@@ -149,16 +153,30 @@ export default function CalendarPage() {
           c.email,
         subtitle: c.email,
       }))
-    }
-    if (category === 'jobDuration') {
-      return jobs.map((job) => ({
+    } else if (category === 'jobDuration') {
+      allSuggestions = jobs.map((job) => ({
         id: job.id,
         name: job.title,
         subtitle: job.customer?.name || undefined,
       }))
     }
-    return []
-  }, [category, vehicles, items, crew, jobs])
+    
+    // Apply fuzzy search filtering if search query exists
+    if (searchQuery.trim()) {
+      const { fuzzySearch } = require('@shared/lib/generalFunctions')
+      return fuzzySearch(
+        allSuggestions,
+        searchQuery,
+        [
+          (s) => s.name,
+          (s) => s.subtitle ?? '',
+        ],
+        0.3,
+      )
+    }
+    
+    return allSuggestions
+  }, [category, vehicles, items, crew, jobs, searchQuery])
 
   // Helper to check if time period is Job duration
   const isJobDuration = (record: { title?: string | null }) =>

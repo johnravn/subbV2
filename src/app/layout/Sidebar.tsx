@@ -361,7 +361,9 @@ function SidebarContent({
                     isMobile={isMobile}
                     onCloseMobile={() => onToggle(false)}
                     badge={
-                      n.label === 'Matters' ? <MattersUnreadBadge /> : undefined
+                      n.label === 'Matters' ? (
+                        <MattersUnreadBadge isCollapsed={!open} />
+                      ) : undefined
                     }
                   />
                 ))}
@@ -383,7 +385,7 @@ function SidebarContent({
                         onCloseMobile={() => onToggle(false)}
                         badge={
                           n.label === 'Matters' ? (
-                            <MattersUnreadBadge />
+                            <MattersUnreadBadge isCollapsed={!open} />
                           ) : undefined
                         }
                       />
@@ -447,7 +449,7 @@ function SidebarContent({
   )
 }
 
-function MattersUnreadBadge() {
+function MattersUnreadBadge({ isCollapsed }: { isCollapsed?: boolean }) {
   const { companyId } = useCompany()
   const { data: unreadCount = 0 } = useQuery({
     ...unreadMattersCountQuery(companyId ?? ''),
@@ -461,7 +463,18 @@ function MattersUnreadBadge() {
       radius="full"
       size="1"
       color="blue"
-      style={{ minWidth: 18, height: 18, padding: '0 6px' }}
+      highContrast={false}
+      style={{
+        minWidth: 18,
+        height: 18,
+        padding: '0 6px',
+        ...(isCollapsed
+          ? {
+              backgroundColor: 'var(--blue-7)',
+              color: 'var(--blue-12)',
+            }
+          : {}),
+      }}
     >
       {unreadCount > 99 ? '99+' : unreadCount}
     </Badge>
@@ -516,23 +529,29 @@ function NavItem({
           position: 'relative',
         }}
       >
-        {icon}
+        {open ? (
+          icon
+        ) : (
+          <Box style={{ position: 'relative', display: 'inline-flex' }}>
+            {icon}
+            {badge && (
+              <Box
+                style={{
+                  position: 'absolute',
+                  top: -6,
+                  right: -6,
+                }}
+              >
+                {badge}
+              </Box>
+            )}
+          </Box>
+        )}
         {open && (
           <Flex align="center" justify="between" style={{ flex: 1 }}>
             <span style={{ lineHeight: 1 }}>{label}</span>
             {badge}
           </Flex>
-        )}
-        {!open && badge && (
-          <Box
-            style={{
-              position: 'absolute',
-              top: -4,
-              right: -4,
-            }}
-          >
-            {badge}
-          </Box>
         )}
       </Link>
     </Button>

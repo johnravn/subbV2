@@ -18,6 +18,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { prettyPhone } from '@shared/phone/phone'
 import { useToast } from '@shared/ui/toast/ToastProvider'
+import { fmtVAT } from '@shared/lib/generalFunctions'
 import InspectorSkeleton from '@shared/ui/components/InspectorSkeleton'
 import MapEmbed from '@shared/maps/MapEmbed'
 import {
@@ -86,8 +87,25 @@ export default function CustomerInspector({
 
   const deleteCustomerMut = useMutation({
     mutationFn: async () => {
-      if (!companyId || !id) throw new Error('Missing ids')
-      return deleteCustomer({ companyId, id })
+      if (!companyId || !id || !data) throw new Error('Missing ids or data')
+      await deleteCustomer({ companyId, id })
+
+      // Log activity
+      try {
+        const { logActivity } = await import('@features/latest/api/queries')
+        await logActivity({
+          companyId,
+          activityType: 'customer_removed',
+          metadata: {
+            customer_id: id,
+            customer_name: data.name,
+          },
+          title: data.name,
+        })
+      } catch (logErr) {
+        console.error('Failed to log activity:', logErr)
+        // Don't fail the whole operation if logging fails
+      }
     },
     onSuccess: async () => {
       await Promise.all([
@@ -97,6 +115,10 @@ export default function CustomerInspector({
         }),
         qc.invalidateQueries({
           queryKey: ['company', companyId, 'customer-detail'],
+          exact: false,
+        }),
+        qc.invalidateQueries({
+          queryKey: ['company', companyId, 'latest-feed'],
           exact: false,
         }),
       ])
@@ -175,6 +197,7 @@ export default function CustomerInspector({
               address: c.address ?? '',
               email: c.email ?? '',
               phone: c.phone ?? '',
+              vat_number: c.vat_number ?? '',
               is_partner: c.is_partner,
             }}
             onSaved={() => {
@@ -228,6 +251,14 @@ export default function CustomerInspector({
               ) : (
                 '—'
               )}
+            </Text>
+          </div>
+          <div>
+            <Text as="div" size="1" color="gray" style={{ marginBottom: 4 }}>
+              VAT number
+            </Text>
+            <Text as="div" size="2">
+              {fmtVAT(c.vat_number)}
             </Text>
           </div>
           {addrParts && (

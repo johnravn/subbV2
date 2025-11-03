@@ -458,7 +458,7 @@ export default function SuperPage() {
             ) : (
               <Flex
                 ref={companiesContainerRef}
-                gap="4"
+                gap="2"
                 align="stretch"
                 style={{
                   height: isLarge ? '100%' : undefined,
@@ -515,7 +515,7 @@ export default function SuperPage() {
                     setIsResizingCompanies(true)
                   }}
                   style={{
-                    width: '8px',
+                    width: '6px',
                     height: '20%',
                     cursor: 'col-resize',
                     backgroundColor: 'var(--gray-a4)',
@@ -718,7 +718,7 @@ export default function SuperPage() {
             ) : (
               <Flex
                 ref={usersContainerRef}
-                gap="4"
+                gap="2"
                 align="stretch"
                 style={{
                   height: isLarge ? '100%' : undefined,
@@ -771,7 +771,7 @@ export default function SuperPage() {
                     setIsResizingUsers(true)
                   }}
                   style={{
-                    width: '8px',
+                    width: '6px',
                     height: '20%',
                     cursor: 'col-resize',
                     backgroundColor: 'var(--gray-a4)',

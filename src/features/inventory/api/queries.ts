@@ -303,12 +303,27 @@ export const inventoryIndexQuery = ({
 
       if (category && category !== 'all') q = q.eq('category_name', category)
 
-      if (search) {
-        const s = escapeForPostgrestOr(search)
-        // IMPORTANT: no wrapping parentheses here
-        q = q.or(
-          `name.ilike.*${s}*,category_name.ilike.*${s}*,brand_name.ilike.*${s}*`,
-        )
+      if (search && search.trim()) {
+        const term = search.trim()
+        // Fuzzy search: use multiple patterns for better matching
+        const patterns: Array<string> = [
+          `%${escapeForPostgrestOr(term)}%`,
+          term.length > 2
+            ? `%${escapeForPostgrestOr(term.split('').join('%'))}%`
+            : null,
+        ].filter((p): p is string => p !== null)
+
+        // Build OR conditions for all columns with all patterns
+        const conditions: Array<string> = []
+        patterns.forEach((pattern) => {
+          conditions.push(`name.ilike.${pattern}`)
+          conditions.push(`category_name.ilike.${pattern}`)
+          conditions.push(`brand_name.ilike.${pattern}`)
+        })
+
+        if (conditions.length > 0) {
+          q = q.or(conditions.join(','))
+        }
       }
 
       // Server-side sort + stable tiebreaker for pagination
@@ -319,24 +334,39 @@ export const inventoryIndexQuery = ({
         })
         .order('id', { ascending: true }) // 👈 stable secondary sort
 
-      const { data, error, count } = await q.range(from, to)
+      const { data, error } = await q.range(from, to)
       if (error) throw error
 
-      let filteredRows = (data ?? []) as Array<InventoryIndexRow>
+      let filteredRows = data as Array<InventoryIndexRow>
 
       // Client-side filtering for complex type combinations that PostgREST can't handle
       if (showGroups && !showItems && showGroupOnlyItems) {
         // Filter: keep groups OR items with allow_individual_booking=false
         filteredRows = filteredRows.filter(
-          (row) =>
-            row.is_group === true ||
-            (row.is_group === false && row.allow_individual_booking === false),
+          (row) => row.is_group || !row.allow_individual_booking,
+        )
+      }
+
+      // Apply client-side fuzzy matching for better typo tolerance
+      // This handles cases where database ilike patterns aren't fuzzy enough
+      // (e.g., "unaktive" should match "unactive" despite k vs c substitution)
+      if (search && search.trim()) {
+        const { fuzzySearch } = await import('@shared/lib/generalFunctions')
+        filteredRows = fuzzySearch(
+          filteredRows,
+          search,
+          [
+            (row) => row.name,
+            (row) => row.category_name || '',
+            (row) => row.brand_name || '',
+          ],
+          0.25, // Lower threshold since we already filtered with ilike
         )
       }
 
       return {
         rows: filteredRows,
-        count: count ?? 0,
+        count: filteredRows.length, // Use filtered count instead of raw count
       }
     },
     staleTime: 10_000,

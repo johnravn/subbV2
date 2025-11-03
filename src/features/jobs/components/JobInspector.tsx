@@ -156,7 +156,7 @@ export default function JobInspector({
                 color={
                   displayStatus === 'canceled'
                     ? 'red'
-                    : displayStatus === 'paid' || displayStatus === 'completed'
+                    : displayStatus === 'paid'
                       ? 'green'
                       : displayStatus === 'in_progress'
                         ? 'amber'

@@ -48,7 +48,7 @@ export function IncomeExpensesChart({
   const containerRef = React.useRef<HTMLDivElement>(null)
   const [chartHeight, setChartHeight] = React.useState(height || 300)
   const [internalChartType, setInternalChartType] =
-    React.useState<ChartType>('bar')
+    React.useState<ChartType>('area')
 
   // Use controlled chartType if provided, otherwise use internal state
   const chartType = controlledChartType ?? internalChartType

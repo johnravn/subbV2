@@ -3,6 +3,7 @@ import * as React from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button, Dialog, Flex, Select, TextField } from '@radix-ui/themes'
 import { supabase } from '@shared/api/supabase'
+import { addThreeHours } from '@shared/lib/generalFunctions'
 import DateTimePicker from '@shared/ui/components/DateTimePicker'
 import type { ExternalReqStatus, ReservedItemRow } from '../../types'
 
@@ -27,12 +28,9 @@ export default function EditItemBookingDialog({
   const [useTimePeriodWindow, setUseTimePeriodWindow] = React.useState<boolean>(
     !row.start_at && !row.end_at,
   )
-  const [lineStart, setLineStart] = React.useState<string>(
-    row.start_at || '',
-  )
-  const [lineEnd, setLineEnd] = React.useState<string>(
-    row.end_at || '',
-  )
+  const [lineStart, setLineStart] = React.useState<string>(row.start_at || '')
+  const [lineEnd, setLineEnd] = React.useState<string>(row.end_at || '')
+  const [autoSetEndTime, setAutoSetEndTime] = React.useState(false)
 
   React.useEffect(() => {
     if (!open) return
@@ -42,7 +40,14 @@ export default function EditItemBookingDialog({
     setUseTimePeriodWindow(!row.start_at && !row.end_at)
     setLineStart(row.start_at || '')
     setLineEnd(row.end_at || '')
+    setAutoSetEndTime(false) // Don't auto-set when loading existing data
   }, [open, row])
+
+  // Auto-set end time when start time changes
+  React.useEffect(() => {
+    if (!lineStart || !autoSetEndTime || useTimePeriodWindow) return
+    setLineEnd(addThreeHours(lineStart))
+  }, [lineStart, autoSetEndTime, useTimePeriodWindow])
 
   const save = useMutation({
     mutationFn: async () => {
@@ -120,14 +125,20 @@ export default function EditItemBookingDialog({
                 <DateTimePicker
                   label="Start"
                   value={lineStart}
-                  onChange={setLineStart}
+                  onChange={(value) => {
+                    setLineStart(value)
+                    setAutoSetEndTime(true)
+                  }}
                 />
               </Box>
               <Box style={{ flex: 1 }}>
                 <DateTimePicker
                   label="End"
                   value={lineEnd}
-                  onChange={setLineEnd}
+                  onChange={(value) => {
+                    setLineEnd(value)
+                    setAutoSetEndTime(false)
+                  }}
                 />
               </Box>
             </Flex>
@@ -167,4 +178,3 @@ function Field({
     </div>
   )
 }
-

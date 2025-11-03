@@ -25,7 +25,11 @@ import { useAuthz } from '@shared/auth/useAuthz'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import DateTimePicker from '@shared/ui/components/DateTimePicker'
 import { supabase } from '@shared/api/supabase'
-import { makeWordPresentable } from '@shared/lib/generalFunctions'
+import {
+  addThreeHours,
+  makeWordPresentable,
+} from '@shared/lib/generalFunctions'
+import { logActivity } from '@features/latest/api/queries'
 import type { JobStatus, TimePeriodLite } from '@features/jobs/types'
 
 const JOB_STATUS_ORDER: Array<JobStatus> = [
@@ -69,7 +73,12 @@ export default function TimelineTab({ jobId }: { jobId: string }) {
           <Heading size="3" mb="3">
             Job Status
           </Heading>
-          <JobStatusTimeline jobId={jobId} currentStatus={job.status} />
+          <JobStatusTimeline
+            jobId={jobId}
+            currentStatus={job.status}
+            jobTitle={job.title}
+            companyId={job.company_id}
+          />
         </Card>
       )}
 
@@ -91,9 +100,13 @@ export default function TimelineTab({ jobId }: { jobId: string }) {
 function JobStatusTimeline({
   jobId,
   currentStatus,
+  jobTitle,
+  companyId,
 }: {
   jobId: string
   currentStatus: JobStatus
+  jobTitle: string
+  companyId: string
 }) {
   const qc = useQueryClient()
   const { success, error } = useToast()
@@ -105,15 +118,55 @@ function JobStatusTimeline({
 
   const updateStatus = useMutation({
     mutationFn: async (newStatus: JobStatus) => {
+      const previousStatus = currentStatus
       const { error: updateError } = await supabase
         .from('jobs')
         .update({ status: newStatus })
         .eq('id', jobId)
       if (updateError) throw updateError
+
+      // Log activity if status changed to confirmed, canceled, or paid
+      if (
+        previousStatus !== newStatus &&
+        (newStatus === 'confirmed' ||
+          newStatus === 'canceled' ||
+          newStatus === 'paid')
+      ) {
+        try {
+          await logActivity({
+            companyId,
+            activityType: 'job_status_changed',
+            metadata: {
+              job_id: jobId,
+              job_title: jobTitle,
+              previous_status: previousStatus,
+              new_status: newStatus,
+            },
+            title: jobTitle,
+          })
+        } catch (logErr) {
+          console.error('Failed to log job status change activity:', logErr)
+          // Don't fail the whole status update if logging fails
+        }
+      }
+
+      return newStatus
     },
-    onSuccess: async (_, newStatus) => {
-      await qc.invalidateQueries({ queryKey: ['jobs-detail', jobId] })
-      await qc.invalidateQueries({ queryKey: ['company'] })
+    onSuccess: async (newStatus) => {
+      // Invalidate and refetch queries
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['jobs-detail', jobId] }),
+        qc.invalidateQueries({ queryKey: ['company'] }),
+        qc.invalidateQueries({
+          queryKey: ['company', companyId, 'latest-feed'],
+          exact: false,
+        }),
+        // Force refetch of latest feed to ensure new activity appears immediately
+        qc.refetchQueries({
+          queryKey: ['company', companyId, 'latest-feed'],
+          exact: false,
+        }),
+      ])
       success(
         'Status updated',
         `Job status changed to ${makeWordPresentable(newStatus)}`,
@@ -249,12 +302,11 @@ function JobStatusTimeline({
                       ✕
                     </Text>
                   )}
-                  {isActive &&
-                    (isPaidStatus || displayStatus === 'completed') && (
-                      <Text size="1" style={{ color: 'white' }}>
-                        ✓
-                      </Text>
-                    )}
+                  {isActive && isPaidStatus && (
+                    <Text size="1" style={{ color: 'white' }}>
+                      ✓
+                    </Text>
+                  )}
                 </Box>
 
                 {/* Status label */}
@@ -267,7 +319,7 @@ function JobStatusTimeline({
                       ? isActive
                         ? 'var(--red-11)'
                         : 'var(--gray-a9)'
-                      : isPaidStatus || status === 'completed'
+                      : isPaidStatus
                         ? isActive
                           ? 'var(--green-11)'
                           : isPast
@@ -305,7 +357,7 @@ function JobStatusTimeline({
           color={
             isCanceled
               ? 'red'
-              : displayStatus === 'paid' || displayStatus === 'completed'
+              : displayStatus === 'paid'
                 ? 'green'
                 : displayStatus === 'in_progress'
                   ? 'amber'
@@ -735,6 +787,13 @@ function EditTimePeriodDialog({
   const [title, setTitle] = React.useState(timePeriod.title || '')
   const [startAt, setStartAt] = React.useState(timePeriod.start_at)
   const [endAt, setEndAt] = React.useState(timePeriod.end_at)
+  const [autoSetEndTime, setAutoSetEndTime] = React.useState(!timePeriod.id)
+
+  // Auto-set end time when start time changes (only for new time periods)
+  React.useEffect(() => {
+    if (!startAt || !autoSetEndTime || timePeriod.id) return
+    setEndAt(addThreeHours(startAt))
+  }, [startAt, autoSetEndTime, timePeriod.id])
 
   const handleSave = () => {
     onSave({
@@ -794,8 +853,22 @@ function EditTimePeriodDialog({
             )}
           </Box>
 
-          <DateTimePicker label="Start" value={startAt} onChange={setStartAt} />
-          <DateTimePicker label="End" value={endAt} onChange={setEndAt} />
+          <DateTimePicker
+            label="Start"
+            value={startAt}
+            onChange={(value) => {
+              setStartAt(value)
+              setAutoSetEndTime(!timePeriod.id)
+            }}
+          />
+          <DateTimePicker
+            label="End"
+            value={endAt}
+            onChange={(value) => {
+              setEndAt(value)
+              setAutoSetEndTime(false)
+            }}
+          />
         </Flex>
 
         <Flex gap="3" mt="4" justify="end">

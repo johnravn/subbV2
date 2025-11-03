@@ -1,6 +1,16 @@
 import * as React from 'react'
-import { Box, Card, Flex, Grid, Heading, Separator } from '@radix-ui/themes'
+import {
+  Box,
+  Card,
+  Flex,
+  Grid,
+  Heading,
+  IconButton,
+  Separator,
+  Tooltip,
+} from '@radix-ui/themes'
 import { useLocation } from '@tanstack/react-router'
+import { SidebarExpand } from 'iconoir-react'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import PageSkeleton from '@shared/ui/components/PageSkeleton'
 import JobsTable from '../components/JobsTable'
@@ -42,10 +52,33 @@ export default function JobsPage() {
     }
   }, [])
 
-  // Resize state: track left panel width as percentage (default 30%)
-  const [leftPanelWidth, setLeftPanelWidth] = React.useState<number>(37)
+  // Resize state: track left panel width as percentage (default 45/55 split)
+  const [leftPanelWidth, setLeftPanelWidth] = React.useState<number>(45)
+  const [isMinimized, setIsMinimized] = React.useState(false)
+  const [savedWidth, setSavedWidth] = React.useState<number>(45) // Save width when minimizing
   const [isResizing, setIsResizing] = React.useState(false)
   const containerRef = React.useRef<HTMLDivElement>(null)
+
+  // Toggle minimize state
+  const toggleMinimize = React.useCallback(() => {
+    if (isMinimized) {
+      // Expand
+      setLeftPanelWidth(savedWidth || 45)
+      setIsMinimized(false)
+    } else {
+      // Minimize
+      setSavedWidth(leftPanelWidth)
+      setIsMinimized(true)
+    }
+  }, [isMinimized, savedWidth, leftPanelWidth])
+
+  // Expand when clicking on glowing bar
+  const handleGlowingBarClick = React.useCallback(() => {
+    if (isMinimized) {
+      setLeftPanelWidth(savedWidth || 45)
+      setIsMinimized(false)
+    }
+  }, [isMinimized, savedWidth])
 
   // Handle mouse move for resizing
   React.useEffect(() => {
@@ -60,8 +93,8 @@ export default function JobsPage() {
       const mouseX = e.clientX - containerRect.left
 
       // Calculate new left panel width percentage
-      // Min 25%, Max 75% to prevent panels from getting too small
-      const minWidth = 25
+      // Min 15%, Max 75% to prevent panels from getting too small
+      const minWidth = 15
       const maxWidth = 75
       const newWidthPercent = Math.max(
         minWidth,
@@ -69,6 +102,12 @@ export default function JobsPage() {
       )
 
       setLeftPanelWidth(newWidthPercent)
+      // Update saved width if user manually resizes
+      setSavedWidth(newWidthPercent)
+      // Clear minimized state if user manually expands beyond threshold
+      if (isMinimized && newWidthPercent > 35) {
+        setIsMinimized(false)
+      }
     }
 
     const handleMouseUp = () => {
@@ -184,7 +223,7 @@ export default function JobsPage() {
     >
       <Flex
         ref={containerRef}
-        gap="4"
+        gap="2"
         align="stretch"
         style={{
           height: isLarge ? '100%' : undefined,
@@ -198,60 +237,119 @@ export default function JobsPage() {
           style={{
             display: 'flex',
             flexDirection: 'column',
-            width: `${leftPanelWidth}%`,
+            width: isMinimized ? '60px' : `${leftPanelWidth}%`,
             height: isLarge ? '100%' : undefined,
-            minWidth: '300px',
-            maxWidth: '75%',
+            minWidth: isMinimized ? '60px' : '300px',
+            maxWidth: isMinimized ? '60px' : '75%',
             minHeight: 0,
             flexShrink: 0,
-            transition: isResizing ? 'none' : 'width 0.1s ease-out',
+            transition: isResizing ? 'none' : 'width 0.2s ease-out',
+            position: 'relative',
+            overflow: 'hidden',
           }}
         >
-          <Heading size="5" mb="3">
-            Jobs
-          </Heading>
-          <Separator size="4" mb="3" />
-          <Box
-            style={{
-              flex: isLarge ? 1 : undefined,
-              minHeight: isLarge ? 0 : undefined,
-              overflowY: isLarge ? 'auto' : 'visible',
-            }}
-          >
-            <JobsTable selectedId={selectedId} onSelect={setSelectedId} />
-          </Box>
+          {isMinimized ? (
+            <>
+              {/* Glowing vertical bar skeleton with animation */}
+              <Box
+                onClick={handleGlowingBarClick}
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  top: '20px',
+                  bottom: '20px',
+                  transform: 'translateX(-50%)',
+                  width: '12px',
+                  borderRadius: '4px',
+                  background:
+                    'linear-gradient(180deg, var(--accent-9), var(--accent-6))',
+                  cursor: 'pointer',
+                  zIndex: 5,
+                  transition: 'all 0.2s ease-out',
+                  animation: 'glow-pulse 5s ease-in-out infinite',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.width = '24px'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.width = '12px'
+                }}
+              />
+              <style>{`
+                @keyframes glow-pulse {
+                  0%, 100% {
+                    box-shadow: 0 0 8px var(--accent-a5), 0 0 12px var(--accent-a4);
+                  }
+                  50% {
+                    box-shadow: 0 0 12px var(--accent-a6), 0 0 18px var(--accent-a5);
+                  }
+                }
+              `}</style>
+            </>
+          ) : (
+            <>
+              <Flex align="center" justify="between" mb="3">
+                <Heading size="5">Jobs</Heading>
+                <Tooltip content="Collapse sidebar">
+                  <IconButton
+                    size="3"
+                    variant="ghost"
+                    onClick={toggleMinimize}
+                    style={{
+                      flexShrink: 0,
+                    }}
+                  >
+                    <SidebarExpand width={22} height={22} />
+                  </IconButton>
+                </Tooltip>
+              </Flex>
+              <Separator size="4" mb="3" />
+              <Box
+                style={{
+                  flex: isLarge ? 1 : undefined,
+                  minHeight: isLarge ? 0 : undefined,
+                  overflowY: isLarge ? 'auto' : 'visible',
+                }}
+              >
+                <JobsTable selectedId={selectedId} onSelect={setSelectedId} />
+              </Box>
+            </>
+          )}
         </Card>
 
-        {/* RESIZER */}
-        <Box
-          onMouseDown={(e) => {
-            e.preventDefault()
-            setIsResizing(true)
-          }}
-          style={{
-            width: '8px',
-            height: '20%',
-            cursor: 'col-resize',
-            backgroundColor: 'var(--gray-a4)',
-            borderRadius: '4px',
-            flexShrink: 0,
-            alignSelf: 'center',
-            userSelect: 'none',
-            margin: '0 -4px',
-            zIndex: 10,
-            transition: isResizing ? 'none' : 'background-color 0.2s',
-          }}
-          onMouseEnter={(e) => {
-            if (!isResizing) {
-              e.currentTarget.style.backgroundColor = 'var(--gray-a6)'
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!isResizing) {
-              e.currentTarget.style.backgroundColor = 'var(--gray-a4)'
-            }
-          }}
-        />
+        {/* RESIZER - hidden when minimized */}
+        {!isMinimized && (
+          <Box
+            onMouseDown={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setIsResizing(true)
+            }}
+            style={{
+              width: '6px',
+              height: '20%',
+              cursor: 'col-resize',
+              backgroundColor: 'var(--gray-a4)',
+              borderRadius: '4px',
+              flexShrink: 0,
+              alignSelf: 'center',
+              userSelect: 'none',
+              margin: '0 -4px',
+              zIndex: 10,
+              transition: isResizing ? 'none' : 'background-color 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              if (!isResizing) {
+                e.currentTarget.style.backgroundColor = 'var(--gray-a6)'
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isResizing) {
+                e.currentTarget.style.backgroundColor = 'var(--gray-a4)'
+              }
+            }}
+          />
+        )}
 
         {/* RIGHT: Inspector */}
         <Card

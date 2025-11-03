@@ -18,6 +18,7 @@ import {
 import { Car } from 'iconoir-react'
 import { supabase } from '@shared/api/supabase'
 import { useToast } from '@shared/ui/toast/ToastProvider'
+import { addThreeHours } from '@shared/lib/generalFunctions'
 import DateTimePicker from '@shared/ui/components/DateTimePicker'
 import { vehiclesIndexQuery } from '@features/vehicles/api/queries'
 import { jobDetailQuery } from '@features/jobs/api/queries'
@@ -53,6 +54,7 @@ export default function BookVehicleDialog({
   >('')
   const [timePeriodStartAt, setTimePeriodStartAt] = React.useState<string>('')
   const [timePeriodEndAt, setTimePeriodEndAt] = React.useState<string>('')
+  const [autoSetEndTime, setAutoSetEndTime] = React.useState(true)
 
   // External fields
   const [status, setStatus] = React.useState<ExternalReqStatus>('planned')
@@ -171,6 +173,26 @@ export default function BookVehicleDialog({
     }
   }, [selectedVehicle, existingTimePeriods])
 
+  // Set default dates from job when creating new time period
+  React.useEffect(() => {
+    if (createNewTimePeriod && job) {
+      if (job.start_at) {
+        setTimePeriodStartAt(job.start_at)
+        setAutoSetEndTime(true)
+      }
+      if (job.end_at) {
+        setTimePeriodEndAt(job.end_at)
+        setAutoSetEndTime(false)
+      }
+    }
+  }, [createNewTimePeriod, job])
+
+  // Auto-set end time when start time changes (only when creating new time period)
+  React.useEffect(() => {
+    if (!timePeriodStartAt || !autoSetEndTime || !createNewTimePeriod) return
+    setTimePeriodEndAt(addThreeHours(timePeriodStartAt))
+  }, [timePeriodStartAt, autoSetEndTime, createNewTimePeriod])
+
   // Update dates when selected time period changes
   React.useEffect(() => {
     if (
@@ -184,17 +206,10 @@ export default function BookVehicleDialog({
       if (selectedPeriod) {
         setTimePeriodStartAt(selectedPeriod.start_at)
         setTimePeriodEndAt(selectedPeriod.end_at)
+        setAutoSetEndTime(false) // Don't auto-set when using existing period
       }
     }
   }, [selectedTimePeriodId, createNewTimePeriod, existingTimePeriods])
-
-  // Set default dates from job when creating new time period
-  React.useEffect(() => {
-    if (createNewTimePeriod && job) {
-      if (job.start_at) setTimePeriodStartAt(job.start_at)
-      if (job.end_at) setTimePeriodEndAt(job.end_at)
-    }
-  }, [createNewTimePeriod, job])
 
   // Generate time period title
   const timePeriodTitle = React.useMemo(() => {
@@ -420,14 +435,20 @@ export default function BookVehicleDialog({
                       <DateTimePicker
                         label="Start"
                         value={timePeriodStartAt}
-                        onChange={setTimePeriodStartAt}
+                        onChange={(value) => {
+                          setTimePeriodStartAt(value)
+                          setAutoSetEndTime(true)
+                        }}
                       />
                     </Box>
                     <Box style={{ flex: 1 }}>
                       <DateTimePicker
                         label="End"
                         value={timePeriodEndAt}
-                        onChange={setTimePeriodEndAt}
+                        onChange={(value) => {
+                          setTimePeriodEndAt(value)
+                          setAutoSetEndTime(false)
+                        }}
                       />
                     </Box>
                   </Flex>

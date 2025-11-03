@@ -4,14 +4,16 @@ import { Button, Dialog, Flex, Switch, Text, TextField } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { PhoneInputField } from '@shared/phone/PhoneInputField'
-import { upsertCustomer } from '../../api/queries'
+import { formatVATInput } from '@shared/lib/generalFunctions'
 import { NorwayZipCodeField } from '@shared/lib/NorwayZipCodeField'
+import { upsertCustomer } from '../../api/queries'
 
 type Initial = {
   id: string
   name: string
   email: string
   phone: string
+  vat_number: string
   address: string
   is_partner: boolean
 }
@@ -48,6 +50,7 @@ export default function EditCustomerDialog({
 
   const [form, setForm] = React.useState({
     ...initial,
+    vat_number: initial.vat_number ? formatVATInput(initial.vat_number) : '',
     ...parseAddress(initial.address),
   })
 
@@ -55,6 +58,7 @@ export default function EditCustomerDialog({
     if (!open) return
     setForm({
       ...initial,
+      vat_number: initial.vat_number ? formatVATInput(initial.vat_number) : '',
       ...parseAddress(initial.address),
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -89,6 +93,7 @@ export default function EditCustomerDialog({
         name: form.name,
         email: form.email || null,
         phone: form.phone || null,
+        vat_number: form.vat_number.trim() || null,
         address: addressString,
         is_partner: !!form.is_partner,
       })
@@ -126,6 +131,15 @@ export default function EditCustomerDialog({
               onChange={(val) => set('phone', val ?? '')} // <-- fix
               defaultCountry="NO"
               placeholder="Enter phone number"
+            />
+          </Field>
+          <Field label="VAT number">
+            <TextField.Root
+              value={form.vat_number}
+              onChange={(e) =>
+                set('vat_number', formatVATInput(e.target.value))
+              }
+              placeholder="e.g., 123 456 789"
             />
           </Field>
           <Field label="Address line">

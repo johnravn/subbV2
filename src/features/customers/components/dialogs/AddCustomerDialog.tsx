@@ -1,11 +1,12 @@
 import * as React from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button, Dialog, Flex, Switch, Text, TextField } from '@radix-ui/themes'
 import { PhoneInputField } from '@shared/phone/PhoneInputField'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { supabase } from '@shared/api/supabase'
 import { NorwayZipCodeField } from '@shared/lib/NorwayZipCodeField'
+import { formatVATInput } from '@shared/lib/generalFunctions'
 
 export default function AddCustomerDialog({
   open,
@@ -17,10 +18,12 @@ export default function AddCustomerDialog({
   onAdded?: () => void
 }) {
   const { companyId } = useCompany()
+  const qc = useQueryClient()
   const [form, setForm] = React.useState({
     name: '',
     email: '',
     phone: '',
+    vat_number: '',
     address_line: '',
     zip_code: '',
     city: '',
@@ -56,6 +59,7 @@ export default function AddCustomerDialog({
         name: form.name,
         email: form.email || null,
         phone: form.phone || null,
+        vat_number: form.vat_number.trim() || null,
         address: addressString,
         is_partner: !!form.is_partner,
       }
@@ -95,19 +99,44 @@ export default function AddCustomerDialog({
         if (addressError) throw addressError
       }
 
+      // Log activity for new customers
+      if (customerId) {
+        try {
+          const { logActivity } = await import('@features/latest/api/queries')
+          await logActivity({
+            companyId,
+            activityType: 'customer_added',
+            metadata: {
+              customer_id: customerId,
+              customer_name: form.name.trim(),
+              is_partner: form.is_partner,
+            },
+            title: form.name.trim(),
+          })
+        } catch (logErr) {
+          console.error('Failed to log activity:', logErr)
+          // Don't fail the whole operation if logging fails
+        }
+      }
+
       return customerId
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       // Reset form
       setForm({
         name: '',
         email: '',
         phone: '',
+        vat_number: '',
         address_line: '',
         zip_code: '',
         city: '',
         country: 'Norway',
         is_partner: false,
+      })
+      await qc.invalidateQueries({
+        queryKey: ['company', companyId, 'latest-feed'],
+        exact: false,
       })
       onOpenChange(false)
       onAdded?.()
@@ -146,6 +175,15 @@ export default function AddCustomerDialog({
               onChange={(val) => set('phone', val ?? '')} // <-- fix
               defaultCountry="NO"
               placeholder="Enter phone number"
+            />
+          </Field>
+          <Field label="VAT number">
+            <TextField.Root
+              value={form.vat_number}
+              onChange={(e) =>
+                set('vat_number', formatVATInput(e.target.value))
+              }
+              placeholder="e.g., 123 456 789"
             />
           </Field>
           <Field label="Address line">

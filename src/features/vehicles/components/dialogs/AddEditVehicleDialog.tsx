@@ -130,7 +130,29 @@ export default function AddEditVehicleDialog({
         image_path: form.image_path,
         notes: form.notes.trim() || null,
       }
-      return upsertVehicle(payload)
+      const vehicleId = await upsertVehicle(payload)
+
+      // Log activity for new vehicles
+      if (mode === 'create') {
+        try {
+          const { logActivity } = await import('@features/latest/api/queries')
+          await logActivity({
+            companyId,
+            activityType: 'vehicle_added',
+            metadata: {
+              vehicle_id: vehicleId,
+              vehicle_name: form.name.trim(),
+              license_plate: form.registration_no.trim() || null,
+            },
+            title: form.name.trim(),
+          })
+        } catch (logErr) {
+          console.error('Failed to log activity:', logErr)
+          // Don't fail the whole operation if logging fails
+        }
+      }
+
+      return vehicleId
     },
     onSuccess: async () => {
       await Promise.all([
@@ -140,6 +162,10 @@ export default function AddEditVehicleDialog({
         }),
         qc.invalidateQueries({
           queryKey: ['company', companyId, 'vehicle-detail'],
+          exact: false,
+        }),
+        qc.invalidateQueries({
+          queryKey: ['company', companyId, 'latest-feed'],
           exact: false,
         }),
       ])

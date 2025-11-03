@@ -7,6 +7,7 @@ export type CustomerRow = {
   email: string | null
   phone: string | null
   address: string | null
+  vat_number: string | null
   is_partner: boolean
   created_at: string
 }
@@ -47,18 +48,49 @@ export function customersIndexQuery({
       let q = supabase
         .from('customers')
         .select(
-          'id, company_id, name, email, phone, address, is_partner, created_at',
+          'id, company_id, name, email, phone, address, vat_number, is_partner, created_at',
         )
         .eq('company_id', companyId)
         .or('deleted.is.null,deleted.eq.false')
-        .order('name', { ascending: true })
-      if (search) q = q.ilike('name', `%${search}%`)
+      
+      // Apply fuzzy search using expanded ilike patterns
+      if (search && search.trim()) {
+        const term = search.trim()
+        // Use multiple patterns for fuzzy matching:
+        // 1. Exact substring match
+        // 2. Match with characters in order but possibly spaced (handles typos)
+        const patterns = [
+          `%${term}%`,
+          term.length > 2 ? `%${term.split('').join('%')}%` : null,
+        ].filter(Boolean) as string[]
+        
+        const conditions = patterns
+          .map((pattern) => `name.ilike.${pattern}`)
+          .join(',')
+        q = q.or(conditions)
+      }
+      
+      q = q.order('name', { ascending: true })
+      
       if (showRegular && !showPartner) q = q.eq('is_partner', false)
       if (!showRegular && showPartner) q = q.eq('is_partner', true)
       // if both on -> no filter; if both off -> show none
       if (!showRegular && !showPartner) return []
       const { data, error } = await q
       if (error) throw error
+      
+      // Apply client-side fuzzy matching for better results
+      // This handles cases where database ilike isn't fuzzy enough
+      if (search && search.trim()) {
+        const { fuzzySearch } = await import('@shared/lib/generalFunctions')
+        return fuzzySearch(
+          (data || []) as CustomerRow[],
+          search,
+          [(item) => item.name, (item) => item.email, (item) => item.phone],
+          0.25, // Lower threshold since we already filtered with ilike
+        ) as CustomerRow[]
+      }
+      
       return data as any
     },
   }
@@ -80,7 +112,7 @@ export function customerDetailQuery({
       const { data: c, error } = await supabase
         .from('customers')
         .select(
-          'id, company_id, name, email, phone, address, is_partner, created_at',
+          'id, company_id, name, email, phone, address, vat_number, is_partner, created_at',
         )
         .eq('company_id', companyId)
         .eq('id', id)
@@ -109,6 +141,7 @@ export async function upsertCustomer(payload: {
   email?: string | null
   phone?: string | null
   address?: string | null
+  vat_number?: string | null
   is_partner?: boolean
 }) {
   const body = {
@@ -117,6 +150,7 @@ export async function upsertCustomer(payload: {
     email: payload.email ?? null,
     phone: payload.phone ?? null,
     address: payload.address ?? null,
+    vat_number: payload.vat_number ?? null,
     is_partner: !!payload.is_partner,
   }
   if (payload.id) {

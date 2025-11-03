@@ -23,6 +23,7 @@ const activityTypeLabels: Record<ActivityType, string> = {
   crew_added: 'Crew',
   crew_removed: 'Crew',
   job_created: 'Jobs',
+  job_status_changed: 'Jobs',
   job_deleted: 'Jobs',
   announcement: 'Announcements',
 }
@@ -38,7 +39,7 @@ const categoryGroups: Record<string, Array<ActivityType>> = {
   Vehicles: ['vehicle_added', 'vehicle_removed'],
   Customers: ['customer_added', 'customer_removed'],
   Crew: ['crew_added', 'crew_removed'],
-  Jobs: ['job_created', 'job_deleted'],
+  Jobs: ['job_created', 'job_status_changed', 'job_deleted'],
   Announcements: ['announcement'],
 }
 
@@ -80,8 +81,10 @@ export default function ActivityFilter({
   return (
     <DropdownMenu.Root open={open} onOpenChange={setOpen}>
       <DropdownMenu.Trigger>
-        <IconButton variant="soft" size="2">
-          <Filter width={16} height={16} />
+        <Box style={{ position: 'relative', display: 'inline-block' }}>
+          <IconButton variant="soft" size="2">
+            <Filter width={16} height={16} />
+          </IconButton>
           {activeFiltersCount > 0 && (
             <Box
               style={{
@@ -102,7 +105,7 @@ export default function ActivityFilter({
               {activeFiltersCount}
             </Box>
           )}
-        </IconButton>
+        </Box>
       </DropdownMenu.Trigger>
 
       <DropdownMenu.Content align="end" style={{ minWidth: 200 }}>
@@ -131,12 +134,33 @@ export default function ActivityFilter({
         <DropdownMenu.Separator />
 
         <DropdownMenu.Label>Filter by Type</DropdownMenu.Label>
-        {Object.entries(activityTypeLabels).map(([type, label]) => {
-          const isSelected = selectedTypes.includes(type as ActivityType)
+        {Object.entries(
+          Object.entries(activityTypeLabels).reduce(
+            (acc, [type, label]) => {
+              if (!acc[label]) {
+                acc[label] = []
+              }
+              acc[label].push(type as ActivityType)
+              return acc
+            },
+            {} as Record<string, Array<ActivityType>>,
+          ),
+        ).map(([label, types]) => {
+          const isSelected = types.every((t) => selectedTypes.includes(t))
           return (
             <DropdownMenu.Item
-              key={type}
-              onClick={() => toggleType(type as ActivityType)}
+              key={label}
+              onClick={() => {
+                // If all types are selected, deselect all; otherwise select all
+                if (isSelected) {
+                  onTypesChange(
+                    selectedTypes.filter((t) => !types.includes(t)),
+                  )
+                } else {
+                  const newTypes = [...new Set([...selectedTypes, ...types])]
+                  onTypesChange(newTypes)
+                }
+              }}
             >
               <Flex align="center" gap="2">
                 <Checkbox checked={isSelected} />

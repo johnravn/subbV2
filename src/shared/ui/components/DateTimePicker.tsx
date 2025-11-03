@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Box, Flex, IconButton, Popover, Text } from '@radix-ui/themes'
-import { Calendar, Check } from 'iconoir-react'
+import { Calendar } from 'iconoir-react'
 
 type Props = {
   value: string // ISO string or empty string
@@ -57,7 +57,9 @@ export default function DateTimePicker({
     const month = currentMonth.getMonth()
     const firstDay = new Date(year, month, 1)
     const lastDay = new Date(year, month + 1, 0)
-    const startPadding = firstDay.getDay() // 0 = Sunday
+    // Convert Sunday (0) to 6, Monday (1) to 0, etc. to make Monday the first day
+    const dayOfWeek = firstDay.getDay() // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    const startPadding = dayOfWeek === 0 ? 6 : dayOfWeek - 1 // Monday = 0, Sunday = 6
     const daysInMonth = lastDay.getDate()
 
     const days: Array<{ day: number; date: Date; isCurrentMonth: boolean }> = []
@@ -183,7 +185,7 @@ export default function DateTimePicker({
   const monthNameOnly = currentMonth.toLocaleDateString('en-US', {
     month: 'long',
   })
-  
+
   // Generate years for year picker (1930 to current year + 10 years)
   const yearRange = React.useMemo(() => {
     const currentYearNum = new Date().getFullYear()
@@ -193,7 +195,7 @@ export default function DateTimePicker({
     }
     return years
   }, [])
-  
+
   const handleYearSelect = (year: number) => {
     setCurrentMonth(new Date(year, currentMonthIndex, 1))
     setShowYearPicker(false)
@@ -206,11 +208,14 @@ export default function DateTimePicker({
         `[data-year="${new Date().getFullYear()}"]`,
       ) as HTMLElement
       if (currentYearButton) {
-        currentYearButton.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        currentYearButton.scrollIntoView({
+          block: 'center',
+          behavior: 'smooth',
+        })
       }
     }
   }, [showYearPicker])
-  
+
   const isToday = (date: Date) =>
     toLocalDate(date.toISOString()) === toLocalDate(new Date().toISOString())
   const isSelected = (date: Date) =>
@@ -339,15 +344,6 @@ export default function DateTimePicker({
                 </button>
               </Flex>
             )}
-            {dateOnly && <Box style={{ flex: 1 }} />}
-            <IconButton
-              variant="ghost"
-              size="3"
-              onClick={() => setOpen(false)}
-              style={{ cursor: 'pointer' }}
-            >
-              <Check width={20} height={20} />
-            </IconButton>
           </Flex>
 
           {/* Date picker */}
@@ -436,7 +432,7 @@ export default function DateTimePicker({
                   gap: 4,
                 }}
               >
-                {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
+                {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map((day) => (
                   <Text
                     key={day}
                     size="1"
@@ -523,7 +519,7 @@ export default function DateTimePicker({
                 </Text>
                 <Box style={{ width: 60 }} /> {/* Spacer for alignment */}
               </Flex>
-              
+
               {/* Year grid */}
               <Box
                 ref={yearPickerRef}

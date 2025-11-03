@@ -2,6 +2,7 @@ import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Box, Button, Dialog, Flex, Text, TextField } from '@radix-ui/themes'
 import { supabase } from '@shared/api/supabase'
+import { addThreeHours } from '@shared/lib/generalFunctions'
 import DateTimePicker from '@shared/ui/components/DateTimePicker'
 
 export default function AddRoleDialog({
@@ -18,6 +19,7 @@ export default function AddRoleDialog({
   const [needed, setNeeded] = React.useState<number>(1)
   const [startAt, setStartAt] = React.useState('')
   const [endAt, setEndAt] = React.useState('')
+  const [autoSetEndTime, setAutoSetEndTime] = React.useState(true)
   const [roleCategory, setRoleCategory] = React.useState('')
 
   // Fetch company_id from job
@@ -45,11 +47,19 @@ export default function AddRoleDialog({
     if (!open || !job) return
     if (!startAt && job.start_at) {
       setStartAt(job.start_at)
+      setAutoSetEndTime(true)
     }
     if (!endAt && job.end_at) {
       setEndAt(job.end_at)
+      setAutoSetEndTime(false)
     }
   }, [open, job, startAt, endAt])
+
+  // Auto-set end time when start time changes
+  React.useEffect(() => {
+    if (!startAt || !autoSetEndTime) return
+    setEndAt(addThreeHours(startAt))
+  }, [startAt, autoSetEndTime])
 
   const titleSuggestions = [
     'Technician',
@@ -148,11 +158,21 @@ export default function AddRoleDialog({
               <DateTimePicker
                 label="Start"
                 value={startAt}
-                onChange={setStartAt}
+                onChange={(value) => {
+                  setStartAt(value)
+                  setAutoSetEndTime(true)
+                }}
               />
             </Box>
             <Box style={{ flex: 1 }}>
-              <DateTimePicker label="End" value={endAt} onChange={setEndAt} />
+              <DateTimePicker
+                label="End"
+                value={endAt}
+                onChange={(value) => {
+                  setEndAt(value)
+                  setAutoSetEndTime(false)
+                }}
+              />
             </Box>
           </Flex>
           <Box>

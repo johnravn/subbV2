@@ -69,8 +69,20 @@ export function vehiclesIndexQuery({
 
       const term = search.trim()
       if (term) {
-        const s = `%${term}%`
-        q = q.or(`name.ilike.${s},registration_no.ilike.${s}`)
+        // Fuzzy search: use multiple patterns for better matching
+        const patterns = [
+          `%${term}%`,
+          term.length > 2 ? `%${term.split('').join('%')}%` : null,
+        ].filter(Boolean) as string[]
+        
+        const conditions = patterns
+          .flatMap((pattern) => [
+            `name.ilike.${pattern}`,
+            `registration_no.ilike.${pattern}`,
+          ])
+          .join(',')
+        
+        q = q.or(conditions)
       }
 
       const { data, error } = await q.order('name', { ascending: true })

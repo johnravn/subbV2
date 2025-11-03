@@ -61,10 +61,23 @@ export default function AddContactDialog({
         .eq('company_id', companyId)
         .order('name', { ascending: true })
 
+      // Apply fuzzy search using multiple patterns
       if (searchQuery.trim()) {
-        q = q.or(
-          `name.ilike.%${searchQuery.trim()}%,email.ilike.%${searchQuery.trim()}%,phone.ilike.%${searchQuery.trim()}%`,
-        )
+        const term = searchQuery.trim()
+        const patterns = [
+          `%${term}%`,
+          term.length > 2 ? `%${term.split('').join('%')}%` : null,
+        ].filter(Boolean) as string[]
+        
+        const conditions = patterns
+          .flatMap((pattern) => [
+            `name.ilike.${pattern}`,
+            `email.ilike.${pattern}`,
+            `phone.ilike.${pattern}`,
+          ])
+          .join(',')
+        
+        q = q.or(conditions)
       }
 
       const { data, error } = await q.limit(20)
@@ -79,15 +92,19 @@ export default function AddContactDialog({
     },
   })
 
-  // Filter contacts based on search
+  // Apply client-side fuzzy filtering for better results
   const filteredContacts = React.useMemo(() => {
     if (!searchQuery.trim()) return contacts
-    const query = searchQuery.toLowerCase().trim()
-    return contacts.filter(
-      (c) =>
-        c.name.toLowerCase().includes(query) ||
-        c.email?.toLowerCase().includes(query) ||
-        c.phone?.includes(query),
+    const { fuzzySearch } = require('@shared/lib/generalFunctions')
+    return fuzzySearch(
+      contacts,
+      searchQuery,
+      [
+        (c) => c.name,
+        (c) => c.email ?? '',
+        (c) => c.phone ?? '',
+      ],
+      0.25,
     )
   }, [contacts, searchQuery])
 

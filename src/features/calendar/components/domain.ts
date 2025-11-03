@@ -12,10 +12,11 @@ export type CalendarRecord = {
   end?: string | null // ISO
   allDay?: boolean
   kind: CalendarKind
-  // Optional “who/what” the booking is for (used for filters)
+  // Optional "who/what" the booking is for (used for filters)
   ref?: {
     jobId?: string
-    itemId?: string
+    itemId?: string // For single-item queries (backward compatibility)
+    itemIds?: string[] // All item IDs for this equipment period
     vehicleId?: string
     userId?: string // crew
   }
@@ -89,16 +90,37 @@ export function applyCalendarFilter(
   if (!f) return events
   const kinds = f.kinds?.length ? new Set(f.kinds) : null
   const { jobId, itemId, vehicleId, userId } = f.scope ?? {}
-  const q = f.text?.toLowerCase().trim()
+  const q = f.text?.trim()
 
-  return events.filter((e) => {
+  // Use fuzzy matching for text search if available
+  let filteredEvents = events.filter((e) => {
     const xp = (e.extendedProps ?? {}) as any
     const okKind = kinds ? kinds.has(xp.kind) : true
     const okJob = jobId ? xp.ref?.jobId === jobId : true
-    const okItem = itemId ? xp.ref?.itemId === itemId : true
+    // Check both itemId (single) and itemIds (array) for backward compatibility
+    const okItem = itemId
+      ? xp.ref?.itemId === itemId ||
+        (Array.isArray(xp.ref?.itemIds) && xp.ref.itemIds.includes(itemId))
+      : true
     const okVeh = vehicleId ? xp.ref?.vehicleId === vehicleId : true
     const okUser = userId ? xp.ref?.userId === userId : true
-    const okText = q ? (e.title?.toLowerCase().includes(q) ?? false) : true
-    return okKind && okJob && okItem && okVeh && okUser && okText
+    return okKind && okJob && okItem && okVeh && okUser
   })
+
+  // Apply fuzzy text search if query provided
+  if (q) {
+    const { fuzzySearch } = require('@shared/lib/generalFunctions')
+    filteredEvents = fuzzySearch(
+      filteredEvents,
+      q,
+      [
+        (e) => e.title ?? '',
+        (e) => (e.extendedProps as any)?.jobTitle ?? null,
+        (e) => (e.extendedProps as any)?.projectLead?.display_name ?? null,
+      ],
+      0.3,
+    )
+  }
+
+  return filteredEvents
 }

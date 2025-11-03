@@ -12,6 +12,7 @@ import {
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { ArrowDown, ArrowUp, Search, Trash } from 'iconoir-react'
+import { fuzzySearch } from '@shared/lib/generalFunctions'
 import {
   crewIndexQuery,
   deleteInvite,
@@ -133,12 +134,17 @@ export default function CrewTable({
       )
     }
 
-    const term = search.trim().toLowerCase()
-    const filtered = term
-      ? L.filter(
-          (r) =>
-            r.title.toLowerCase().includes(term) ||
-            (r.subtitle ?? '').toLowerCase().includes(term),
+    // Use fuzzy search for better matching
+    const filtered = search.trim()
+      ? fuzzySearch(
+          L,
+          search,
+          [
+            (r) => r.title,
+            (r) => r.subtitle ?? '',
+            (r) => r.email ?? '',
+          ],
+          0.3,
         )
       : L
 

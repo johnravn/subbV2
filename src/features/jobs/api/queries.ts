@@ -129,24 +129,22 @@ export function jobsIndexQuery({
         })
       }
 
-      // Client-side filtering across title, customer name, project lead name, and date
+      // Client-side fuzzy filtering across title, customer name, project lead name, and date
       // (PostgREST doesn't support filtering on joined columns like customer.name)
       if (search.trim()) {
-        const searchLower = search.trim().toLowerCase()
-        results = results.filter((job) => {
-          const customerMatch =
-            job.customer?.name?.toLowerCase().includes(searchLower) ?? false
-          const titleMatch = job.title.toLowerCase().includes(searchLower)
-          const dateMatch =
-            job.start_at?.toLowerCase().includes(searchLower) ?? false
-          const projectLeadMatch =
-            job.project_lead?.display_name
-              ?.toLowerCase()
-              .includes(searchLower) ??
-            job.project_lead?.email?.toLowerCase().includes(searchLower) ??
-            false
-          return customerMatch || titleMatch || dateMatch || projectLeadMatch
-        })
+        const { fuzzySearch } = await import('@shared/lib/generalFunctions')
+        results = fuzzySearch(
+          results,
+          search,
+          [
+            (job) => job.title,
+            (job) => job.customer?.name ?? null,
+            (job) => job.project_lead?.display_name ?? null,
+            (job) => job.project_lead?.email ?? null,
+            (job) => job.start_at ?? null,
+          ],
+          0.25, // Lower threshold for fuzzy matching
+        )
       }
 
       // Client-side sort for customer_name

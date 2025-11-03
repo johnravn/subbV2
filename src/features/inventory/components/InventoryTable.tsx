@@ -102,9 +102,12 @@ export default function InventoryTable({
     )
 
     // Measure an actual row height if possible; fall back to 44px
-    const rowEl = containerRef.current?.querySelector<HTMLTableRowElement>(
-      'tbody tr[data-row-probe], tbody tr',
+    // Prefer visible rows, but can use probe row as fallback
+    const visibleRow = containerRef.current?.querySelector<HTMLTableRowElement>(
+      'tbody tr:not([data-row-probe])',
     )
+    const rowEl = visibleRow || 
+      containerRef.current?.querySelector<HTMLTableRowElement>('tbody tr[data-row-probe]')
     const rowH = rowEl?.getBoundingClientRect().height || 44
 
     const rows = Math.max(5, Math.floor(available / rowH)) // never go below 5
@@ -145,6 +148,8 @@ export default function InventoryTable({
   React.useEffect(() => {
     // next tick so the DOM is painted before measuring
     if (pageSizeOverride != null) return // ⬅️ bail out on phones
+    // Only recompute if we have rows to measure
+    if (!data?.rows || data.rows.length === 0) return
     const id = requestAnimationFrame(recomputePageSize)
     return () => cancelAnimationFrame(id)
   }, [
@@ -377,43 +382,59 @@ export default function InventoryTable({
         </Table.Header>
 
         <Table.Body>
-          {!isLoading && table.getRowModel().rows.length === 0 && (
-            <Table.Row data-row-probe style={{ visibility: 'hidden' }}>
-              <Table.Cell colSpan={columns.length}>probe</Table.Cell>
-            </Table.Row>
-          )}
           {isLoading ? (
             <Table.Row>
               <Table.Cell colSpan={columns.length}>Loading…</Table.Cell>
             </Table.Row>
           ) : table.getRowModel().rows.length === 0 ? (
             <Table.Row>
-              <Table.Cell colSpan={columns.length}>No results</Table.Cell>
+              <Table.Cell
+                colSpan={columns.length}
+                style={{
+                  textAlign: 'center',
+                  padding: 'var(--space-3)',
+                }}
+              >
+                <Text size="2" color="gray">
+                  No results
+                </Text>
+              </Table.Cell>
             </Table.Row>
           ) : (
-            table.getRowModel().rows.map((row) => {
-              const active = row.original.id === selectedId
-              return (
-                <Table.Row
-                  key={row.id}
-                  onClick={() => onSelect(row.original.id)}
-                  style={{
-                    cursor: 'pointer',
-                    background: active ? 'var(--accent-a3)' : undefined,
-                  }}
-                  data-state={active ? 'active' : undefined}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <Table.Cell key={cell.id}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext(),
-                      )}
-                    </Table.Cell>
-                  ))}
-                </Table.Row>
-              )
-            })
+            <>
+              {table.getRowModel().rows.map((row) => {
+                const active = row.original.id === selectedId
+                return (
+                  <Table.Row
+                    key={row.id}
+                    onClick={() => onSelect(row.original.id)}
+                    style={{
+                      cursor: 'pointer',
+                      background: active ? 'var(--accent-a3)' : undefined,
+                    }}
+                    data-state={active ? 'active' : undefined}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <Table.Cell key={cell.id}>
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext(),
+                        )}
+                      </Table.Cell>
+                    ))}
+                  </Table.Row>
+                )
+              })}
+              {/* Probe row for height measurement - last row, completely hidden */}
+              <Table.Row
+                data-row-probe
+                style={{
+                  display: 'none',
+                }}
+              >
+                <Table.Cell colSpan={columns.length}>probe</Table.Cell>
+              </Table.Row>
+            </>
           )}
         </Table.Body>
       </Table.Root>
