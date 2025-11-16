@@ -110,18 +110,39 @@ export default function EditWelcomeMatterDialog({
         if (updateError) throw updateError
       } else {
         // Create new welcome matter
-        const { error: createError } = await supabase.from('matters').insert({
-          company_id: companyId,
-          created_by_user_id: user.id,
-          matter_type: 'announcement',
-          title: form.title.trim(),
-          content: form.content.trim() || null,
-        })
+        const { data: newMatter, error: createError } = await supabase
+          .from('matters')
+          .insert({
+            company_id: companyId,
+            created_by_user_id: user.id,
+            matter_type: 'announcement',
+            title: form.title.trim(),
+            content: form.content.trim() || null,
+          })
+          .select('id')
+          .single()
 
         if (createError) throw createError
 
-        // Note: Recipients should be added automatically when users are added to the company
-        // This is handled by the system when users join
+        // Add all existing company members as recipients to the welcome matter
+        // This handles the case where the welcome matter is created after users already exist
+        if (newMatter?.id) {
+          const { error: recipientsError } = await supabase.rpc(
+            'add_existing_users_to_welcome_matter',
+            {
+              p_company_id: companyId,
+              p_matter_id: newMatter.id,
+            },
+          )
+
+          // Don't fail the whole operation if adding recipients fails (they'll be added via trigger for new users)
+          if (recipientsError) {
+            console.warn(
+              'Failed to add existing users to welcome matter:',
+              recipientsError,
+            )
+          }
+        }
       }
     },
     onSuccess: () => {

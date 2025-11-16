@@ -28,6 +28,11 @@ export type JobListRow = {
     id: UUID
     name: string | null
   } | null
+  customer_user?: {
+    user_id: UUID
+    display_name: string | null
+    email: string
+  } | null
   project_lead?: {
     user_id: UUID
     display_name: string | null
@@ -62,6 +67,7 @@ export type JobDetail = {
 
   project_lead_user_id: UUID | null
   customer_id: UUID | null
+  customer_user_id: UUID | null
   customer_contact_id: UUID | null
   job_address_id: UUID | null
 
@@ -69,6 +75,13 @@ export type JobDetail = {
     id: UUID
     name: string | null
     email: string | null
+    phone: string | null
+  } | null
+
+  customer_user?: {
+    user_id: UUID
+    display_name: string | null
+    email: string
     phone: string | null
   } | null
 

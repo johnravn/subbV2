@@ -6,11 +6,14 @@ import {
   Flex,
   Grid,
   Heading,
+  Select,
   Separator,
   Switch,
   Text,
 } from '@radix-ui/themes'
+import { useQuery } from '@tanstack/react-query'
 import { useCompany } from '@shared/companies/CompanyProvider'
+import { supabase } from '@shared/api/supabase'
 import { Plus } from 'iconoir-react'
 import PageSkeleton from '@shared/ui/components/PageSkeleton'
 import MatterList from '../components/MatterList'
@@ -22,6 +25,48 @@ export default function MattersPage() {
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
   const [createMatterOpen, setCreateMatterOpen] = React.useState(false)
   const [unreadFilter, setUnreadFilter] = React.useState(false)
+  const [companyFilter, setCompanyFilter] = React.useState<string | 'all'>(
+    'all',
+  )
+
+  // Fetch all companies the user is a member of for the filter
+  const { data: user } = useQuery({
+    queryKey: ['auth', 'user'],
+    queryFn: async () => (await supabase.auth.getUser()).data.user ?? null,
+  })
+
+  const { data: companies } = useQuery({
+    queryKey: ['my-companies', user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('superuser')
+        .eq('user_id', user!.id)
+        .maybeSingle()
+
+      const isSuperuser = profile?.superuser ?? false
+
+      if (isSuperuser) {
+        const { data, error } = await supabase
+          .from('companies')
+          .select('id, name')
+          .order('name', { ascending: true })
+        if (error) throw error
+        return data
+      } else {
+        const { data, error } = await supabase
+          .from('company_users')
+          .select('companies ( id, name )')
+          .eq('user_id', user!.id)
+        if (error) throw error
+        return (data as Array<any>)
+          .map((r) => r.companies)
+          .filter(Boolean)
+          .sort((a: any, b: any) => a.name.localeCompare(b.name))
+      }
+    },
+  })
 
   // Responsive toggle for >= 1024px (large screens)
   const [isLarge, setIsLarge] = React.useState<boolean>(() =>
@@ -92,7 +137,6 @@ export default function MattersPage() {
     return (
       <section
         style={{
-          height: isLarge ? '100%' : undefined,
           minHeight: 0,
         }}
       >
@@ -101,7 +145,6 @@ export default function MattersPage() {
           gap="4"
           align="stretch"
           style={{
-            height: isLarge ? '100%' : undefined,
             minHeight: 0,
           }}
         >
@@ -122,7 +165,7 @@ export default function MattersPage() {
               }}
             >
               <Heading size="5">Matters</Heading>
-              <Flex align="center" gap="3">
+              <Flex align="center" gap="3" wrap="wrap">
                 <Flex align="center" gap="2">
                   <Text size="2" weight="medium">
                     Unread only
@@ -133,6 +176,26 @@ export default function MattersPage() {
                     size="2"
                   />
                 </Flex>
+                {companies && companies.length > 0 && (
+                  <Select.Root
+                    value={companyFilter}
+                    size="3"
+                    onValueChange={(val) => setCompanyFilter(val)}
+                  >
+                    <Select.Trigger
+                      placeholder="Filter company…"
+                      style={{ minHeight: 'var(--space-7)' }}
+                    />
+                    <Select.Content>
+                      <Select.Item value="all">All Companies</Select.Item>
+                      {companies.map((c: any) => (
+                        <Select.Item key={c.id} value={c.id}>
+                          {c.name}
+                        </Select.Item>
+                      ))}
+                    </Select.Content>
+                  </Select.Root>
+                )}
                 <Button size="2" onClick={() => setCreateMatterOpen(true)}>
                   <Plus /> New Matter
                 </Button>
@@ -148,6 +211,8 @@ export default function MattersPage() {
                 selectedId={selectedId}
                 onSelect={setSelectedId}
                 unreadFilter={unreadFilter}
+                companyFilter={companyFilter}
+                companies={companies || []}
               />
             </Box>
           </Card>
@@ -239,7 +304,7 @@ export default function MattersPage() {
             }}
           >
             <Heading size="5">Matters</Heading>
-            <Flex align="center" gap="3">
+            <Flex align="center" gap="3" wrap="wrap">
               <Flex align="center" gap="2">
                 <Text size="2" weight="medium">
                   Unread only
@@ -250,6 +315,26 @@ export default function MattersPage() {
                   size="2"
                 />
               </Flex>
+              {companies && companies.length > 0 && (
+                <Select.Root
+                  value={companyFilter}
+                  size="3"
+                  onValueChange={(val) => setCompanyFilter(val)}
+                >
+                  <Select.Trigger
+                    placeholder="Filter company…"
+                    style={{ minHeight: 'var(--space-7)' }}
+                  />
+                  <Select.Content>
+                    <Select.Item value="all">All Companies</Select.Item>
+                    {companies.map((c: any) => (
+                      <Select.Item key={c.id} value={c.id}>
+                        {c.name}
+                      </Select.Item>
+                    ))}
+                  </Select.Content>
+                </Select.Root>
+              )}
               <Button size="2" onClick={() => setCreateMatterOpen(true)}>
                 <Plus /> New Matter
               </Button>
@@ -266,6 +351,8 @@ export default function MattersPage() {
               selectedId={selectedId}
               onSelect={setSelectedId}
               unreadFilter={unreadFilter}
+              companyFilter={companyFilter}
+              companies={companies || []}
             />
           </Box>
         </Card>

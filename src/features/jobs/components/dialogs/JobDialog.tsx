@@ -59,6 +59,9 @@ export default function JobDialog({
   const [customerId, setCustomerId] = React.useState<UUID | ''>(
     initialData?.customer_id ?? '',
   )
+  const [customerUserId, setCustomerUserId] = React.useState<UUID | ''>(
+    initialData?.customer_user_id ?? '',
+  )
   const [contactId, setContactId] = React.useState<UUID | ''>(
     initialData?.customer_contact_id ?? '',
   )
@@ -73,6 +76,7 @@ export default function JobDialog({
     setAutoSetEndTime(false) // Don't auto-set when loading existing data
     setProjectLead(initialData.project_lead_user_id ?? '')
     setCustomerId(initialData.customer_id ?? '')
+    setCustomerUserId(initialData.customer_user_id ?? '')
     setContactId(initialData.customer_contact_id ?? '')
   }, [open, mode, initialData])
 
@@ -84,7 +88,17 @@ export default function JobDialog({
 
   React.useEffect(() => {
     setContactId('') // clear previous selection if customer changes
+    if (customerId) {
+      setCustomerUserId('') // clear user selection if customer is selected
+    }
   }, [customerId])
+
+  React.useEffect(() => {
+    if (customerUserId) {
+      setCustomerId('') // clear customer selection if user is selected
+      setContactId('') // clear contact selection when user is selected
+    }
+  }, [customerUserId])
 
   // Set current user as project lead when creating a new job
   React.useEffect(() => {
@@ -114,6 +128,24 @@ export default function JobDialog({
         user_id: UUID
         display_name: string | null
         email: string
+      }>
+    },
+  })
+
+  const { data: companyUsers = [] } = useQuery({
+    queryKey: ['company', companyId, 'users-for-customer'],
+    enabled: open,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('company_user_profiles')
+        .select('user_id, display_name, email, role')
+        .eq('company_id', companyId)
+      if (error) throw error
+      return data as Array<{
+        user_id: UUID
+        display_name: string | null
+        email: string
+        role: string
       }>
     },
   })
@@ -176,6 +208,7 @@ export default function JobDialog({
             end_at: endAt || null,
             project_lead_user_id: projectLead || null,
             customer_id: customerId || null,
+            customer_user_id: customerUserId || null,
             customer_contact_id: contactId || null,
           })
           .select('id')
@@ -235,6 +268,7 @@ export default function JobDialog({
             end_at: endAt || null,
             project_lead_user_id: projectLead || null,
             customer_id: customerId || null,
+            customer_user_id: customerUserId || null,
             customer_contact_id: contactId || null,
           })
           .eq('id', initialData.id)
@@ -415,6 +449,22 @@ export default function JobDialog({
                     {customers.map((c) => (
                       <Select.Item key={c.id} value={c.id}>
                         {c.name}
+                      </Select.Item>
+                    ))}
+                  </Select.Content>
+                </Select.Root>
+              </Field>
+
+              <Field label="Customer (from company)">
+                <Select.Root
+                  value={customerUserId}
+                  onValueChange={(v) => setCustomerUserId(v)}
+                >
+                  <Select.Trigger placeholder="None" />
+                  <Select.Content style={{ zIndex: 10000 }}>
+                    {companyUsers.map((u) => (
+                      <Select.Item key={u.user_id} value={u.user_id}>
+                        {u.display_name ?? u.email}
                       </Select.Item>
                     ))}
                   </Select.Content>

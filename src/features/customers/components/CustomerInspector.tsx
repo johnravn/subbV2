@@ -19,6 +19,7 @@ import { useCompany } from '@shared/companies/CompanyProvider'
 import { prettyPhone } from '@shared/phone/phone'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { fmtVAT } from '@shared/lib/generalFunctions'
+import { CopyIconButton } from '@shared/lib/CopyIconButton'
 import InspectorSkeleton from '@shared/ui/components/InspectorSkeleton'
 import MapEmbed from '@shared/maps/MapEmbed'
 import LogoUpload from '@shared/ui/components/LogoUpload'
@@ -333,9 +334,14 @@ export default function CustomerInspector({
             <Text as="div" size="1" color="gray" style={{ marginBottom: 4 }}>
               VAT number
             </Text>
-            <Text as="div" size="2">
-              {fmtVAT(c.vat_number)}
-            </Text>
+            <Flex align="center" gap="2">
+              <Text as="div" size="2">
+                {fmtVAT(c.vat_number)}
+              </Text>
+              {c.vat_number && (
+                <CopyIconButton text={c.vat_number} copyLabel="Copy VAT number" />
+              )}
+            </Flex>
           </div>
           {addrParts && (
             <>

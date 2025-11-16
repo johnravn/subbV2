@@ -32,7 +32,7 @@ import { supabase } from '@shared/api/supabase'
 import { formatDistanceToNow } from 'date-fns'
 import { jobsIndexQuery } from '@features/jobs/api/queries'
 import { latestFeedQuery } from '@features/latest/api/queries'
-import { mattersIndexQuery } from '@features/matters/api/queries'
+import { mattersIndexQueryAll } from '@features/matters/api/queries'
 import { incomeAndExpensesQuery } from '@features/home/api/queries'
 import { IncomeExpensesChart } from '@shared/ui/components/IncomeExpensesChart'
 import { groupInventoryActivities } from '@features/latest/utils/groupInventoryActivities'
@@ -86,10 +86,9 @@ export default function HomePage() {
     return upcomingJobs.filter((job) => job.project_lead?.user_id === userId)
   }, [upcomingJobs, showMyJobsOnly, userId, isFreelancer])
 
-  // Fetch unread matters
+  // Fetch unread matters from all companies
   const { data: mattersData, isLoading: mattersLoading } = useQuery({
-    ...mattersIndexQuery(companyId ?? ''),
-    enabled: !!companyId,
+    ...mattersIndexQueryAll(),
   })
 
   const unreadMatters = React.useMemo(() => {
@@ -1073,7 +1072,7 @@ function MattersSection({
   matters: Array<{
     id: string
     title: string
-    matter_type: 'crew_invite' | 'vote' | 'announcement' | 'chat'
+    matter_type: 'crew_invite' | 'vote' | 'announcement' | 'chat' | 'update'
     created_at: string
     created_by?: {
       user_id: string
@@ -1089,13 +1088,15 @@ function MattersSection({
   const navigate = useNavigate()
 
   const getMatterTypeLabel = (
-    type: 'crew_invite' | 'vote' | 'announcement' | 'chat',
+    type: 'crew_invite' | 'vote' | 'announcement' | 'chat' | 'update',
   ): string => {
     switch (type) {
       case 'vote':
         return 'Vote'
       case 'chat':
         return 'Chat'
+      case 'update':
+        return 'Update'
       case 'crew_invite':
         return 'Invite'
       case 'announcement':
@@ -1106,12 +1107,14 @@ function MattersSection({
   }
 
   const getMatterTypeColor = (
-    type: 'crew_invite' | 'vote' | 'announcement' | 'chat',
+    type: 'crew_invite' | 'vote' | 'announcement' | 'chat' | 'update',
   ): 'blue' | 'purple' | 'green' | 'orange' => {
     switch (type) {
       case 'vote':
         return 'purple'
       case 'chat':
+        return 'blue'
+      case 'update':
         return 'blue'
       case 'crew_invite':
         return 'green'

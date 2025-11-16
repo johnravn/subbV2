@@ -93,7 +93,7 @@ BEGIN
     ) VALUES (
       NEW.company_id,
       coalesce(creator_user_id, project_lead_id),
-      'chat',
+      'update',
       'Offer accepted: ' || coalesce(job_title, 'Untitled job'),
       CASE
         WHEN accepted_phone IS NULL THEN

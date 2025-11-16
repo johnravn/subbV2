@@ -54,6 +54,7 @@ export function jobsIndexQuery({
           `
           id, company_id, title, jobnr, status, start_at, end_at, customer_contact_id,
           customer:customer_id ( id, name ),
+          customer_user:customer_user_id ( user_id, display_name, email ),
           project_lead:project_lead_user_id ( user_id, display_name, email, avatar_url )
         `,
         )
@@ -129,7 +130,7 @@ export function jobsIndexQuery({
         })
       }
 
-      // Client-side fuzzy filtering across title, customer name, project lead name, and date
+      // Client-side fuzzy filtering across title, customer name, customer user name, project lead name, and date
       // (PostgREST doesn't support filtering on joined columns like customer.name)
       if (search.trim()) {
         const { fuzzySearch } = await import('@shared/lib/generalFunctions')
@@ -139,6 +140,8 @@ export function jobsIndexQuery({
           [
             (job) => job.title,
             (job) => job.customer?.name ?? null,
+            (job) => job.customer_user?.display_name ?? null,
+            (job) => job.customer_user?.email ?? null,
             (job) => job.project_lead?.display_name ?? null,
             (job) => job.project_lead?.email ?? null,
             (job) => job.start_at ?? null,
@@ -150,8 +153,8 @@ export function jobsIndexQuery({
       // Client-side sort for customer_name
       if (sortBy === 'customer_name') {
         results = [...results].sort((a, b) => {
-          const aName = a.customer?.name ?? ''
-          const bName = b.customer?.name ?? ''
+          const aName = a.customer?.name ?? a.customer_user?.display_name ?? a.customer_user?.email ?? ''
+          const bName = b.customer?.name ?? b.customer_user?.display_name ?? b.customer_user?.email ?? ''
           const comparison = aName.localeCompare(bName)
           return sortDir === 'asc' ? comparison : -comparison
         })
@@ -303,8 +306,9 @@ export function jobDetailQuery({ jobId }: { jobId: string }) {
         .select(
           `
           id, company_id, title, jobnr, description, status, start_at, end_at,
-          project_lead_user_id, customer_id, customer_contact_id, job_address_id,
+          project_lead_user_id, customer_id, customer_user_id, customer_contact_id, job_address_id,
           customer:customer_id ( id, name, email, phone ),
+          customer_user:customer_user_id ( user_id, display_name, email, phone ),
           project_lead:project_lead_user_id ( user_id, display_name, email ),
           customer_contact:customer_contact_id ( id, name, email, phone, title ),
           address:job_address_id ( id, name, address_line, zip_code, city, country )

@@ -8,6 +8,180 @@ import type {
   MatterResponse,
 } from '../types'
 
+// Fetch matters from all companies the user is a member of
+export function mattersIndexQueryAll() {
+  return {
+    queryKey: ['matters', 'index', 'all'],
+    queryFn: async (): Promise<Array<Matter>> => {
+      // Get current user ID
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) return []
+
+      // Get all companies the user is a member of
+      // Check if user is a superuser
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('superuser')
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      const isSuperuser = profile?.superuser ?? false
+
+      let companyIds: string[] = []
+      if (isSuperuser) {
+        // Superusers can access all companies
+        const { data: allCompanies } = await supabase
+          .from('companies')
+          .select('id')
+        companyIds = (allCompanies || []).map((c) => c.id)
+      } else {
+        // Regular users only see companies they're members of
+        const { data: memberships } = await supabase
+          .from('company_users')
+          .select('company_id')
+          .eq('user_id', user.id)
+        companyIds = (memberships || []).map((m) => m.company_id)
+      }
+
+      if (companyIds.length === 0) return []
+
+      // Get all matters where user is a recipient (with read status)
+      const { data: recipientMatters, error: recError } = await supabase
+        .from('matter_recipients' as any)
+        .select('matter_id, viewed_at')
+        .eq('user_id', user.id)
+
+      if (recError) throw recError
+
+      // Get all matter IDs where user is recipient or creator
+      const recipientMatterIds = new Set<string>(
+        (recipientMatters || []).map((r) => r.matter_id as string),
+      )
+
+      // Track which matters are unread
+      const unreadMatterIds = new Set<string>(
+        (recipientMatters || [])
+          .filter((r) => !r.viewed_at)
+          .map((r) => r.matter_id as string),
+      )
+
+      // Now fetch matters from all companies the user is a member of
+      // User must be either creator OR recipient
+      let q = supabase
+        .from('matters' as any)
+        .select(
+          `
+          id,
+          company_id,
+          created_by_user_id,
+          matter_type,
+          title,
+          content,
+          job_id,
+          time_period_id,
+          is_anonymous,
+          allow_custom_responses,
+          created_as_company,
+          created_at,
+          updated_at,
+          metadata,
+          created_by:created_by_user_id ( user_id, display_name, email, avatar_url ),
+          company:company_id ( id, name ),
+          job:job_id ( id, title, project_lead:project_lead_user_id ( user_id, display_name, email, avatar_url ) ),
+          time_period:time_period_id ( id, title )
+        `,
+        )
+        .in('company_id', companyIds)
+        .order('created_at', { ascending: false })
+
+      const { data: allMatters, error } = await q
+      if (error) throw error
+
+      // Filter to only matters where user is creator or recipient
+      // For crew_invite matters, only show if user is a recipient (not if they're the creator)
+      const filteredMatters = (allMatters || []).filter((m) => {
+        // For crew_invite, only show if user is a recipient
+        if (m.matter_type === 'crew_invite') {
+          return recipientMatterIds.has(m.id)
+        }
+        // For other matter types, show if user is creator or recipient
+        return m.created_by_user_id === user.id || recipientMatterIds.has(m.id)
+      })
+
+      if (filteredMatters.length === 0) return []
+
+      const matterIds = filteredMatters.map((m) => m.id)
+
+      // Get recipient and response counts for these matters
+      const [recipientsData, responsesData] = await Promise.all([
+        supabase
+          .from('matter_recipients' as any)
+          .select('matter_id')
+          .in('matter_id', matterIds),
+        supabase
+          .from('matter_responses' as any)
+          .select('matter_id')
+          .in('matter_id', matterIds),
+      ])
+
+      if (recipientsData.error) throw recipientsData.error
+      if (responsesData.error) throw responsesData.error
+
+      const recipientCounts = new Map<string, number>()
+      const responseCounts = new Map<string, number>()
+
+      for (const r of recipientsData.data || []) {
+        recipientCounts.set(
+          r.matter_id as string,
+          (recipientCounts.get(r.matter_id as string) || 0) + 1,
+        )
+      }
+
+      for (const r of responsesData.data || []) {
+        responseCounts.set(
+          r.matter_id as string,
+          (responseCounts.get(r.matter_id as string) || 0) + 1,
+        )
+      }
+
+      // Get my responses for these matters
+      const { data: myResponsesData } = await supabase
+        .from('matter_responses' as any)
+        .select('matter_id, id, response, created_at, updated_at')
+        .eq('user_id', user.id)
+        .in('matter_id', matterIds)
+
+      const myResponseMap = new Map<string, any>()
+      if (myResponsesData) {
+        for (const r of myResponsesData) {
+          myResponseMap.set(r.matter_id as string, {
+            id: r.id,
+            matter_id: r.matter_id,
+            user_id: user.id,
+            response: r.response,
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+          })
+        }
+      }
+
+      return filteredMatters.map((m) => ({
+        ...m,
+        recipient_count: recipientCounts.get(m.id) || 0,
+        response_count: responseCounts.get(m.id) || 0,
+        my_response: myResponseMap.get(m.id) || null,
+        // Matter is unread if user is a recipient and hasn't viewed it
+        // Matters created by user are always considered "read"
+        is_unread:
+          m.created_by_user_id !== user.id && unreadMatterIds.has(m.id),
+      })) as Array<Matter>
+    },
+  }
+}
+
+// Legacy function - kept for backward compatibility, but uses single company
 export function mattersIndexQuery(companyId: string) {
   return {
     queryKey: ['matters', 'index', companyId],
@@ -851,6 +1025,74 @@ export function matterFilesQuery(matterId: string) {
   }
 }
 
+// Count unread matters from all companies the user is a member of
+export function unreadMattersCountQueryAll() {
+  return {
+    queryKey: ['matters', 'unread-count', 'all'],
+    queryFn: async (): Promise<number> => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) return 0
+
+      // Get all companies the user is a member of
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('superuser')
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      const isSuperuser = profile?.superuser ?? false
+
+      let companyIds: string[] = []
+      if (isSuperuser) {
+        // Superusers can access all companies
+        const { data: allCompanies } = await supabase
+          .from('companies')
+          .select('id')
+        companyIds = (allCompanies || []).map((c) => c.id)
+      } else {
+        // Regular users only see companies they're members of
+        const { data: memberships } = await supabase
+          .from('company_users')
+          .select('company_id')
+          .eq('user_id', user.id)
+        companyIds = (memberships || []).map((m) => m.company_id)
+      }
+
+      if (companyIds.length === 0) return 0
+
+      // Get all matters where user is a recipient
+      const { data: recipientMatters, error: recError } = await supabase
+        .from('matter_recipients' as any)
+        .select('matter_id, viewed_at')
+        .eq('user_id', user.id)
+        .is('viewed_at', null) // Only unread ones
+
+      if (recError) throw recError
+
+      // Get the matter IDs for unread matters
+      const unreadMatterIds =
+        recipientMatters?.map((r) => r.matter_id as string) || []
+
+      if (unreadMatterIds.length === 0) return 0
+
+      // Filter to only matters in companies the user is a member of
+      const { data: companyMatters, error: matterError } = await supabase
+        .from('matters' as any)
+        .select('id')
+        .in('company_id', companyIds)
+        .in('id', unreadMatterIds)
+
+      if (matterError) throw matterError
+
+      return companyMatters?.length || 0
+    },
+    refetchInterval: 30000, // Refetch every 30 seconds
+  }
+}
+
+// Legacy function - kept for backward compatibility
 export function unreadMattersCountQuery(companyId: string) {
   return {
     queryKey: ['matters', 'unread-count', companyId],

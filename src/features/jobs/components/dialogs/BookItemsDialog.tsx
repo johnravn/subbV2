@@ -751,25 +751,85 @@ export default function BookItemsDialog({
         }
       }
 
-      // Get ALL existing reservations for these items (across all time periods)
-      // to check global availability
-      const { data: allExistingReservations, error: allResErr } = await supabase
+      // Get time period details for the periods we're booking
+      const { data: bookingTimePeriods, error: tpDetailsErr } = await supabase
+        .from('time_periods')
+        .select('id, start_at, end_at')
+        .in('id', Array.from(allTimePeriodIds))
+        .eq('deleted', false)
+
+      if (tpDetailsErr) throw tpDetailsErr
+
+      if (!bookingTimePeriods || bookingTimePeriods.length === 0) {
+        throw new Error('Time periods not found')
+      }
+
+      // Find all time periods that overlap with our booking periods
+      // Start by including the booking periods themselves
+      const overlappingTimePeriodIds = new Set<string>(
+        bookingTimePeriods.map((tp) => tp.id),
+      )
+      
+      // Get all equipment time periods for the company to check for overlaps
+      const { data: allEquipmentPeriods, error: allTpErr } = await supabase
+        .from('time_periods')
+        .select('id, start_at, end_at')
+        .eq('company_id', companyId)
+        .eq('category', 'equipment')
+        .eq('deleted', false)
+
+      if (allTpErr) throw allTpErr
+
+      // Helper function to check if two time periods overlap
+      const periodsOverlap = (
+        start1: string,
+        end1: string,
+        start2: string,
+        end2: string,
+      ): boolean => {
+        return new Date(start1) < new Date(end2) && new Date(start2) < new Date(end1)
+      }
+
+      // Find overlapping time periods (excluding the booking periods themselves since we already added them)
+      for (const bookingPeriod of bookingTimePeriods) {
+        for (const otherPeriod of allEquipmentPeriods || []) {
+          // Skip if it's one of our booking periods (already included)
+          if (overlappingTimePeriodIds.has(otherPeriod.id)) continue
+          
+          if (
+            periodsOverlap(
+              bookingPeriod.start_at,
+              bookingPeriod.end_at,
+              otherPeriod.start_at,
+              otherPeriod.end_at,
+            )
+          ) {
+            overlappingTimePeriodIds.add(otherPeriod.id)
+          }
+        }
+      }
+
+      // Get reservations only from overlapping time periods
+      const { data: overlappingReservations, error: overlapResErr } = await supabase
         .from('reserved_items')
-        .select('item_id, quantity')
+        .select('item_id, quantity, time_period_id')
         .in('item_id', Array.from(allItemIds))
+        .in('time_period_id', Array.from(overlappingTimePeriodIds))
 
-      if (allResErr) throw allResErr
+      if (overlapResErr) throw overlapResErr
 
-      // Calculate total reserved per item (existing across all time periods)
+      // Calculate total reserved per item (only from overlapping time periods)
+      // Note: This includes updated quantities from the booking periods (after updates executed above)
       const existingReservedMap = new Map<string, number>()
-      for (const res of allExistingReservations) {
+      for (const res of overlappingReservations || []) {
         const current = existingReservedMap.get(res.item_id) ?? 0
         existingReservedMap.set(res.item_id, current + res.quantity)
       }
 
-      // Calculate new bookings per item
+      // Calculate new bookings per item (only for inserts, not updates)
+      // Updates are already reflected in existingReservedMap above
       const newBookingMap = new Map<string, number>()
-      for (const item of payload) {
+      for (const item of toInsert) {
         const current = newBookingMap.get(item.item_id) ?? 0
         newBookingMap.set(item.item_id, current + item.quantity)
       }
@@ -780,6 +840,8 @@ export default function BookItemsDialog({
         const onHand = itemOnHandMap.get(itemId) ?? 0
         if (onHand > 0) {
           // Only check availability for items with on_hand set
+          // existingQty includes updated quantities from booking periods
+          // newQty only includes quantities from new inserts
           const existingQty = existingReservedMap.get(itemId) ?? 0
           const newQty = newBookingMap.get(itemId) ?? 0
           const finalTotal = existingQty + newQty

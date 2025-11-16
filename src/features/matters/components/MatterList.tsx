@@ -12,7 +12,6 @@ import {
   TextField,
   Tooltip,
 } from '@radix-ui/themes'
-import { useCompany } from '@shared/companies/CompanyProvider'
 import {
   ArrowDown,
   ArrowUp,
@@ -22,22 +21,25 @@ import {
   Search,
   Xmark,
 } from 'iconoir-react'
-import { mattersIndexQuery } from '../api/queries'
+import { mattersIndexQueryAll } from '../api/queries'
 import type { Matter, MatterType } from '../types'
 
-type SortBy = 'type' | 'title' | 'created' | 'response'
+type SortBy = 'type' | 'title' | 'created' | 'response' | 'company'
 type SortDir = 'asc' | 'desc'
 
 export default function MatterList({
   selectedId,
   onSelect,
   unreadFilter,
+  companyFilter,
+  companies,
 }: {
   selectedId: string | null
   onSelect: (id: string | null) => void
   unreadFilter: boolean
+  companyFilter: string | 'all'
+  companies: Array<{ id: string; name: string }>
 }) {
-  const { companyId } = useCompany()
   const [search, setSearch] = React.useState('')
   const [typeFilter, setTypeFilter] = React.useState<MatterType | 'all'>('all')
   const [sortBy, setSortBy] = React.useState<SortBy>('created')
@@ -55,8 +57,7 @@ export default function MatterList({
     isLoading,
     isFetching,
   } = useQuery({
-    ...mattersIndexQuery(companyId || ''),
-    enabled: !!companyId,
+    ...mattersIndexQueryAll(),
   })
 
   // Recompute page size based on available space
@@ -140,7 +141,7 @@ export default function MatterList({
   // Reset to page 1 when filters change
   React.useEffect(() => {
     setPage(1)
-  }, [search, typeFilter, unreadFilter, sortBy, sortDir])
+  }, [search, typeFilter, unreadFilter, companyFilter, sortBy, sortDir])
 
   // Filter and sort matters client-side
   const allFilteredMatters = React.useMemo(() => {
@@ -169,6 +170,11 @@ export default function MatterList({
     // Apply unread filter
     if (unreadFilter) {
       filtered = filtered.filter((m) => m.is_unread === true)
+    }
+
+    // Apply company filter
+    if (companyFilter !== 'all') {
+      filtered = filtered.filter((m) => m.company_id === companyFilter)
     }
 
     // Apply sorting
@@ -202,11 +208,16 @@ export default function MatterList({
           comparison = aHasResponse - bHasResponse
           break
         }
+        case 'company':
+          const aCompanyName = a.company?.name || ''
+          const bCompanyName = b.company?.name || ''
+          comparison = aCompanyName.localeCompare(bCompanyName)
+          break
       }
 
       return sortDir === 'asc' ? comparison : -comparison
     })
-  }, [allMatters, search, typeFilter, unreadFilter, sortBy, sortDir])
+  }, [allMatters, search, typeFilter, unreadFilter, companyFilter, sortBy, sortDir])
 
   // Paginate the filtered matters
   const totalPages = Math.ceil(allFilteredMatters.length / pageSize)
@@ -276,6 +287,7 @@ export default function MatterList({
       vote: { color: 'purple', label: 'Vote' },
       announcement: { color: 'gray', label: 'Announcement' },
       chat: { color: 'green', label: 'Chat' },
+      update: { color: 'blue', label: 'Update' },
     }
     const v = variants[type] ?? variants.announcement
     return (
@@ -326,6 +338,7 @@ export default function MatterList({
               <Select.Item value="vote">Vote</Select.Item>
               <Select.Item value="announcement">Announcement</Select.Item>
               <Select.Item value="chat">Chat</Select.Item>
+              <Select.Item value="update">Update</Select.Item>
               <Select.Item value="crew_invite">Crew Invite</Select.Item>
             </Select.Content>
           </Select.Root>
@@ -394,6 +407,20 @@ export default function MatterList({
                   <Flex align="center" gap="1">
                     <ChatBubbleQuestion width={14} height={14} />
                     {sortBy === 'response' &&
+                      (sortDir === 'asc' ? (
+                        <ArrowUp width={12} height={12} />
+                      ) : (
+                        <ArrowDown width={12} height={12} />
+                      ))}
+                  </Flex>
+                </Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('company')}
+                >
+                  <Flex align="center" gap="1">
+                    <Text>Company</Text>
+                    {sortBy === 'company' &&
                       (sortDir === 'asc' ? (
                         <ArrowUp width={12} height={12} />
                       ) : (
@@ -495,6 +522,11 @@ export default function MatterList({
                         </Text>
                       )}
                     </Table.Cell>
+                    <Table.Cell>
+                      <Text size="2" color="gray">
+                        {matter.company?.name || '—'}
+                      </Text>
+                    </Table.Cell>
                   </Table.Row>
                 )
               })}
@@ -505,7 +537,7 @@ export default function MatterList({
                   display: 'none',
                 }}
               >
-                <Table.Cell colSpan={4}>probe</Table.Cell>
+                <Table.Cell colSpan={5}>probe</Table.Cell>
               </Table.Row>
             </Table.Body>
           </Table.Root>

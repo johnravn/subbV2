@@ -1041,6 +1041,79 @@ export type Database = {
           },
         ]
       }
+      job_invoices: {
+        Row: {
+          conta_customer_id: number | null
+          conta_invoice_id: string | null
+          conta_response: Json | null
+          created_at: string
+          created_by_user_id: string | null
+          error_message: string | null
+          id: string
+          invoice_basis: string
+          invoice_data: Json
+          job_id: string
+          offer_id: string | null
+          organization_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          conta_customer_id?: number | null
+          conta_invoice_id?: string | null
+          conta_response?: Json | null
+          created_at?: string
+          created_by_user_id?: string | null
+          error_message?: string | null
+          id?: string
+          invoice_basis: string
+          invoice_data: Json
+          job_id: string
+          offer_id?: string | null
+          organization_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          conta_customer_id?: number | null
+          conta_invoice_id?: string | null
+          conta_response?: Json | null
+          created_at?: string
+          created_by_user_id?: string | null
+          error_message?: string | null
+          id?: string
+          invoice_basis?: string
+          invoice_data?: Json
+          job_id?: string
+          offer_id?: string | null
+          organization_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_invoices_created_by_user_id_fkey"
+            columns: ["created_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "job_invoices_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_invoices_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "job_offers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       job_notes: {
         Row: {
           author_user_id: string | null
@@ -1281,6 +1354,7 @@ export type Database = {
           created_at: string
           customer_contact_id: string | null
           customer_id: string | null
+          customer_user_id: string | null
           description: string | null
           end_at: string | null
           id: string
@@ -1297,6 +1371,7 @@ export type Database = {
           created_at?: string
           customer_contact_id?: string | null
           customer_id?: string | null
+          customer_user_id?: string | null
           description?: string | null
           end_at?: string | null
           id?: string
@@ -1313,6 +1388,7 @@ export type Database = {
           created_at?: string
           customer_contact_id?: string | null
           customer_id?: string | null
+          customer_user_id?: string | null
           description?: string | null
           end_at?: string | null
           id?: string
@@ -1345,6 +1421,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "customers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_customer_user_id_fkey"
+            columns: ["customer_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
           },
           {
             foreignKeyName: "jobs_job_address_id_fkey"
@@ -2932,6 +3015,10 @@ export type Database = {
       }
     }
     Functions: {
+      add_existing_users_to_welcome_matter: {
+        Args: { p_company_id: string; p_matter_id: string }
+        Returns: undefined
+      }
       add_freelancer_or_invite:
         | {
             Args: {
@@ -3142,7 +3229,7 @@ export type Database = {
         | "responded"
         | "declined"
         | "accepted"
-      matter_type: "crew_invite" | "vote" | "announcement" | "chat"
+      matter_type: "crew_invite" | "vote" | "announcement" | "chat" | "update"
       offer_status:
         | "draft"
         | "sent"
@@ -3345,7 +3432,7 @@ export const Constants = {
         "declined",
         "accepted",
       ],
-      matter_type: ["crew_invite", "vote", "announcement", "chat"],
+      matter_type: ["crew_invite", "vote", "announcement", "chat", "update"],
       offer_status: [
         "draft",
         "sent",

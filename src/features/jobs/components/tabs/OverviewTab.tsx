@@ -46,7 +46,9 @@ const OverviewTab = ({ job }: { job: JobDetail }) => {
               {job.project_lead?.email ? ` (${job.project_lead.email})` : ''}
             </span>
           </KV>
-          <KV label="Customer">{job.customer?.name ?? '—'}</KV>
+          <KV label="Customer">
+            {job.customer?.name ?? job.customer_user?.display_name ?? job.customer_user?.email ?? '—'}
+          </KV>
           <Box>
             <Flex align={'center'} gap={'2'} mb={'2'}>
               <Text size="2" color="gray" style={{ display: 'block' }}>

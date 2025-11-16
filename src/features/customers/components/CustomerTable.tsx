@@ -13,6 +13,7 @@ import {
   Tooltip,
 } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
+import { prettyPhone } from '@shared/phone/phone'
 import { InfoCircle, Search } from 'iconoir-react'
 import { customersIndexQuery } from '../api/queries'
 import AddCustomerDialog from './dialogs/AddCustomerDialog'
@@ -257,7 +258,7 @@ export default function CustomerTable({
                     </Text>
                     {r.phone && (
                       <Text as="div" size="1" color="gray">
-                        {r.phone}
+                        {prettyPhone(r.phone)}
                       </Text>
                     )}
                   </Table.Cell>

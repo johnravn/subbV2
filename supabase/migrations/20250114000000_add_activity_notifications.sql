@@ -76,7 +76,7 @@ BEGIN
   ) VALUES (
     activity_company_id,
     actor_user_id, -- The person who liked/commented is the "creator" of the notification
-    'chat',
+    'update',
     matter_title,
     matter_content,
     jsonb_build_object(

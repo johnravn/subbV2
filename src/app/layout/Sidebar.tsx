@@ -35,7 +35,7 @@ import logoWhite from '@shared/assets/gridLogo/grid_logo_white.svg'
 import { useAuthz } from '@shared/auth/useAuthz'
 import { canVisit } from '@shared/auth/permissions'
 import { useCompany } from '@shared/companies/CompanyProvider'
-import { unreadMattersCountQuery } from '@features/matters/api/queries'
+import { unreadMattersCountQueryAll } from '@features/matters/api/queries'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useTheme } from '../hooks/useTheme'
 import { APP_VERSION } from '../config/version'
@@ -450,10 +450,8 @@ function SidebarContent({
 }
 
 function MattersUnreadBadge({ isCollapsed }: { isCollapsed?: boolean }) {
-  const { companyId } = useCompany()
   const { data: unreadCount = 0 } = useQuery({
-    ...unreadMattersCountQuery(companyId ?? ''),
-    enabled: !!companyId,
+    ...unreadMattersCountQueryAll(),
   })
 
   if (unreadCount === 0) return null

@@ -109,20 +109,6 @@ export default function EquipmentTab({ jobId }: { jobId: string }) {
 
   return (
     <Box>
-      <Flex mb="3" justify="between" align="center">
-        <SegmentedControl.Root
-          value={view}
-          onValueChange={(v) => setView(v as 'internal' | 'external')}
-        >
-          <SegmentedControl.Item value="internal">
-            Internal equipment
-          </SegmentedControl.Item>
-          <SegmentedControl.Item value="external">
-            External equipment
-          </SegmentedControl.Item>
-        </SegmentedControl.Root>
-      </Flex>
-
       {/* INTERNAL VIEW */}
       {view === 'internal' && (
         <InternalEquipmentTable
@@ -134,6 +120,8 @@ export default function EquipmentTab({ jobId }: { jobId: string }) {
           setBookItemsOpen={setBookItemsOpen}
           editMode={editMode}
           setEditMode={setEditMode}
+          view={view}
+          onViewChange={(v) => setView(v as 'internal' | 'external')}
         />
       )}
 
@@ -147,6 +135,8 @@ export default function EquipmentTab({ jobId }: { jobId: string }) {
           companyId={companyId}
           editMode={externalEditMode}
           setEditMode={setExternalEditMode}
+          view={view}
+          onViewChange={(v) => setView(v as 'internal' | 'external')}
         />
       )}
     </Box>
@@ -163,6 +153,8 @@ function InternalEquipmentTable({
   setBookItemsOpen,
   editMode,
   setEditMode,
+  view,
+  onViewChange,
 }: {
   rows: Array<any>
   jobId: string
@@ -172,6 +164,8 @@ function InternalEquipmentTable({
   setBookItemsOpen: (v: boolean) => void
   editMode: boolean
   setEditMode: (v: boolean) => void
+  view: 'internal' | 'external'
+  onViewChange: (v: 'internal' | 'external') => void
 }) {
   const qc = useQueryClient()
   const { success, error } = useToast()
@@ -269,7 +263,19 @@ function InternalEquipmentTable({
       >
         <Heading size="3">Internal equipment</Heading>
         {companyRole !== 'freelancer' && (
-          <Box style={{ display: 'flex', gap: 8 }}>
+          <Flex align="center" gap="3">
+            <SegmentedControl.Root
+              value={view}
+              onValueChange={(v) => onViewChange(v as 'internal' | 'external')}
+              size="2"
+            >
+              <SegmentedControl.Item value="internal">
+                Internal equipment
+              </SegmentedControl.Item>
+              <SegmentedControl.Item value="external">
+                External equipment
+              </SegmentedControl.Item>
+            </SegmentedControl.Root>
             {rows.length > 0 && (
               <Button
                 size="2"
@@ -289,7 +295,7 @@ function InternalEquipmentTable({
             >
               <Plus width={16} height={16} /> Book items
             </Button>
-          </Box>
+          </Flex>
         )}
         {canBook && companyId && (
           <BookItemsDialog
@@ -513,6 +519,8 @@ function ExternalEquipmentTable({
   companyId,
   editMode,
   setEditMode,
+  view,
+  onViewChange,
 }: {
   rows: Array<any>
   externalTimePeriods: Array<{
@@ -526,6 +534,8 @@ function ExternalEquipmentTable({
   companyId: string | null
   editMode: boolean
   setEditMode: (v: boolean) => void
+  view: 'internal' | 'external'
+  onViewChange: (v: 'internal' | 'external') => void
 }) {
   const qc = useQueryClient()
   const { success, error } = useToast()
@@ -821,6 +831,18 @@ function ExternalEquipmentTable({
         }}
       >
         <Heading size="3">External equipment</Heading>
+        <SegmentedControl.Root
+          value={view}
+          onValueChange={(v) => onViewChange(v as 'internal' | 'external')}
+          size="2"
+        >
+          <SegmentedControl.Item value="internal">
+            Internal equipment
+          </SegmentedControl.Item>
+          <SegmentedControl.Item value="external">
+            External equipment
+          </SegmentedControl.Item>
+        </SegmentedControl.Root>
       </Box>
 
       {/* Owner Sections */}

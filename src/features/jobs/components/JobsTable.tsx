@@ -626,7 +626,9 @@ export default function JobsTable({
                   )}
                 </Table.Cell>
                 <Table.Cell>{j.title}</Table.Cell>
-                <Table.Cell>{j.customer?.name ?? '—'}</Table.Cell>
+                <Table.Cell>
+                  {j.customer?.name ?? j.customer_user?.display_name ?? j.customer_user?.email ?? '—'}
+                </Table.Cell>
                 <Table.Cell>
                   {j.start_at
                     ? (() => {

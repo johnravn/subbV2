@@ -20,9 +20,7 @@ import { useToast } from '@shared/ui/toast/ToastProvider'
 import { jobDetailQuery } from '../api/queries'
 import { useAutoUpdateJobStatus } from '../hooks/useAutoUpdateJobStatus'
 import OverviewTab from './tabs/OverviewTab'
-import EquipmentTab from './tabs/EquipmentTab'
-import CrewTab from './tabs/CrewTab'
-import TransportTab from './tabs/TransportTab'
+import BookingsTab from './tabs/BookingsTab'
 import TimelineTab from './tabs/TimelineTab'
 import ContactsTab from './tabs/ContactsTab'
 import CalendarTab from './tabs/CalendarTab'
@@ -75,7 +73,6 @@ export default function JobInspector({
   const [editOpen, setEditOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [statusTimelineOpen, setStatusTimelineOpen] = React.useState(false)
-  const [crewView, setCrewView] = React.useState<'roles' | 'crew'>('roles')
   const [activeTab, setActiveTab] = React.useState<string>(
     initialTab || 'overview',
   )
@@ -234,9 +231,7 @@ export default function JobInspector({
           <Tabs.Trigger value="overview">Overview</Tabs.Trigger>
           <Tabs.Trigger value="timeline">Timeline</Tabs.Trigger>
           <Tabs.Trigger value="calendar">Calendar</Tabs.Trigger>
-          <Tabs.Trigger value="equipment">Equipment</Tabs.Trigger>
-          <Tabs.Trigger value="crew">Crew</Tabs.Trigger>
-          <Tabs.Trigger value="transport">Transportation</Tabs.Trigger>
+          <Tabs.Trigger value="bookings">Bookings</Tabs.Trigger>
           <Tabs.Trigger value="offers">Offers</Tabs.Trigger>
           <Tabs.Trigger value="invoice">Invoice</Tabs.Trigger>
           <Tabs.Trigger value="money">Money</Tabs.Trigger>
@@ -254,19 +249,8 @@ export default function JobInspector({
         <Tabs.Content value="calendar" mt={'10px'}>
           <CalendarTab jobId={job.id} />
         </Tabs.Content>
-        <Tabs.Content value="equipment" mt={'10px'}>
-          <EquipmentTab jobId={job.id} />
-        </Tabs.Content>
-        <Tabs.Content value="crew" mt={'10px'}>
-          <CrewTab
-            jobId={job.id}
-            companyId={job.company_id}
-            view={crewView}
-            onViewChange={setCrewView}
-          />
-        </Tabs.Content>
-        <Tabs.Content value="transport" mt={'10px'}>
-          <TransportTab jobId={job.id} />
+        <Tabs.Content value="bookings" mt={'10px'}>
+          <BookingsTab jobId={job.id} />
         </Tabs.Content>
         <Tabs.Content value="offers" mt={'10px'}>
           <OffersTab jobId={job.id} companyId={job.company_id} />
