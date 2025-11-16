@@ -5,15 +5,20 @@ import { Box, Button, Card, Flex, Heading, Text } from '@radix-ui/themes'
 import { ArrowRight, CheckCircle, XmarkCircle } from 'iconoir-react'
 import { useNavigate } from '@tanstack/react-router'
 import { supabase } from '@shared/api/supabase'
+import ContactDialog from '../dialogs/ContactDialog'
 import type { JobDetail } from '../../types'
 
 type TodoItem = {
   id: string
   type:
     | 'missing_location'
+    | 'missing_contact'
     | 'unassigned_crew'
     | 'unconfirmed_vehicle'
     | 'uninvoiced_completed'
+    | 'no_crew_planned'
+    | 'crew_planned_not_requested'
+    | 'insufficient_crew_requested'
   title: string
   description: string
   severity: 'high' | 'medium' | 'low'
@@ -30,8 +35,9 @@ export default function ToDoTab({
   job: JobDetail
 }) {
   const navigate = useNavigate()
+  const [contactDialogOpen, setContactDialogOpen] = React.useState(false)
 
-  // Fetch crew roles with needed_count and actual assignments
+  // Fetch crew roles with needed_count and status breakdowns
   const { data: crewRoles } = useQuery({
     queryKey: ['jobs', jobId, 'todo', 'crew-roles'],
     queryFn: async () => {
@@ -48,24 +54,36 @@ export default function ToDoTab({
       const tpIds = timePeriods.map((tp) => tp.id)
       const { data: assignments, error: assignErr } = await supabase
         .from('reserved_crew')
-        .select('time_period_id')
+        .select('time_period_id, status')
         .in('time_period_id', tpIds)
       if (assignErr) throw assignErr
 
-      const assignmentCounts = new Map<string, number>()
+      // Count assignments by status for each time period
+      const statusByTp = new Map<string, Record<string, number>>()
       for (const a of assignments) {
-        assignmentCounts.set(
-          a.time_period_id,
-          (assignmentCounts.get(a.time_period_id) || 0) + 1,
-        )
+        const key = a.time_period_id
+        const bag = statusByTp.get(key) || {}
+        bag[a.status] = (bag[a.status] || 0) + 1
+        statusByTp.set(key, bag)
       }
 
-      return timePeriods.map((tp) => ({
-        id: tp.id,
-        title: tp.title || 'Untitled Role',
-        needed_count: tp.needed_count || 0,
-        assigned_count: assignmentCounts.get(tp.id) || 0,
-      }))
+      return timePeriods.map((tp) => {
+        const counts = statusByTp.get(tp.id) || {}
+        return {
+          id: tp.id,
+          title: tp.title || 'Untitled Role',
+          needed_count: tp.needed_count || 0,
+          planned_count: counts['planned'] || 0,
+          requested_count: counts['requested'] || 0,
+          accepted_count: counts['accepted'] || 0,
+          declined_count: counts['declined'] || 0,
+          assigned_count:
+            (counts['planned'] || 0) +
+            (counts['requested'] || 0) +
+            (counts['accepted'] || 0) +
+            (counts['declined'] || 0),
+        }
+      })
     },
   })
 
@@ -125,10 +143,84 @@ export default function ToDoTab({
       })
     }
 
-    // 2. Check for unassigned crew roles
+    // 2. Check for missing contact
+    if (!job.customer_contact_id && job.customer_id) {
+      items.push({
+        id: 'missing-contact',
+        type: 'missing_contact',
+        title: 'Missing Contact',
+        description: 'No contact has been set for this job.',
+        severity: 'high',
+        actionUrl: `/jobs?jobId=${jobId}&tab=overview`,
+        actionLabel: 'Add Contact',
+      })
+    }
+
+    // 3. Check for crew role issues
     if (crewRoles) {
       crewRoles.forEach((role) => {
-        if (role.needed_count > role.assigned_count) {
+        const needed = role.needed_count || 0
+
+        // Skip if no crew needed for this role
+        if (needed === 0) return
+
+        const requestedOrAccepted = role.requested_count + role.accepted_count
+
+        // Check: Role exists with no crew planned, requested, or accepted
+        if (
+          role.planned_count === 0 &&
+          role.requested_count === 0 &&
+          role.accepted_count === 0 &&
+          needed > 0
+        ) {
+          items.push({
+            id: `no-crew-planned-${role.id}`,
+            type: 'no_crew_planned',
+            title: `No Crew Planned: ${role.title}`,
+            description: `This role requires ${needed} crew member(s) but no crew has been planned yet.`,
+            severity: 'medium',
+            actionUrl: `/jobs?jobId=${jobId}&tab=crew`,
+            actionLabel: 'Plan Crew',
+            metadata: { roleId: role.id, roleTitle: role.title },
+          })
+        }
+
+        // Check: Crew is planned but not requested
+        if (role.planned_count > 0 && role.requested_count === 0) {
+          items.push({
+            id: `crew-planned-not-requested-${role.id}`,
+            type: 'crew_planned_not_requested',
+            title: `Crew Planned But Not Requested: ${role.title}`,
+            description: `${role.planned_count} crew member(s) are planned but none have been requested yet.`,
+            severity: 'medium',
+            actionUrl: `/jobs?jobId=${jobId}&tab=crew`,
+            actionLabel: 'Request Crew',
+            metadata: { roleId: role.id, roleTitle: role.title },
+          })
+        }
+
+        // Check: Fewer crew requested or accepted than needed
+        if (requestedOrAccepted < needed) {
+          const missing = needed - requestedOrAccepted
+          items.push({
+            id: `insufficient-crew-requested-${role.id}`,
+            type: 'insufficient_crew_requested',
+            title: `Insufficient Crew Requested: ${role.title}`,
+            description: `This role needs ${needed} crew member(s), but only ${requestedOrAccepted} have been requested or accepted (${role.requested_count} requested, ${role.accepted_count} accepted). ${missing} more needed.`,
+            severity: 'medium',
+            actionUrl: `/jobs?jobId=${jobId}&tab=crew`,
+            actionLabel: 'Request More Crew',
+            metadata: { roleId: role.id, roleTitle: role.title },
+          })
+        }
+
+        // Legacy check: Unassigned crew roles (kept for backward compatibility)
+        // Only show if we haven't already shown a more specific message above
+        if (
+          role.needed_count > role.assigned_count &&
+          role.planned_count > 0 &&
+          role.requested_count > 0
+        ) {
           const missing = role.needed_count - role.assigned_count
           items.push({
             id: `unassigned-crew-${role.id}`,
@@ -144,7 +236,7 @@ export default function ToDoTab({
       })
     }
 
-    // 3. Check for unconfirmed vehicle bookings
+    // 4. Check for unconfirmed vehicle bookings
     // Note: This is a placeholder - you may need to adjust based on your actual confirmation logic
     // For now, we'll check for external vehicle bookings with certain statuses
     if (vehicleBookings) {
@@ -166,7 +258,7 @@ export default function ToDoTab({
       })
     }
 
-    // 4. Check for completed jobs that aren't invoiced
+    // 5. Check for completed jobs that aren't invoiced
     if (job.status === 'completed') {
       items.push({
         id: 'uninvoiced-completed',
@@ -197,7 +289,10 @@ export default function ToDoTab({
   }
 
   const handleAction = (item: TodoItem) => {
-    if (item.actionUrl) {
+    if (item.type === 'missing_contact') {
+      // Open contact dialog directly
+      setContactDialogOpen(true)
+    } else if (item.actionUrl) {
       navigate({ to: item.actionUrl })
     }
   }
@@ -246,46 +341,54 @@ export default function ToDoTab({
                 />
               </Box>
               <Box style={{ flex: 1 }}>
-                <Flex gap="2" align="center" mb="2">
-                  <Heading size="3">{item.title}</Heading>
-                  <Box
-                    style={{
-                      padding: '2px 8px',
-                      borderRadius: 4,
-                      background: `var(--${getSeverityColor(item.severity)}-3)`,
-                      border: `1px solid var(--${getSeverityColor(item.severity)}-6)`,
-                    }}
-                  >
-                    <Text
-                      size="1"
-                      weight="medium"
+                <Flex direction="column" gap="2">
+                  <Flex gap="2" align="center">
+                    <Heading size="3">{item.title}</Heading>
+                    <Box
                       style={{
-                        color: `var(--${getSeverityColor(item.severity)}-11)`,
-                        textTransform: 'uppercase',
+                        padding: '2px 8px',
+                        borderRadius: 4,
+                        background: `var(--${getSeverityColor(item.severity)}-3)`,
+                        border: `1px solid var(--${getSeverityColor(item.severity)}-6)`,
                       }}
                     >
-                      {item.severity}
-                    </Text>
-                  </Box>
+                      <Text
+                        size="1"
+                        weight="medium"
+                        style={{
+                          color: `var(--${getSeverityColor(item.severity)}-11)`,
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        {item.severity}
+                      </Text>
+                    </Box>
+                  </Flex>
+                  <Text size="2" color="gray">
+                    {item.description}
+                  </Text>
+                  {item.actionUrl && (
+                    <Button
+                      size="2"
+                      variant="soft"
+                      onClick={() => handleAction(item)}
+                    >
+                      {item.actionLabel || 'Fix'}
+                      <ArrowRight width={14} height={14} />
+                    </Button>
+                  )}
                 </Flex>
-                <Text size="2" color="gray" mb="3">
-                  {item.description}
-                </Text>
-                {item.actionUrl && (
-                  <Button
-                    size="2"
-                    variant="soft"
-                    onClick={() => handleAction(item)}
-                  >
-                    {item.actionLabel || 'Fix'}
-                    <ArrowRight width={14} height={14} />
-                  </Button>
-                )}
               </Box>
             </Flex>
           </Card>
         ))}
       </Flex>
+      <ContactDialog
+        open={contactDialogOpen}
+        onOpenChange={setContactDialogOpen}
+        companyId={job.company_id}
+        job={job}
+      />
     </Box>
   )
 }

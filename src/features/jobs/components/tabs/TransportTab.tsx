@@ -22,6 +22,17 @@ import { FixedTimePeriodEditor } from '@features/calendar/components/reservation
 import BookVehicleDialog from '../dialogs/BookVehicleDialog'
 import type { ExternalReqStatus, ReservedVehicleRow } from '../../types'
 
+type TransportQueryResult = {
+  bookings: Array<ReservedVehicleRow>
+  notices: Array<{
+    id: string
+    title: string | null
+    notes: string
+    start_at: string
+    end_at: string
+  }>
+}
+
 export default function TransportTab({ jobId }: { jobId: string }) {
   const [bookVehOpen, setBookVehOpen] = React.useState(false)
   const [deletingBooking, setDeletingBooking] = React.useState<string | null>(
@@ -41,16 +52,27 @@ export default function TransportTab({ jobId }: { jobId: string }) {
     new Set(),
   )
 
-  const { data } = useQuery({
+  const { data } = useQuery<TransportQueryResult>({
     queryKey: ['jobs.transport', jobId],
     queryFn: async () => {
       const { data: timePeriods, error: rErr } = await supabase
         .from('time_periods')
-        .select('id')
+        .select('id, title, notes, start_at, end_at, deleted')
         .eq('job_id', jobId)
+        .eq('category', 'transport')
+        .eq('deleted', false)
+
       if (rErr) throw rErr
-      const resIds = timePeriods.map((r) => r.id)
-      if (!resIds.length) return [] as Array<ReservedVehicleRow>
+
+      const resIds = (timePeriods || []).map((r: any) => r.id)
+
+      if (!resIds.length) {
+        return {
+          bookings: [] as Array<ReservedVehicleRow>,
+          notices: [],
+        }
+      }
+
       const { data: rows, error } = await supabase
         .from('reserved_vehicles')
         .select(
@@ -59,10 +81,12 @@ export default function TransportTab({ jobId }: { jobId: string }) {
           vehicle:vehicle_id (
             id, name, image_path, external_owner_id, deleted,
             external_owner:external_owner_id ( id, name )
-          )
+          ),
+          time_period:time_period_id ( id, title, notes, start_at, end_at )
         `,
         )
         .in('time_period_id', resIds)
+
       if (error) throw error
 
       // Filter out rows where vehicle is deleted
@@ -74,9 +98,30 @@ export default function TransportTab({ jobId }: { jobId: string }) {
         return !vehicleObj?.deleted
       })
 
-      return filteredRows as unknown as Array<ReservedVehicleRow>
+      const bookings = filteredRows as unknown as Array<ReservedVehicleRow>
+
+      const bookedTimePeriodIds = new Set(
+        bookings.map((row: any) => row.time_period_id),
+      )
+
+      const notices = (timePeriods || [])
+        .filter(
+          (tp: any) => tp.notes && !bookedTimePeriodIds.has(tp.id as string),
+        )
+        .map((tp: any) => ({
+          id: tp.id as string,
+          title: (tp.title as string | null) ?? null,
+          notes: tp.notes as string,
+          start_at: tp.start_at as string,
+          end_at: tp.end_at as string,
+        }))
+
+      return { bookings, notices }
     },
   })
+
+  const bookings = data?.bookings ?? []
+  const notices = data?.notices ?? []
 
   const handleUpdateBooking = async (
     bookingId: string,
@@ -182,10 +227,37 @@ export default function TransportTab({ jobId }: { jobId: string }) {
         )}
       </Box>
 
+      {/* Notices for missing vehicle proposals */}
+      {notices.length > 0 && (
+        <Flex direction="column" gap="2" mb="3">
+          {notices.map((notice) => (
+            <Card
+              key={notice.id}
+              variant="surface"
+              style={{ border: '1px solid var(--amber-a5)' }}
+            >
+              <Flex direction="column" gap="2">
+                <Flex align="center" gap="2">
+                  <Text weight="medium" color="amber">
+                    Vehicle proposal missing
+                  </Text>
+                  {notice.title && (
+                    <Badge variant="soft" color="amber">
+                      {notice.title}
+                    </Badge>
+                  )}
+                </Flex>
+                <Text size="2">{notice.notes}</Text>
+              </Flex>
+            </Card>
+          ))}
+        </Flex>
+      )}
+
       {/* Vehicle Cards List */}
-      {data && data.length > 0 ? (
+      {bookings.length > 0 ? (
         <Flex direction="column" gap="3">
-          {data.map((row) => {
+          {bookings.map((row) => {
             const vehicle = row.vehicle as any
             const vehicleObj = Array.isArray(vehicle) ? vehicle[0] : vehicle
             const owner = Array.isArray(vehicleObj?.external_owner)

@@ -263,6 +263,7 @@ export default function VehiclesPage() {
 
         {/* RESIZER */}
         <Box
+          className="section-resizer"
           onMouseDown={(e) => {
             e.preventDefault()
             setIsResizing(true)
@@ -283,6 +284,7 @@ export default function VehiclesPage() {
           onMouseEnter={(e) => {
             if (!isResizing) {
               e.currentTarget.style.backgroundColor = 'var(--gray-a6)'
+              e.currentTarget.style.cursor = 'col-resize'
             }
           }}
           onMouseLeave={(e) => {

@@ -585,7 +585,7 @@ export default function AddGroupDialog({
                       placeholder={loading ? 'Loading…' : 'Select category'}
                       style={{ minHeight: 'var(--space-7)' }}
                     />
-                    <Select.Content>
+                    <Select.Content style={{ zIndex: 10000 }}>
                       <Select.Group>
                         {categories.map((c) => (
                           <Select.Item key={c.id} value={c.id}>
@@ -612,7 +612,7 @@ export default function AddGroupDialog({
                     size="3"
                   >
                     <Select.Trigger style={{ minHeight: 'var(--space-7)' }} />
-                    <Select.Content>
+                    <Select.Content style={{ zIndex: 10000 }}>
                       <Select.Item value="true">Active</Select.Item>
                       <Select.Item value="false">Inactive</Select.Item>
                     </Select.Content>
@@ -626,7 +626,7 @@ export default function AddGroupDialog({
                     onValueChange={(v) => set('unique', v === 'true')}
                   >
                     <Select.Trigger style={{ minHeight: 'var(--space-7)' }} />
-                    <Select.Content>
+                    <Select.Content style={{ zIndex: 10000 }}>
                       <Select.Item value="false">Bundle (generic)</Select.Item>
                       <Select.Item value="true">Unique (fixed set)</Select.Item>
                     </Select.Content>
@@ -680,7 +680,7 @@ export default function AddGroupDialog({
                     size="3"
                   >
                     <Select.Trigger style={{ minHeight: 'var(--space-7)' }} />
-                    <Select.Content>
+                    <Select.Content style={{ zIndex: 10000 }}>
                       <Select.Item value="internal">Internal</Select.Item>
                       <Select.Item value="external">External</Select.Item>
                     </Select.Content>
@@ -700,7 +700,7 @@ export default function AddGroupDialog({
                         placeholder="Select partner…"
                         style={{ minHeight: 'var(--space-7)' }}
                       />
-                      <Select.Content>
+                      <Select.Content style={{ zIndex: 10000 }}>
                         <Select.Group>
                           {partners.map((p) => (
                             <Select.Item key={p.id} value={p.id}>

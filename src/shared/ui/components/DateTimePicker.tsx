@@ -286,6 +286,7 @@ export default function DateTimePicker({
             maxHeight: 'min(80vh, 600px)',
             maxWidth: 'calc(100vw - 32px)',
             overflowY: 'auto',
+            zIndex: 10001, // Ensure it appears above dialogs (which use z-index 10000)
           }}
         >
           {/* Tabs with close button */}

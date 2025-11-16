@@ -1,6 +1,7 @@
 // src/features/company/components/CompanyOverviewTab.tsx
 import * as React from 'react'
 import {
+  Badge,
   Box,
   Button,
   Card,
@@ -10,15 +11,16 @@ import {
   Separator,
   Text,
 } from '@radix-ui/themes'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import MapEmbed from '@shared/maps/MapEmbed'
-import { Edit, MessageText } from 'iconoir-react'
+import { Edit, MessageText, NavArrowDown, NavArrowRight } from 'iconoir-react'
 import { fmtVAT } from '@shared/lib/generalFunctions'
 import { prettyPhone } from '@shared/phone/phone'
-import { companyDetailQuery } from '../api/queries'
-import EditCompanyDialog from './dialogs/EditCompanyDialog'
+import CompanyLogoUpload from '@shared/ui/components/CompanyLogoUpload'
 import CreateAnnouncementDialog from '@features/latest/components/CreateAnnouncementDialog'
+import { companyDetailQuery, updateCompany } from '../api/queries'
+import EditCompanyDialog from './dialogs/EditCompanyDialog'
 
 const FIELD_MAX = 420
 
@@ -27,6 +29,7 @@ export default function CompanyOverviewTab() {
   const qc = useQueryClient()
   const [editOpen, setEditOpen] = React.useState(false)
   const [announcementOpen, setAnnouncementOpen] = React.useState(false)
+  const [logoExpanded, setLogoExpanded] = React.useState(false)
 
   const { data, isLoading, isError, error } = useQuery({
     ...(companyId
@@ -36,6 +39,34 @@ export default function CompanyOverviewTab() {
           queryFn: () => Promise.resolve(null),
         }),
     enabled: !!companyId,
+  })
+
+  const updateLogoMutation = useMutation({
+    mutationFn: async ({
+      lightPath,
+      darkPath,
+    }: {
+      lightPath: string | null
+      darkPath: string | null
+    }) => {
+      if (!companyId || !data) throw new Error('Missing company')
+      await updateCompany({
+        companyId,
+        id: companyId,
+        name: data.name,
+        address: data.address,
+        vat_number: data.vat_number,
+        general_email: data.general_email,
+        contact_person_id: data.contact_person_id,
+        logo_light_path: lightPath,
+        logo_dark_path: darkPath,
+      })
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['company', companyId, 'company-detail'],
+      })
+    },
   })
 
   if (isLoading) {
@@ -100,9 +131,26 @@ export default function CompanyOverviewTab() {
     .join(', ')
 
   return (
-    <Card size="4" style={{ minHeight: 0, overflow: 'auto' }}>
+    <Card
+      size="4"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        minHeight: 0,
+        overflow: 'hidden',
+      }}
+    >
       {/* Header */}
-      <Flex align="center" justify="between" wrap="wrap" gap="3" mb="4">
+      <Flex
+        align="center"
+        justify="between"
+        wrap="wrap"
+        gap="3"
+        mb="4"
+        p="4"
+        pb="0"
+      >
         <Heading size="4">{data.name}</Heading>
         <Flex gap="2">
           <Button
@@ -136,9 +184,61 @@ export default function CompanyOverviewTab() {
         onOpenChange={setAnnouncementOpen}
       />
 
-      {/* Main content in columns */}
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-        <Flex direction="column" gap="4" p="4">
+      {/* Main content in columns - scrollable */}
+      <Box
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+        }}
+      >
+        <Flex direction="column" gap="4" p="4" pt="0">
+          {/* Logo Upload Section */}
+          <Box>
+            <Flex
+              align="center"
+              gap="2"
+              mb="2"
+              style={{
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
+              onClick={() => setLogoExpanded(!logoExpanded)}
+            >
+              {logoExpanded ? (
+                <NavArrowDown width={16} height={16} />
+              ) : (
+                <NavArrowRight width={16} height={16} />
+              )}
+              <Text as="div" size="2" color="gray">
+                Company Logos
+              </Text>
+              {data.logo_light_path || data.logo_dark_path ? (
+                <Badge variant="soft" color="green" size="1">
+                  Configured
+                </Badge>
+              ) : (
+                <Badge variant="soft" color="red" size="1">
+                  Not configured
+                </Badge>
+              )}
+            </Flex>
+            {logoExpanded && (
+              <CompanyLogoUpload
+                currentLightLogoPath={data.logo_light_path}
+                currentDarkLogoPath={data.logo_dark_path}
+                uploadPathPrefix={`companies/${companyId}`}
+                onUploadComplete={(lightPath, darkPath) => {
+                  updateLogoMutation.mutate({ lightPath, darkPath })
+                }}
+                disabled={updateLogoMutation.isPending}
+              />
+            )}
+          </Box>
+
+          <Separator size="4" />
+
           <Grid columns={{ initial: '1', md: '2', lg: '3' }} gap="4">
             {/* LEFT: Company information */}
             <Column title="Company information">
@@ -243,7 +343,7 @@ export default function CompanyOverviewTab() {
             </Column>
           </Grid>
         </Flex>
-      </div>
+      </Box>
     </Card>
   )
 }

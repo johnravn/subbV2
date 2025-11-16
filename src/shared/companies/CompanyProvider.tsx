@@ -41,21 +41,41 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
   })
   const userId = userQ.data?.id ?? null
 
+  // Track previous userId to detect user changes
+  const previousUserIdRef = React.useRef<string | null>(null)
+
   // Namespaced LS key per user to avoid cross-user leakage
   const lsKey = userId ? `selected-company-id:${userId}` : null
 
   // Local selected company id (fast path)
   const [companyId, setCompanyIdState] = React.useState<string | null>(null)
 
-  // Initialize from localStorage when user becomes known
+  // Initialize from localStorage when user becomes known, reset on user change
   React.useEffect(() => {
+    const previousUserId = previousUserIdRef.current
+
+    // If user changed to a different user (not just null), clear company state
+    if (previousUserId && previousUserId !== userId && userId !== null) {
+      // Invalidate all company-related queries for the old user
+      qc.invalidateQueries({ queryKey: ['my-companies'] })
+      qc.invalidateQueries({ queryKey: ['profile'] })
+      setCompanyIdState(null)
+    }
+
     if (!userId) {
       setCompanyIdState(null)
+      previousUserIdRef.current = null
       return
     }
-    const fromLS = lsKey ? safeGetLS(lsKey) : null
-    setCompanyIdState(fromLS)
-  }, [userId, lsKey])
+
+    // Only load from localStorage if this is the first time for this user
+    // or if user changed (userId !== previousUserId)
+    if (userId !== previousUserId) {
+      const fromLS = lsKey ? safeGetLS(lsKey) : null
+      setCompanyIdState(fromLS)
+      previousUserIdRef.current = userId
+    }
+  }, [userId, lsKey, qc])
 
   // Cross-tab sync
   React.useEffect(() => {

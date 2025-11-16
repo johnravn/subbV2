@@ -9,6 +9,7 @@ export type CustomerRow = {
   address: string | null
   vat_number: string | null
   is_partner: boolean
+  logo_path: string | null
   created_at: string
 }
 
@@ -48,7 +49,7 @@ export function customersIndexQuery({
       let q = supabase
         .from('customers')
         .select(
-          'id, company_id, name, email, phone, address, vat_number, is_partner, created_at',
+          'id, company_id, name, email, phone, address, vat_number, is_partner, logo_path, created_at',
         )
         .eq('company_id', companyId)
         .or('deleted.is.null,deleted.eq.false')
@@ -112,7 +113,7 @@ export function customerDetailQuery({
       const { data: c, error } = await supabase
         .from('customers')
         .select(
-          'id, company_id, name, email, phone, address, vat_number, is_partner, created_at',
+          'id, company_id, name, email, phone, address, vat_number, is_partner, logo_path, created_at',
         )
         .eq('company_id', companyId)
         .eq('id', id)
@@ -143,6 +144,7 @@ export async function upsertCustomer(payload: {
   address?: string | null
   vat_number?: string | null
   is_partner?: boolean
+  logo_path?: string | null
 }) {
   const body = {
     company_id: payload.company_id,
@@ -152,6 +154,7 @@ export async function upsertCustomer(payload: {
     address: payload.address ?? null,
     vat_number: payload.vat_number ?? null,
     is_partner: !!payload.is_partner,
+    logo_path: payload.logo_path ?? null,
   }
   if (payload.id) {
     const { error } = await supabase

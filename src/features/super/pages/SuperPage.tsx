@@ -510,6 +510,7 @@ export default function SuperPage() {
 
                 {/* RESIZER */}
                 <Box
+                  className="section-resizer"
                   onMouseDown={(e) => {
                     e.preventDefault()
                     setIsResizingCompanies(true)
@@ -532,6 +533,7 @@ export default function SuperPage() {
                   onMouseEnter={(e) => {
                     if (!isResizingCompanies) {
                       e.currentTarget.style.backgroundColor = 'var(--gray-a6)'
+                      e.currentTarget.style.cursor = 'col-resize'
                     }
                   }}
                   onMouseLeave={(e) => {
@@ -766,6 +768,7 @@ export default function SuperPage() {
 
                 {/* RESIZER */}
                 <Box
+                  className="section-resizer"
                   onMouseDown={(e) => {
                     e.preventDefault()
                     setIsResizingUsers(true)
@@ -788,6 +791,7 @@ export default function SuperPage() {
                   onMouseEnter={(e) => {
                     if (!isResizingUsers) {
                       e.currentTarget.style.backgroundColor = 'var(--gray-a6)'
+                      e.currentTarget.style.cursor = 'col-resize'
                     }
                   }}
                   onMouseLeave={(e) => {

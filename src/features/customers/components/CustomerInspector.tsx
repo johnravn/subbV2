@@ -13,7 +13,7 @@ import {
   Table,
   Text,
 } from '@radix-ui/themes'
-import { Edit, Trash } from 'iconoir-react'
+import { Edit, NavArrowDown, NavArrowRight, Trash } from 'iconoir-react'
 import { useNavigate } from '@tanstack/react-router'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { prettyPhone } from '@shared/phone/phone'
@@ -21,11 +21,13 @@ import { useToast } from '@shared/ui/toast/ToastProvider'
 import { fmtVAT } from '@shared/lib/generalFunctions'
 import InspectorSkeleton from '@shared/ui/components/InspectorSkeleton'
 import MapEmbed from '@shared/maps/MapEmbed'
+import LogoUpload from '@shared/ui/components/LogoUpload'
 import {
   customerDetailQuery,
   customerRecentJobsQuery,
   deleteContact,
   deleteCustomer,
+  upsertCustomer,
 } from '../api/queries'
 import EditCustomerDialog from './dialogs/EditCustomerDialog'
 import AddContactDialog from './dialogs/AddContactDialog'
@@ -43,6 +45,7 @@ export default function CustomerInspector({
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [editOpen, setEditOpen] = React.useState(false)
+  const [logoExpanded, setLogoExpanded] = React.useState(false)
 
   // NEW: dialog state for contacts
   const [addOpen, setAddOpen] = React.useState(false)
@@ -129,6 +132,32 @@ export default function CustomerInspector({
     },
     onError: (e: any) =>
       toastError('Failed to delete', e?.message ?? 'Please try again.'),
+  })
+
+  const updateLogoMutation = useMutation({
+    mutationFn: async (logoPath: string | null) => {
+      if (!companyId || !id || !data)
+        throw new Error('Missing company or customer')
+      await upsertCustomer({
+        id: data.id,
+        company_id: companyId,
+        name: data.name,
+        email: data.email ?? null,
+        phone: data.phone ?? null,
+        address: data.address ?? null,
+        vat_number: data.vat_number ?? null,
+        is_partner: data.is_partner,
+        logo_path: logoPath,
+      })
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['company', companyId, 'customer-detail', id],
+      })
+      qc.invalidateQueries({
+        queryKey: ['company', companyId, 'customers-index'],
+      })
+    },
   })
 
   // If query returns no data (customer was deleted), clear selection
@@ -222,6 +251,53 @@ export default function CustomerInspector({
           </Button>
         </Flex>
       </Flex>
+
+      <Separator my="3" />
+
+      {/* Logo Upload */}
+      <Box mb="4">
+        <Flex
+          align="center"
+          gap="2"
+          mb="2"
+          style={{
+            cursor: 'pointer',
+            userSelect: 'none',
+          }}
+          onClick={() => setLogoExpanded(!logoExpanded)}
+        >
+          {logoExpanded ? (
+            <NavArrowDown width={16} height={16} />
+          ) : (
+            <NavArrowRight width={16} height={16} />
+          )}
+          <Text as="div" size="2" color="gray">
+            Logo
+          </Text>
+          {c.logo_path ? (
+            <Badge variant="soft" color="green" size="1">
+              Configured
+            </Badge>
+          ) : (
+            <Badge variant="soft" color="red" size="1">
+              Not configured
+            </Badge>
+          )}
+        </Flex>
+        {logoExpanded && (
+          <LogoUpload
+            currentLogoPath={c.logo_path}
+            uploadPath={`customers/${companyId}/${c.id}/logo.jpg`}
+            onUploadComplete={(path) => {
+              updateLogoMutation.mutate(path)
+            }}
+            onDelete={() => {
+              updateLogoMutation.mutate(null)
+            }}
+            disabled={updateLogoMutation.isPending}
+          />
+        )}
+      </Box>
 
       <Separator my="3" />
 

@@ -78,6 +78,15 @@ export default function VehiclesList({
             )
           })
         )}
+        {/* Probe row for height measurement */}
+        <Table.Row
+          data-row-probe
+          style={{
+            display: 'none',
+          }}
+        >
+          <Table.Cell colSpan={4}>probe</Table.Cell>
+        </Table.Row>
       </Table.Body>
     </Table.Root>
   )

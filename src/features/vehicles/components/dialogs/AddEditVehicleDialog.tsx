@@ -17,7 +17,7 @@ import { useCompany } from '@shared/companies/CompanyProvider'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { Camera } from 'iconoir-react'
 import { partnerCustomersQuery, upsertVehicle } from '../../api/queries'
-import type { FuelType } from '../../api/queries'
+import type { FuelType, VehicleCategory } from '../../api/queries'
 
 type Mode = 'create' | 'edit'
 type Initial = {
@@ -25,6 +25,7 @@ type Initial = {
   name: string
   registration_no: string
   fuel: FuelType | null
+  vehicle_category: VehicleCategory | null
   internally_owned: boolean
   external_owner_id: string | null
   image_path: string | null
@@ -54,6 +55,7 @@ export default function AddEditVehicleDialog({
     name: '',
     registration_no: '',
     fuel: null as FuelType | null,
+    vehicle_category: null as VehicleCategory | null,
     internally_owned: true,
     external_owner_id: null as string | null,
     image_path: null as string | null,
@@ -70,6 +72,7 @@ export default function AddEditVehicleDialog({
       name: initial.name,
       registration_no: initial.registration_no,
       fuel: initial.fuel,
+      vehicle_category: initial.vehicle_category ?? null,
       internally_owned: initial.internally_owned,
       external_owner_id: initial.external_owner_id ?? null,
       image_path: initial.image_path ?? null,
@@ -123,6 +126,7 @@ export default function AddEditVehicleDialog({
         name: form.name.trim(),
         registration_no: form.registration_no.trim() || null,
         fuel: form.fuel,
+        vehicle_category: form.vehicle_category,
         internally_owned: form.internally_owned,
         external_owner_id: form.internally_owned
           ? null
@@ -220,10 +224,43 @@ export default function AddEditVehicleDialog({
                   placeholder="Select fuel"
                   style={{ minHeight: 'var(--space-7)' }}
                 />
-                <Select.Content>
+                <Select.Content style={{ zIndex: 10000 }}>
                   <Select.Item value="electric">electric</Select.Item>
                   <Select.Item value="diesel">diesel</Select.Item>
                   <Select.Item value="petrol">petrol</Select.Item>
+                </Select.Content>
+              </Select.Root>
+            </Field>
+
+            <Field label="Vehicle Category">
+              <Select.Root
+                value={form.vehicle_category ?? ''}
+                onValueChange={(v) =>
+                  set('vehicle_category', (v || null) as VehicleCategory | null)
+                }
+                size="3"
+              >
+                <Select.Trigger
+                  placeholder="Select category"
+                  style={{ minHeight: 'var(--space-7)' }}
+                />
+                <Select.Content style={{ zIndex: 10000 }}>
+                  <Select.Item value="passenger_car_small">
+                    Passenger Car - Small
+                  </Select.Item>
+                  <Select.Item value="passenger_car_medium">
+                    Passenger Car - Medium
+                  </Select.Item>
+                  <Select.Item value="passenger_car_big">
+                    Passenger Car - Big
+                  </Select.Item>
+                  <Select.Item value="van_small">Van - Small</Select.Item>
+                  <Select.Item value="van_medium">Van - Medium</Select.Item>
+                  <Select.Item value="van_big">Van - Big</Select.Item>
+                  <Select.Item value="C1">C1</Select.Item>
+                  <Select.Item value="C1E">C1E</Select.Item>
+                  <Select.Item value="C">C</Select.Item>
+                  <Select.Item value="CE">CE</Select.Item>
                 </Select.Content>
               </Select.Root>
             </Field>
@@ -255,7 +292,7 @@ export default function AddEditVehicleDialog({
                   }
                   style={{ minHeight: 'var(--space-7)' }}
                 />
-                <Select.Content>
+                <Select.Content style={{ zIndex: 10000 }}>
                   <Select.Group>
                     <Select.Label>Your company</Select.Label>
                     <Select.Item value=" ">Internal (your company)</Select.Item>

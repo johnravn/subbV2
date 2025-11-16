@@ -9,9 +9,11 @@ import {
   Separator,
   Tooltip,
 } from '@radix-ui/themes'
+import { useQuery } from '@tanstack/react-query'
 import { useLocation } from '@tanstack/react-router'
-import { SidebarExpand } from 'iconoir-react'
+import { TransitionLeft } from 'iconoir-react'
 import { useCompany } from '@shared/companies/CompanyProvider'
+import { companyExpansionQuery } from '@features/company/api/queries'
 import PageSkeleton from '@shared/ui/components/PageSkeleton'
 import JobsTable from '../components/JobsTable'
 import JobInspector from '../components/JobInspector'
@@ -22,6 +24,91 @@ export default function JobsPage() {
   const search = location.search as { jobId?: string; tab?: string }
   const jobId = search?.jobId
   const tab = search?.tab
+
+  // Fetch company expansion for vehicle/transport rates with extensive logging
+  const expansionQueryOptions = React.useMemo(() => {
+    if (!companyId) return null
+    const baseOptions = companyExpansionQuery({ companyId })
+    return {
+      ...baseOptions,
+      queryFn: async () => {
+        const timestamp = new Date().toISOString()
+        console.log('[JobsPage] Fetching company expansion', {
+          companyId,
+          timestamp,
+          queryKey: baseOptions.queryKey,
+        })
+        try {
+          const result = await baseOptions.queryFn()
+          console.log('[JobsPage] Fetched company expansion result', {
+            companyId,
+            timestamp: new Date().toISOString(),
+            result,
+          })
+          return result
+        } catch (err) {
+          console.error('[JobsPage] Company expansion fetch failed', {
+            companyId,
+            timestamp: new Date().toISOString(),
+            error: err,
+          })
+          throw err
+        }
+      },
+    }
+  }, [companyId])
+
+  const {
+    data: companyExpansion,
+    status: companyExpansionStatus,
+    error: companyExpansionError,
+    isFetching: isCompanyExpansionFetching,
+    isLoading: isCompanyExpansionLoading,
+    isError: isCompanyExpansionError,
+  } = useQuery({
+    ...(expansionQueryOptions ?? {
+      queryKey: ['company-expansion', 'no-company'],
+      queryFn: async () => null,
+    }),
+    enabled: !!companyId,
+  })
+
+  React.useEffect(() => {
+    console.log('[JobsPage] companyId updated', {
+      companyId,
+      timestamp: new Date().toISOString(),
+    })
+  }, [companyId])
+
+  React.useEffect(() => {
+    console.log('[JobsPage] Company expansion query status changed', {
+      status: companyExpansionStatus,
+      isLoading: isCompanyExpansionLoading,
+      isFetching: isCompanyExpansionFetching,
+      isError: isCompanyExpansionError,
+      error: companyExpansionError ?? null,
+      timestamp: new Date().toISOString(),
+    })
+  }, [
+    companyExpansionStatus,
+    isCompanyExpansionLoading,
+    isCompanyExpansionFetching,
+    isCompanyExpansionError,
+    companyExpansionError,
+  ])
+
+  // Log vehicle/transport rates when fetched
+  React.useEffect(() => {
+    if (companyExpansion) {
+      console.log('[JobsPage] Vehicle/Transport Rates fetched', {
+        vehicle_daily_rate: companyExpansion.vehicle_daily_rate,
+        vehicle_distance_rate: companyExpansion.vehicle_distance_rate,
+        vehicle_distance_increment: companyExpansion.vehicle_distance_increment,
+        raw: companyExpansion,
+        timestamp: new Date().toISOString(),
+      })
+    }
+  }, [companyExpansion])
 
   const [selectedId, setSelectedId] = React.useState<string | null>(
     jobId || null,
@@ -320,7 +407,7 @@ export default function JobsPage() {
                       flexShrink: 0,
                     }}
                   >
-                    <SidebarExpand width={22} height={22} />
+                    <TransitionLeft width={22} height={22} />
                   </IconButton>
                 </Tooltip>
               </Flex>
@@ -341,6 +428,7 @@ export default function JobsPage() {
         {/* RESIZER - hidden when minimized */}
         {!isMinimized && (
           <Box
+            className="section-resizer"
             onMouseDown={(e) => {
               e.preventDefault()
               e.stopPropagation()
@@ -362,6 +450,7 @@ export default function JobsPage() {
             onMouseEnter={(e) => {
               if (!isResizing) {
                 e.currentTarget.style.backgroundColor = 'var(--gray-a6)'
+                e.currentTarget.style.cursor = 'col-resize'
               }
             }}
             onMouseLeave={(e) => {

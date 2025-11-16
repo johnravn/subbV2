@@ -395,7 +395,7 @@ export default function AddItemDialog({
                   <Select.Trigger
                     placeholder={loading ? 'Loading…' : 'Select category'}
                   />
-                  <Select.Content>
+                  <Select.Content style={{ zIndex: 10000 }}>
                     <Select.Group>
                       {categories.map((c: Option) => (
                         <Select.Item key={c.id} value={c.id}>
@@ -423,7 +423,7 @@ export default function AddItemDialog({
                   disabled={loading}
                 >
                   <Select.Trigger placeholder="Select brand" />
-                  <Select.Content>
+                  <Select.Content style={{ zIndex: 10000 }}>
                     <Select.Group>
                       <Select.Item value="none">(None)</Select.Item>
                       {brands.map((b: Option) => (
@@ -453,7 +453,7 @@ export default function AddItemDialog({
                   }}
                 >
                   <Select.Trigger />
-                  <Select.Content>
+                  <Select.Content style={{ zIndex: 10000 }}>
                     <Select.Item value="internal">Internal</Select.Item>
                     <Select.Item value="external">External</Select.Item>
                   </Select.Content>
@@ -467,7 +467,7 @@ export default function AddItemDialog({
                     onValueChange={(v) => set('external_owner_id', v)}
                   >
                     <Select.Trigger placeholder="Select partner…" />
-                    <Select.Content>
+                    <Select.Content style={{ zIndex: 10000 }}>
                       <Select.Group>
                         {partners.map((p) => (
                           <Select.Item key={p.id} value={p.id}>

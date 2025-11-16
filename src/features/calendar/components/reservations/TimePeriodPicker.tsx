@@ -94,7 +94,7 @@ export default function TimePeriodPicker({
               onValueChange={(v) => onChange(v || null)}
             >
               <Select.Trigger placeholder="Select time period…" />
-              <Select.Content>
+              <Select.Content style={{ zIndex: 10001 }}>
                 {timePeriods.map((r) => (
                   <Select.Item key={r.id} value={r.id}>
                     {r.title || '(untitled)'} — {fmt(r.start_at)} →{' '}

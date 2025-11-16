@@ -2,6 +2,7 @@
 import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  Badge,
   Box,
   Button,
   Card,
@@ -9,16 +10,19 @@ import {
   Flex,
   Heading,
   IconButton,
+  RadioGroup,
   Separator,
   Spinner,
   Switch,
   Text,
+  TextArea,
   TextField,
 } from '@radix-ui/themes'
+import { Check, Edit, MessageText, Trash, Upload, Xmark } from 'iconoir-react'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { supabase } from '@shared/api/supabase'
 import { useToast } from '@shared/ui/toast/ToastProvider'
-import { Check, Edit, Trash, Xmark } from 'iconoir-react'
+import EditWelcomeMatterDialog from './dialogs/EditWelcomeMatterDialog'
 
 type ItemCategory = {
   id: string
@@ -267,8 +271,11 @@ function CategoriesDialogContent({
 export default function CompanySetupTab() {
   const { companyId } = useCompany()
   const qc = useQueryClient()
-  const { success, error: toastError } = useToast()
+  const { success, error: toastError, info } = useToast()
   const [editCategoriesOpen, setEditCategoriesOpen] = React.useState(false)
+  const [welcomeMatterOpen, setWelcomeMatterOpen] = React.useState(false)
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
+  const [uploadingPDF, setUploadingPDF] = React.useState(false)
 
   // Fetch company_expansions for latest_feed_open_to_freelancers setting
   const { data: expansions, isLoading: expansionsLoading } = useQuery({
@@ -285,6 +292,199 @@ export default function CompanySetupTab() {
       return data
     },
   })
+
+  // Terms and conditions state - fetch from company directly
+  const { data: companyTermsData } = useQuery({
+    queryKey: ['company', companyId, 'terms'] as const,
+    enabled: !!companyId,
+    queryFn: async () => {
+      if (!companyId) return null
+      const { data, error } = await supabase
+        .from('companies')
+        .select(
+          'terms_and_conditions_type, terms_and_conditions_text, terms_and_conditions_pdf_path',
+        )
+        .eq('id', companyId)
+        .single()
+      if (error) throw error
+      return data
+    },
+  })
+
+  const [termsType, setTermsType] = React.useState<'pdf' | 'text' | null>(null)
+  const [termsText, setTermsText] = React.useState<string>('')
+  const [uploadedPdfPath, setUploadedPdfPath] = React.useState<string | null>(
+    null,
+  )
+
+  // Update state when company data loads
+  React.useEffect(() => {
+    if (companyTermsData) {
+      const type = companyTermsData.terms_and_conditions_type
+      setTermsType(type === 'pdf' || type === 'text' ? type : null)
+      setTermsText(companyTermsData.terms_and_conditions_text || '')
+      setUploadedPdfPath(companyTermsData.terms_and_conditions_pdf_path || null)
+    }
+  }, [companyTermsData])
+
+  // Upload PDF function
+  const uploadPDF = async (file: File) => {
+    if (!companyId) throw new Error('No company selected')
+    setUploadingPDF(true)
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'pdf'
+      if (ext !== 'pdf') {
+        throw new Error('Only PDF files are allowed')
+      }
+      const fileName = `terms_${Date.now()}.${ext}`
+      const path = `${companyId}/terms/${fileName}`
+
+      // Delete old PDF if exists
+      if (companyTermsData?.terms_and_conditions_pdf_path) {
+        await supabase.storage
+          .from('company_files')
+          .remove([companyTermsData.terms_and_conditions_pdf_path])
+      }
+
+      const { error: uploadError } = await supabase.storage
+        .from('company_files')
+        .upload(path, file, { upsert: false, cacheControl: '3600' })
+
+      if (uploadError) throw uploadError
+
+      // Update local state with uploaded path (user must click Save to persist)
+      setUploadedPdfPath(path)
+      info('PDF uploaded', 'Click "Save" to apply the changes.')
+      return path
+    } finally {
+      setUploadingPDF(false)
+    }
+  }
+
+  // Save terms and conditions mutation
+  const saveTermsMutation = useMutation({
+    mutationFn: async () => {
+      if (!companyId) throw new Error('No company selected')
+      if (!termsType)
+        throw new Error('Please select a type for terms and conditions')
+
+      const updateData: any = {
+        terms_and_conditions_type: termsType,
+      }
+
+      if (termsType === 'text') {
+        updateData.terms_and_conditions_text = termsText.trim() || null
+        updateData.terms_and_conditions_pdf_path = null
+      } else {
+        // Use uploaded PDF path or existing one
+        if (
+          !uploadedPdfPath &&
+          !companyTermsData?.terms_and_conditions_pdf_path
+        ) {
+          throw new Error('Please upload a PDF file first')
+        }
+        updateData.terms_and_conditions_pdf_path =
+          uploadedPdfPath ||
+          companyTermsData?.terms_and_conditions_pdf_path ||
+          null
+        updateData.terms_and_conditions_text = null
+      }
+
+      const { error } = await supabase
+        .from('companies')
+        .update(updateData)
+        .eq('id', companyId)
+
+      if (error) throw error
+    },
+    onSuccess: async () => {
+      // Reset uploaded path after save
+      setUploadedPdfPath(null)
+      setShowEditForm(false)
+      await qc.invalidateQueries({
+        queryKey: ['company', companyId, 'terms'],
+      })
+      success(
+        'Terms and conditions saved',
+        'Terms will be included with offers.',
+      )
+    },
+    onError: (error: any) => {
+      toastError(
+        'Failed to save terms and conditions',
+        error?.message ?? 'Please try again.',
+      )
+    },
+  })
+
+  // Delete terms and conditions
+  const deleteTermsMutation = useMutation({
+    mutationFn: async () => {
+      if (!companyId) throw new Error('No company selected')
+
+      // Delete PDF if exists
+      if (companyTermsData?.terms_and_conditions_pdf_path) {
+        await supabase.storage
+          .from('company_files')
+          .remove([companyTermsData.terms_and_conditions_pdf_path])
+      }
+
+      const { error } = await supabase
+        .from('companies')
+        .update({
+          terms_and_conditions_type: null,
+          terms_and_conditions_text: null,
+          terms_and_conditions_pdf_path: null,
+        })
+        .eq('id', companyId)
+
+      if (error) throw error
+    },
+    onSuccess: async () => {
+      setTermsType(null)
+      setTermsText('')
+      setUploadedPdfPath(null)
+      setShowEditForm(false)
+      await qc.invalidateQueries({
+        queryKey: ['company', companyId, 'terms'],
+      })
+      success('Terms and conditions deleted', 'Terms have been removed.')
+    },
+    onError: (error: any) => {
+      toastError(
+        'Failed to delete terms and conditions',
+        error?.message ?? 'Please try again.',
+      )
+    },
+  })
+
+  // Get PDF URL if exists (use uploaded path or existing one)
+  const pdfPath =
+    uploadedPdfPath || companyTermsData?.terms_and_conditions_pdf_path
+  const pdfUrl = React.useMemo(() => {
+    if (!pdfPath) return null
+    const { data } = supabase.storage
+      .from('company_files')
+      .getPublicUrl(pdfPath)
+    return data.publicUrl
+  }, [pdfPath])
+
+  // Extract filename from PDF path
+  const pdfFileName = React.useMemo(() => {
+    if (!pdfPath) return null
+    const parts = pdfPath.split('/')
+    return parts[parts.length - 1] || 'terms.pdf'
+  }, [pdfPath])
+
+  // Check if terms are currently configured
+  const isConfigured = !!(
+    companyTermsData?.terms_and_conditions_type &&
+    (companyTermsData.terms_and_conditions_type === 'pdf'
+      ? companyTermsData.terms_and_conditions_pdf_path
+      : companyTermsData.terms_and_conditions_text)
+  )
+
+  const [showEditForm, setShowEditForm] = React.useState(false)
 
   const [pendingToggleValue, setPendingToggleValue] = React.useState<
     boolean | null
@@ -347,6 +547,38 @@ export default function CompanySetupTab() {
 
       <Card size="4" style={{ minHeight: 0, overflow: 'auto' }}>
         <Box p="4">
+          {/* Welcome Matter Section */}
+          <Heading size="4" mb="4">
+            Welcome Message
+          </Heading>
+          <Flex direction="column" gap="3" mb="6">
+            <Box>
+              <Flex align="center" gap="3" mb="2">
+                <Text as="div" size="2" weight="bold">
+                  Welcome matter
+                </Text>
+                <Button
+                  size="2"
+                  variant="soft"
+                  onClick={() => setWelcomeMatterOpen(true)}
+                >
+                  <MessageText />
+                  Edit
+                </Button>
+              </Flex>
+              <Text as="div" size="1" color="gray">
+                Message sent to all users when they are added to this company
+              </Text>
+            </Box>
+            <EditWelcomeMatterDialog
+              open={welcomeMatterOpen}
+              onOpenChange={setWelcomeMatterOpen}
+              onSaved={() => {}}
+            />
+          </Flex>
+
+          <Separator size="4" mb="6" />
+
           {/* Inventory Setup Section */}
           <Heading size="4" mb="4">
             Inventory setup
@@ -361,6 +593,326 @@ export default function CompanySetupTab() {
               <Edit /> Manage Categories
             </Button>
           </Flex>
+
+          <Separator size="4" mb="6" />
+
+          {/* Terms and Conditions Section */}
+          <Flex align="center" justify="between" mb="4">
+            <Heading size="4">Terms and Conditions</Heading>
+            {isConfigured && (
+              <Badge color="green" variant="soft" size="2">
+                Configured
+              </Badge>
+            )}
+          </Flex>
+
+          {!isConfigured && !showEditForm ? (
+            <Box mb="6">
+              <Text size="2" color="gray" mb="3" style={{ display: 'block' }}>
+                No terms and conditions configured. Add terms to include them
+                with all offers.
+              </Text>
+              <Button
+                size="2"
+                variant="outline"
+                onClick={() => setShowEditForm(true)}
+              >
+                <Upload width={16} height={16} />
+                Add Terms and Conditions
+              </Button>
+            </Box>
+          ) : (
+            <Flex direction="column" gap="4" mb="6">
+              {/* Show current configuration summary */}
+              {isConfigured &&
+                !showEditForm &&
+                (() => {
+                  if (!companyTermsData) return null
+                  const currentTermsType =
+                    companyTermsData.terms_and_conditions_type
+                  return (
+                    <Box
+                      p="3"
+                      style={{
+                        border: '1px solid var(--gray-a6)',
+                        borderRadius: 8,
+                        background: 'var(--gray-a2)',
+                      }}
+                    >
+                      <Flex align="center" justify="between" gap="2">
+                        <Flex direction="column" gap="1" style={{ flex: 1 }}>
+                          <Flex align="center" gap="2">
+                            <Text size="2" weight="medium">
+                              {currentTermsType === 'pdf'
+                                ? 'PDF Document'
+                                : 'Text Field'}
+                            </Text>
+                            <Badge
+                              variant="soft"
+                              color={
+                                currentTermsType === 'pdf' ? 'blue' : 'gray'
+                              }
+                              size="1"
+                            >
+                              {currentTermsType === 'pdf' ? 'PDF' : 'Text'}
+                            </Badge>
+                          </Flex>
+                          {currentTermsType === 'pdf' && pdfFileName && (
+                            <Text size="1" color="gray">
+                              {pdfFileName}
+                            </Text>
+                          )}
+                          {currentTermsType === 'text' &&
+                            companyTermsData.terms_and_conditions_text && (
+                              <Text
+                                size="1"
+                                color="gray"
+                                style={{ maxWidth: 500 }}
+                              >
+                                {companyTermsData.terms_and_conditions_text
+                                  .length > 100
+                                  ? `${companyTermsData.terms_and_conditions_text.substring(0, 100)}...`
+                                  : companyTermsData.terms_and_conditions_text}
+                              </Text>
+                            )}
+                        </Flex>
+                        <Flex gap="2">
+                          {currentTermsType === 'pdf' && pdfUrl && (
+                            <Button
+                              size="2"
+                              variant="soft"
+                              onClick={() => window.open(pdfUrl, '_blank')}
+                            >
+                              View
+                            </Button>
+                          )}
+                          <Button
+                            size="2"
+                            variant="soft"
+                            onClick={() => {
+                              setShowEditForm(true)
+                              setTermsType(
+                                currentTermsType === 'pdf' ||
+                                  currentTermsType === 'text'
+                                  ? currentTermsType
+                                  : null,
+                              )
+                            }}
+                          >
+                            <Edit width={16} height={16} />
+                            Edit
+                          </Button>
+                          <Button
+                            size="2"
+                            variant="soft"
+                            color="red"
+                            onClick={() => deleteTermsMutation.mutate()}
+                            disabled={deleteTermsMutation.isPending}
+                          >
+                            <Trash width={16} height={16} />
+                          </Button>
+                        </Flex>
+                      </Flex>
+                    </Box>
+                  )
+                })()}
+
+              {/* Edit Form */}
+              {(showEditForm || !isConfigured) && (
+                <>
+                  <Flex direction="column" gap="2">
+                    <Text size="2" weight="medium" mb="1">
+                      Type
+                    </Text>
+                    <RadioGroup.Root
+                      value={termsType || ''}
+                      onValueChange={(value) => {
+                        if (value === 'pdf' || value === 'text') {
+                          setTermsType(value)
+                        } else {
+                          setTermsType(null)
+                        }
+                      }}
+                    >
+                      <Flex direction="column" gap="2">
+                        <Text as="label" size="2">
+                          <Flex align="center" gap="2">
+                            <RadioGroup.Item value="pdf" />
+                            <Text>PDF Document</Text>
+                          </Flex>
+                        </Text>
+                        <Text as="label" size="2">
+                          <Flex align="center" gap="2">
+                            <RadioGroup.Item value="text" />
+                            <Text>Text Field</Text>
+                          </Flex>
+                        </Text>
+                      </Flex>
+                    </RadioGroup.Root>
+                  </Flex>
+
+                  {termsType === 'pdf' && (
+                    <Flex direction="column" gap="2">
+                      <Text size="2" weight="medium" mb="1">
+                        PDF Document
+                      </Text>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".pdf"
+                        style={{ display: 'none' }}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0]
+                          if (!file) return
+                          try {
+                            await uploadPDF(file)
+                          } catch (err: any) {
+                            toastError(
+                              'Upload failed',
+                              err?.message ?? 'Please try again.',
+                            )
+                          } finally {
+                            if (fileInputRef.current) {
+                              fileInputRef.current.value = ''
+                            }
+                          }
+                        }}
+                      />
+                      {pdfPath ? (
+                        <Box
+                          p="2"
+                          style={{
+                            border: '1px solid var(--gray-a6)',
+                            borderRadius: 8,
+                            background: 'var(--gray-a2)',
+                          }}
+                        >
+                          <Flex align="center" justify="between" gap="2">
+                            <Flex
+                              direction="column"
+                              gap="1"
+                              style={{ flex: 1 }}
+                            >
+                              <Text size="2" weight="medium">
+                                {pdfFileName || 'PDF file'}
+                              </Text>
+                              <Text size="1" color="gray">
+                                {uploadedPdfPath
+                                  ? 'New file uploaded (click Save to apply)'
+                                  : 'Current file'}
+                              </Text>
+                            </Flex>
+                            <Flex gap="2">
+                              {pdfUrl && (
+                                <Button
+                                  size="1"
+                                  variant="soft"
+                                  onClick={() => window.open(pdfUrl, '_blank')}
+                                >
+                                  View
+                                </Button>
+                              )}
+                              <Button
+                                size="1"
+                                variant="soft"
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={uploadingPDF}
+                              >
+                                <Upload width={14} height={14} />
+                                {uploadingPDF ? 'Uploading...' : 'Replace'}
+                              </Button>
+                            </Flex>
+                          </Flex>
+                        </Box>
+                      ) : (
+                        <Button
+                          size="2"
+                          variant="outline"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={uploadingPDF}
+                        >
+                          <Upload width={16} height={16} />
+                          {uploadingPDF ? 'Uploading...' : 'Upload PDF'}
+                        </Button>
+                      )}
+                    </Flex>
+                  )}
+
+                  {termsType === 'text' && (
+                    <Flex direction="column" gap="2">
+                      <Text size="2" weight="medium" mb="1">
+                        Terms and Conditions Text
+                      </Text>
+                      <TextArea
+                        value={termsText}
+                        onChange={(e) => setTermsText(e.target.value)}
+                        placeholder="Enter terms and conditions text here..."
+                        rows={10}
+                        resize="vertical"
+                      />
+                    </Flex>
+                  )}
+
+                  {termsType && (
+                    <Flex gap="2" justify="end">
+                      {isConfigured && (
+                        <Button
+                          size="2"
+                          variant="soft"
+                          onClick={() => {
+                            setShowEditForm(false)
+                            // Reset to current values
+                            const currentType =
+                              companyTermsData?.terms_and_conditions_type
+                            setTermsType(
+                              currentType === 'pdf' || currentType === 'text'
+                                ? currentType
+                                : null,
+                            )
+                            setTermsText(
+                              companyTermsData?.terms_and_conditions_text || '',
+                            )
+                            setUploadedPdfPath(null)
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      )}
+                      <Button
+                        size="2"
+                        variant="soft"
+                        color="red"
+                        onClick={() => {
+                          deleteTermsMutation.mutate()
+                          setShowEditForm(false)
+                        }}
+                        disabled={deleteTermsMutation.isPending}
+                      >
+                        {deleteTermsMutation.isPending
+                          ? 'Deleting...'
+                          : 'Delete'}
+                      </Button>
+                      <Button
+                        size="2"
+                        variant="classic"
+                        onClick={() => {
+                          saveTermsMutation.mutate()
+                          setShowEditForm(false)
+                        }}
+                        disabled={
+                          saveTermsMutation.isPending ||
+                          (termsType === 'text' && !termsText.trim()) ||
+                          (termsType === 'pdf' && !pdfPath)
+                        }
+                      >
+                        {saveTermsMutation.isPending ? 'Saving...' : 'Save'}
+                      </Button>
+                    </Flex>
+                  )}
+                </>
+              )}
+            </Flex>
+          )}
 
           <Separator size="4" mb="6" />
 

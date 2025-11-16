@@ -187,6 +187,8 @@ export default function HomePage() {
   const [leftPanelWidth, setLeftPanelWidth] = React.useState<number>(50)
   const [isResizing, setIsResizing] = React.useState(false)
   const containerRef = React.useRef<HTMLDivElement>(null)
+  const rafIdRef = React.useRef<number | null>(null)
+  const pendingWidthRef = React.useRef<number | null>(null)
 
   React.useEffect(() => {
     const mq = window.matchMedia('(min-width: 1024px)')
@@ -205,9 +207,6 @@ export default function HomePage() {
   React.useEffect(() => {
     if (!isResizing) return
 
-    let rafId: number | null = null
-    let pendingWidth: number | null = null
-
     const handleMouseMove = (e: MouseEvent) => {
       if (!containerRef.current) return
       const containerRect = containerRef.current.getBoundingClientRect()
@@ -225,28 +224,40 @@ export default function HomePage() {
         Math.min(maxWidth, (mouseX / containerWidth) * 100),
       )
 
-      pendingWidth = newWidthPercent
+      // Only update if the value actually changed (prevents unnecessary re-renders)
+      pendingWidthRef.current = newWidthPercent
 
       // Use requestAnimationFrame to batch updates and prevent infinite loops
-      if (rafId === null) {
-        rafId = requestAnimationFrame(() => {
-          if (pendingWidth !== null) {
-            setLeftPanelWidth(pendingWidth)
-            pendingWidth = null
+      if (rafIdRef.current === null) {
+        rafIdRef.current = requestAnimationFrame(() => {
+          if (pendingWidthRef.current !== null) {
+            setLeftPanelWidth((prev) => {
+              // Only update if value actually changed
+              if (Math.abs(prev - pendingWidthRef.current!) < 0.1) {
+                return prev
+              }
+              return pendingWidthRef.current!
+            })
+            pendingWidthRef.current = null
           }
-          rafId = null
+          rafIdRef.current = null
         })
       }
     }
 
     const handleMouseUp = () => {
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId)
-        rafId = null
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current)
+        rafIdRef.current = null
       }
-      if (pendingWidth !== null) {
-        setLeftPanelWidth(pendingWidth)
-        pendingWidth = null
+      if (pendingWidthRef.current !== null) {
+        setLeftPanelWidth((prev) => {
+          if (Math.abs(prev - pendingWidthRef.current!) < 0.1) {
+            return prev
+          }
+          return pendingWidthRef.current!
+        })
+        pendingWidthRef.current = null
       }
       setIsResizing(false)
       // Restore cursor and text selection
@@ -262,14 +273,16 @@ export default function HomePage() {
     document.addEventListener('mouseup', handleMouseUp)
 
     return () => {
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId)
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current)
+        rafIdRef.current = null
       }
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
       // Cleanup in case component unmounts during resize
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
+      pendingWidthRef.current = null
     }
   }, [isResizing])
 
@@ -446,6 +459,7 @@ export default function HomePage() {
 
         {/* RESIZER */}
         <Box
+          className="section-resizer"
           onMouseDown={(e) => {
             e.preventDefault()
             setIsResizing(true)
@@ -466,6 +480,7 @@ export default function HomePage() {
           onMouseEnter={(e) => {
             if (!isResizing) {
               e.currentTarget.style.backgroundColor = 'var(--gray-a6)'
+              e.currentTarget.style.cursor = 'col-resize'
             }
           }}
           onMouseLeave={(e) => {

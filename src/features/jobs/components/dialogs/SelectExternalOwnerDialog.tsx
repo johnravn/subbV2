@@ -50,7 +50,7 @@ export default function SelectExternalOwnerDialog({
             onValueChange={setSelectedOwnerId}
           >
             <Select.Trigger placeholder="Select a partner…" />
-            <Select.Content>
+            <Select.Content style={{ zIndex: 10000 }}>
               {availablePartners.length === 0 ? (
                 <Text size="2" color="gray" p="2">
                   No partners available

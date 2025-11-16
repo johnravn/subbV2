@@ -115,6 +115,8 @@ function JobStatusTimeline({
   const currentIndex = JOB_STATUS_ORDER.indexOf(displayStatus)
   const isCanceled = displayStatus === 'canceled'
   const canceledIndex = JOB_STATUS_ORDER.indexOf('canceled')
+  const [pendingStatusChange, setPendingStatusChange] =
+    React.useState<JobStatus | null>(null)
 
   const updateStatus = useMutation({
     mutationFn: async (newStatus: JobStatus) => {
@@ -224,7 +226,7 @@ function JobStatusTimeline({
                     !updateStatus.isPending &&
                     status !== displayStatus
                   ) {
-                    updateStatus.mutate(status)
+                    setPendingStatusChange(status)
                   }
                 }}
               >
@@ -375,6 +377,53 @@ function JobStatusTimeline({
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
         }
       `}</style>
+
+      {/* Confirmation Dialog */}
+      {pendingStatusChange && (
+        <Dialog.Root
+          open={!!pendingStatusChange}
+          onOpenChange={(open) => {
+            if (!open && !updateStatus.isPending) {
+              setPendingStatusChange(null)
+            }
+          }}
+        >
+          <Dialog.Content maxWidth="450px">
+            <Dialog.Title>Change Job Status?</Dialog.Title>
+            <Dialog.Description size="2" mb="4">
+              Are you sure you want to change the job status from{' '}
+              <strong>{makeWordPresentable(displayStatus)}</strong> to{' '}
+              <strong>{makeWordPresentable(pendingStatusChange)}</strong>?
+            </Dialog.Description>
+            <Flex gap="3" justify="end">
+              <Button
+                variant="soft"
+                onClick={() => setPendingStatusChange(null)}
+                disabled={updateStatus.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (pendingStatusChange) {
+                    updateStatus.mutate(pendingStatusChange, {
+                      onSuccess: () => {
+                        setPendingStatusChange(null)
+                      },
+                      onError: () => {
+                        // Keep dialog open on error so user can try again
+                      },
+                    })
+                  }
+                }}
+                disabled={updateStatus.isPending}
+              >
+                {updateStatus.isPending ? 'Updating...' : 'Confirm'}
+              </Button>
+            </Flex>
+          </Dialog.Content>
+        </Dialog.Root>
+      )}
     </Box>
   )
 }

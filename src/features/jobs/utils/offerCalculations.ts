@@ -24,6 +24,8 @@ export function calculateOfferTotals(
   daysOfUse: number,
   discountPercent: number,
   vatPercent: number,
+  vehicleDistanceRate?: number | null,
+  vehicleDistanceIncrement?: number | null,
 ): OfferTotals {
   // Calculate equipment subtotal
   const equipmentSubtotal = equipmentItems.reduce(
@@ -42,15 +44,26 @@ export function calculateOfferTotals(
     return sum + dailyTotal * Math.max(1, days)
   }, 0)
 
-  // Calculate transport subtotal
+  // Calculate transport subtotal: daily_rate * days + distance_rate * (distance rounded up to increment)
   const transportSubtotal = transportItems.reduce((sum, item) => {
-    const dailyTotal = item.daily_rate
     const days = Math.ceil(
       (new Date(item.end_date).getTime() -
         new Date(item.start_date).getTime()) /
         (1000 * 60 * 60 * 24),
     )
-    return sum + dailyTotal * Math.max(1, days)
+    const dailyCost = item.daily_rate * Math.max(1, days)
+    
+    // Calculate distance cost if distance and rates are available
+    const increment = vehicleDistanceIncrement ?? 150
+    const distanceIncrements = item.distance_km
+      ? Math.ceil(item.distance_km / increment)
+      : 0
+    const distanceCost =
+      vehicleDistanceRate && distanceIncrements > 0
+        ? vehicleDistanceRate * distanceIncrements
+        : 0
+    
+    return sum + dailyCost + distanceCost
   }, 0)
 
   // Total before discount

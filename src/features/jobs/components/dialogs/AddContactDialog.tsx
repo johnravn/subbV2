@@ -14,6 +14,7 @@ import {
   TextField,
 } from '@radix-ui/themes'
 import { supabase } from '@shared/api/supabase'
+import { fuzzySearch } from '@shared/lib/generalFunctions'
 import { PhoneInputField } from '@shared/phone/PhoneInputField'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import type { UUID } from '../../types'
@@ -95,7 +96,6 @@ export default function AddContactDialog({
   // Apply client-side fuzzy filtering for better results
   const filteredContacts = React.useMemo(() => {
     if (!searchQuery.trim()) return contacts
-    const { fuzzySearch } = require('@shared/lib/generalFunctions')
     return fuzzySearch(
       contacts,
       searchQuery,

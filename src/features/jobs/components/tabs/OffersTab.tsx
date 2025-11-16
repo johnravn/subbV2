@@ -11,18 +11,30 @@ import {
   Separator,
   Table,
   Text,
+  TextField,
 } from '@radix-ui/themes'
-import { Copy, Eye, Lock, Plus, Trash, Edit, Calendar, Download } from 'iconoir-react'
+import {
+  Calendar,
+  Copy,
+  Download,
+  Edit,
+  Eye,
+  Link,
+  Lock,
+  Plus,
+  Trash,
+} from 'iconoir-react'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { useAuthz } from '@shared/auth/useAuthz'
 import { supabase } from '@shared/api/supabase'
+import { CopyIconButton } from '@shared/lib/CopyIconButton'
 import {
-  jobOffersQuery,
-  duplicateOffer,
-  deleteOffer,
-  lockOffer,
   createBookingsFromOffer,
+  deleteOffer,
+  duplicateOffer,
   exportOfferPDF,
+  jobOffersQuery,
+  lockOffer,
 } from '../../api/offerQueries'
 import TechnicalOfferEditor from '../dialogs/TechnicalOfferEditor'
 import PrettyOfferEditor from '../dialogs/PrettyOfferEditor'
@@ -65,6 +77,9 @@ export default function OffersTab({
   const [editingOfferId, setEditingOfferId] = React.useState<string | null>(
     null,
   )
+  const [linkDialogOpen, setLinkDialogOpen] = React.useState<JobOffer | null>(
+    null,
+  )
 
   const qc = useQueryClient()
   const { success, error: toastError } = useToast()
@@ -87,7 +102,7 @@ export default function OffersTab({
 
   const duplicateOfferMutation = useMutation({
     mutationFn: duplicateOffer,
-    onSuccess: (newOfferId) => {
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['job-offers', jobId] })
       success(
         'Offer duplicated',
@@ -103,9 +118,14 @@ export default function OffersTab({
   })
 
   const lockOfferMutation = useMutation({
-    mutationFn: lockOffer,
-    onSuccess: () => {
+    mutationFn: async (offer: JobOffer) => {
+      await lockOffer(offer.id)
+      return offer
+    },
+    onSuccess: (offer) => {
       qc.invalidateQueries({ queryKey: ['job-offers', jobId] })
+      // Show the link dialog with the offer (access_token is already available)
+      setLinkDialogOpen(offer)
       success('Offer locked', 'The offer has been locked and sent.')
     },
     onError: (err: any) => {
@@ -184,8 +204,7 @@ export default function OffersTab({
   }
 
   const handleViewOffer = (offer: JobOffer) => {
-    // For now, view is the same as edit, but in read-only mode
-    // In the future, this could open a read-only viewer
+    // Open the editor in view mode (read-only)
     setEditingOfferId(offer.id)
     setEditorOpen(true)
   }
@@ -195,7 +214,26 @@ export default function OffersTab({
   }
 
   const handleLockOffer = (offer: JobOffer) => {
-    lockOfferMutation.mutate(offer.id)
+    lockOfferMutation.mutate(offer)
+  }
+
+  const getOfferLink = (offer: JobOffer) => {
+    return `${window.location.origin}/offer/${offer.access_token}`
+  }
+
+  const handleCopyLink = (offer: JobOffer) => {
+    const link = getOfferLink(offer)
+    navigator.clipboard
+      .writeText(link)
+      .then(() => {
+        success(
+          'Link copied',
+          'The offer link has been copied to your clipboard.',
+        )
+      })
+      .catch((err) => {
+        toastError('Failed to copy link', err?.message || 'Please try again.')
+      })
   }
 
   const handleCreateBookings = (offer: JobOffer) => {
@@ -249,7 +287,34 @@ export default function OffersTab({
 
       {isLoading ? (
         <Text>Loading offers...</Text>
-      ) : offers.length === 0 ? (
+      ) : offers.length === 0 && !isReadOnly ? (
+        <Box
+          p="4"
+          style={{
+            border: '2px dashed var(--gray-a6)',
+            borderRadius: 8,
+            textAlign: 'center',
+            cursor: 'pointer',
+            transition: 'all 100ms',
+          }}
+          onClick={handleCreateTechnicalOffer}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = 'var(--gray-a8)'
+            e.currentTarget.style.background = 'var(--gray-a2)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = 'var(--gray-a6)'
+            e.currentTarget.style.background = 'transparent'
+          }}
+        >
+          <Flex direction="column" align="center" gap="2">
+            <Plus width={24} height={24} />
+            <Text size="2" color="gray">
+              Create your first offer
+            </Text>
+          </Flex>
+        </Box>
+      ) : offers.length === 0 && isReadOnly ? (
         <Box
           p="4"
           style={{
@@ -260,9 +325,6 @@ export default function OffersTab({
         >
           <Text size="3" color="gray">
             No offers yet
-          </Text>
-          <Text size="2" color="gray" mt="2">
-            Create your first offer to get started
           </Text>
         </Box>
       ) : (
@@ -307,7 +369,11 @@ export default function OffersTab({
                   <Text weight="medium">{offer.title}</Text>
                 </Table.Cell>
                 <Table.Cell>
-                  <Text>{formatCurrency(offer.total_with_vat)}</Text>
+                  <Text>
+                    {offer.total_with_vat && offer.total_with_vat > 0
+                      ? formatCurrency(offer.total_with_vat)
+                      : '—'}
+                  </Text>
                 </Table.Cell>
                 <Table.Cell>
                   <Text size="2">{formatDate(offer.created_at)}</Text>
@@ -316,51 +382,70 @@ export default function OffersTab({
                   <Flex gap="2">
                     {offer.offer_type === 'technical' ? (
                       <>
-                        <Button
-                          size="1"
-                          variant="soft"
-                          onClick={() => handleViewOffer(offer)}
-                        >
-                          <Eye width={14} height={14} /> View
-                        </Button>
-                        {!isReadOnly && !offer.locked && (
+                        {offer.locked ? (
                           <Button
                             size="1"
                             variant="soft"
                             onClick={() => {
                               setEditorType('technical')
-                              handleEditOffer(offer)
+                              handleViewOffer(offer)
                             }}
                           >
-                            <Edit width={14} height={14} /> Edit
+                            <Eye width={14} height={14} /> View
                           </Button>
+                        ) : (
+                          !isReadOnly && (
+                            <Button
+                              size="1"
+                              variant="soft"
+                              onClick={() => {
+                                setEditorType('technical')
+                                handleEditOffer(offer)
+                              }}
+                            >
+                              <Edit width={14} height={14} /> Edit
+                            </Button>
+                          )
                         )}
                       </>
                     ) : (
                       <>
-                        <Button
-                          size="1"
-                          variant="soft"
-                          onClick={() => {
-                            setEditorType('pretty')
-                            handleViewOffer(offer)
-                          }}
-                        >
-                          <Eye width={14} height={14} /> View
-                        </Button>
-                        {!isReadOnly && !offer.locked && (
+                        {offer.locked ? (
                           <Button
                             size="1"
                             variant="soft"
                             onClick={() => {
                               setEditorType('pretty')
-                              handleEditOffer(offer)
+                              handleViewOffer(offer)
                             }}
                           >
-                            <Edit width={14} height={14} /> Edit
+                            <Eye width={14} height={14} /> View
                           </Button>
+                        ) : (
+                          !isReadOnly && (
+                            <Button
+                              size="1"
+                              variant="soft"
+                              onClick={() => {
+                                setEditorType('pretty')
+                                handleEditOffer(offer)
+                              }}
+                            >
+                              <Edit width={14} height={14} /> Edit
+                            </Button>
+                          )
                         )}
                       </>
+                    )}
+                    {offer.locked && offer.status !== 'draft' && (
+                      <Button
+                        size="1"
+                        variant="soft"
+                        onClick={() => handleCopyLink(offer)}
+                        title="Copy offer link"
+                      >
+                        <Link width={14} height={14} /> Copy Link
+                      </Button>
                     )}
                     {!isReadOnly && (
                       <>
@@ -469,6 +554,47 @@ export default function OffersTab({
                 disabled={deleteOfferMutation.isPending}
               >
                 {deleteOfferMutation.isPending ? 'Deleting...' : 'Delete'}
+              </Button>
+            </Flex>
+          </Dialog.Content>
+        </Dialog.Root>
+      )}
+
+      {/* Offer Link Dialog */}
+      {linkDialogOpen && (
+        <Dialog.Root
+          open={!!linkDialogOpen}
+          onOpenChange={(v) => !v && setLinkDialogOpen(null)}
+        >
+          <Dialog.Content maxWidth="500px">
+            <Dialog.Title>Offer Link Ready</Dialog.Title>
+            <Separator my="3" />
+            <Text size="2" mb="3">
+              The offer has been locked and is ready to share. Copy the link
+              below to send it to your customer:
+            </Text>
+            <Flex gap="2" align="center">
+              <TextField.Root
+                readOnly
+                value={getOfferLink(linkDialogOpen)}
+                style={{ flex: 1 }}
+              />
+              <CopyIconButton text={getOfferLink(linkDialogOpen)} />
+            </Flex>
+            <Text size="1" color="gray" mt="2">
+              This link allows anyone to view and accept the offer without
+              logging in.
+            </Text>
+            <Flex gap="2" mt="4" justify="end">
+              <Dialog.Close>
+                <Button variant="soft">Close</Button>
+              </Dialog.Close>
+              <Button
+                onClick={() => {
+                  window.open(getOfferLink(linkDialogOpen), '_blank')
+                }}
+              >
+                Open in New Tab
               </Button>
             </Flex>
           </Dialog.Content>

@@ -93,10 +93,8 @@ function getActivityGenericDescription(
       return `${authorDisplayName} has deleted "${jobTitle}" from the system. This job will no longer appear in active job listings, but historical records and data will be retained for reference and reporting purposes.`
     }
     case 'announcement':
-      return (
-        activity.description ||
-        `${authorDisplayName} has posted an announcement to keep the team informed. Make sure to read it carefully as it may contain important updates, policy changes, or other information relevant to the company.`
-      )
+      // For announcements, return a generic message - the actual description is displayed separately below
+      return `${authorDisplayName} has posted an announcement to keep the team informed. Make sure to read it carefully as it may contain important updates, policy changes, or other information relevant to the company.`
     default:
       return `${authorDisplayName} has performed an activity update in the system. This change may affect various aspects of the company operations, so please review the details if you need more information.`
   }
@@ -561,10 +559,12 @@ export default function LatestInspector({
                 {getActivityGenericMessage(activity.activity_type)}
               </Heading>
 
-              {/* Generic description */}
-              <Text size="3" style={{ lineHeight: 1.7 }} mb="3">
-                {getActivityGenericDescription(activity, authorDisplayName)}
-              </Text>
+              {/* Generic description - skip for announcements as they have their own message box */}
+              {activity.activity_type !== 'announcement' && (
+                <Text size="3" style={{ lineHeight: 1.7 }} mb="3">
+                  {getActivityGenericDescription(activity, authorDisplayName)}
+                </Text>
+              )}
 
               {/* Clickable item button - styled like feed items */}
               {(() => {
@@ -683,14 +683,7 @@ export default function LatestInspector({
               })()}
 
               {activity.description && (
-                <Box
-                  p="3"
-                  style={{
-                    backgroundColor: 'var(--gray-2)',
-                    borderRadius: 'var(--radius-2)',
-                  }}
-                  mt="3"
-                >
+                <Box mt="3">
                   <Text size="2" style={{ whiteSpace: 'pre-wrap' }}>
                     {activity.description}
                   </Text>

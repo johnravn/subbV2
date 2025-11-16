@@ -295,7 +295,7 @@ export default function EditCompanyDialog({
               onValueChange={(val) => set('contact_person_id', val || null)}
             >
               <Select.Trigger placeholder="Select contact person" />
-              <Select.Content>
+              <Select.Content style={{ zIndex: 10000 }}>
                 {companyUsers.map((u) => {
                   const extraParts = []
                   if (u.phone) {

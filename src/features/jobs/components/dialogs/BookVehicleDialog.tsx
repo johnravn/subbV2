@@ -392,7 +392,7 @@ export default function BookVehicleDialog({
                     onValueChange={setSelectedTimePeriodId}
                   >
                     <Select.Trigger placeholder="Select time period…" />
-                    <Select.Content>
+                    <Select.Content style={{ zIndex: 10000 }}>
                       {existingTimePeriods.map((tp) => (
                         <Select.Item key={tp.id} value={tp.id}>
                           {tp.title || 'Untitled'} (

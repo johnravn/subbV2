@@ -45,11 +45,32 @@ export function AppToastProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const api: ToastContextValue = {
-    show: ({ kind = 'info', ...rest }) => push({ kind, ...rest }),
+    show: ({ kind = 'info', ...rest }) => {
+      // Log error to console for debugging when kind is 'error'
+      if (kind === 'error') {
+        console.error('[Toast Error]', {
+          title: rest.title,
+          description: rest.description,
+          duration: rest.duration,
+          timestamp: new Date().toISOString(),
+          stack: new Error().stack,
+        })
+      }
+      push({ kind, ...rest })
+    },
     success: (title, description, duration) =>
       push({ kind: 'success', title, description, duration }),
-    error: (title, description, duration) =>
-      push({ kind: 'error', title, description, duration }),
+    error: (title, description, duration) => {
+      // Log error to console for debugging
+      console.error('[Toast Error]', {
+        title,
+        description,
+        duration,
+        timestamp: new Date().toISOString(),
+        stack: new Error().stack,
+      })
+      push({ kind: 'error', title, description, duration })
+    },
     info: (title, description, duration) =>
       push({ kind: 'info', title, description, duration }),
   }

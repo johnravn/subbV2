@@ -2,11 +2,15 @@
 import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  Badge,
   Box,
   Button,
+  Checkbox,
   Dialog,
   Flex,
   Heading,
+  IconButton,
+  Select,
   Separator,
   Table,
   Tabs,
@@ -19,12 +23,14 @@ import {
   Lock,
   NavArrowDown,
   NavArrowRight,
+  NavArrowUp,
   Plus,
   Trash,
 } from 'iconoir-react'
 import { supabase } from '@shared/api/supabase'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import DateTimePicker from '@shared/ui/components/DateTimePicker'
+import { companyExpansionQuery } from '@features/company/api/queries'
 import {
   createOffer,
   exportOfferPDF,
@@ -39,6 +45,7 @@ import type {
   OfferTransportItem,
   UUID,
 } from '../../types'
+import type { RentalFactorConfig } from '@features/company/api/queries'
 
 type Props = {
   open: boolean
@@ -68,6 +75,9 @@ type LocalEquipmentItem = {
     name: string
     externally_owned?: boolean | null
     external_owner_id?: UUID | null
+    external_owner_name?: string | null
+    brand?: { id: string; name: string } | null
+    model?: string | null
   } | null
 }
 
@@ -78,16 +88,56 @@ type LocalCrewItem = {
   start_date: string
   end_date: string
   daily_rate: number
+  hourly_rate: number | null
+  hours_per_day: number | null
+  billing_type: 'daily' | 'hourly'
   sort_order: number
+  role_category?: string | null
+}
+
+function calculateHoursPerDay(
+  start: string | null,
+  end: string | null,
+): number | null {
+  if (!start || !end) return null
+
+  const startDate = new Date(start)
+  const endDate = new Date(end)
+
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+    return null
+  }
+
+  const diffMs = endDate.getTime() - startDate.getTime()
+  if (diffMs <= 0) return null
+
+  const hours = diffMs / (1000 * 60 * 60)
+  const days = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)))
+
+  return hours / days
 }
 
 type LocalTransportItem = {
   id: string // temp ID for new items
   vehicle_name: string
   vehicle_id: string | null
+  vehicle_category:
+    | 'passenger_car_small'
+    | 'passenger_car_medium'
+    | 'passenger_car_big'
+    | 'van_small'
+    | 'van_medium'
+    | 'van_big'
+    | 'C1'
+    | 'C1E'
+    | 'C'
+    | 'CE'
+    | null
+  distance_km: number | null
   start_date: string
   end_date: string
-  daily_rate: number
+  daily_rate: number | null
+  distance_rate: number | null // Distance rate per increment (null means use default)
   is_internal: boolean
   sort_order: number
   vehicle?: {
@@ -114,6 +164,79 @@ function Field({
   )
 }
 
+/**
+ * Default rental factors (stiffer values for better profitability)
+ */
+const DEFAULT_RENTAL_FACTORS: RentalFactorConfig = {
+  1: 1.0,
+  2: 1.6,
+  3: 2.0,
+  4: 2.3,
+  5: 2.5,
+  7: 2.8,
+  10: 3.2,
+  14: 3.5,
+  21: 4.0,
+  30: 4.5,
+}
+
+/**
+ * Calculate rental factor based on days of use.
+ * Uses company-specific config if provided, otherwise falls back to defaults.
+ * Based on industry standard rental rates where longer rentals
+ * have decreasing incremental costs.
+ */
+function calculateRentalFactor(
+  days: number,
+  customConfig?: RentalFactorConfig | null,
+): number {
+  if (days <= 0) return 1.0
+
+  const factorMap = customConfig || DEFAULT_RENTAL_FACTORS
+
+  // Exact match
+  if (factorMap[days] !== undefined) {
+    return factorMap[days]
+  }
+
+  // Find the two closest values
+  const sortedDays = Object.keys(factorMap)
+    .map(Number)
+    .sort((a, b) => a - b)
+
+  // If days is less than minimum, use minimum
+  if (days < sortedDays[0]) {
+    return factorMap[sortedDays[0]]
+  }
+
+  // If days is greater than maximum, extrapolate
+  if (days > sortedDays[sortedDays.length - 1]) {
+    const maxDay = sortedDays[sortedDays.length - 1]
+    const maxFactor = factorMap[maxDay]
+    // For extended periods, use logarithmic growth
+    const extraDays = days - maxDay
+    const growthRate = 0.025 // 2.5% per day after max (diminishing)
+    return maxFactor + extraDays * growthRate
+  }
+
+  // Interpolate between two points
+  let lowerDay = sortedDays[0]
+  let upperDay = sortedDays[sortedDays.length - 1]
+
+  for (let i = 0; i < sortedDays.length - 1; i++) {
+    if (days >= sortedDays[i] && days <= sortedDays[i + 1]) {
+      lowerDay = sortedDays[i]
+      upperDay = sortedDays[i + 1]
+      break
+    }
+  }
+
+  const lowerFactor = factorMap[lowerDay]
+  const upperFactor = factorMap[upperDay]
+  const ratio = (days - lowerDay) / (upperDay - lowerDay)
+  return lowerFactor + (upperFactor - lowerFactor) * ratio
+}
+
 export default function TechnicalOfferEditor({
   open,
   onOpenChange,
@@ -129,23 +252,75 @@ export default function TechnicalOfferEditor({
     offerId || null,
   )
 
-  // Fetch job title for default offer name
+  // Fetch job title, duration, and customer for default offer name, time defaults, and discount
   const { data: job } = useQuery({
     queryKey: ['job-title', jobId],
-    enabled: open && !isEditMode,
+    enabled: open,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('jobs')
-        .select('title')
+        .select(
+          'title, start_at, end_at, customer_id, customer:customers!jobs_customer_id_fkey ( id, is_partner )',
+        )
         .eq('id', jobId)
         .single()
       if (error) throw error
-      return data as { title: string }
+
+      // Normalize customer relationship (PostgREST can return as array or object)
+      const customer = Array.isArray((data as any).customer)
+        ? (data as any).customer[0]
+        : (data as any).customer
+
+      return {
+        title: data.title as string,
+        start_at: (data.start_at ?? null) as string | null,
+        end_at: (data.end_at ?? null) as string | null,
+        customer: customer
+          ? ({
+              id: customer.id,
+              is_partner: customer.is_partner ?? false,
+            } as { id: string; is_partner: boolean })
+          : null,
+      }
     },
   })
 
+  // Fetch company expansion for default rates and rental factors
+  const { data: companyExpansion } = useQuery({
+    ...companyExpansionQuery({ companyId }),
+    enabled: open && !!companyId && typeof companyId === 'string',
+  })
+
+  const defaultCrewRatePerDay = React.useMemo(() => {
+    const value = companyExpansion?.crew_rate_per_day ?? null
+    if (value === null) return null
+    const numeric = Number(value)
+    return Number.isFinite(numeric) ? numeric : null
+  }, [companyExpansion?.crew_rate_per_day])
+
+  const defaultCrewRatePerHour = React.useMemo(() => {
+    const value = companyExpansion?.crew_rate_per_hour ?? null
+    if (value === null) return null
+    const numeric = Number(value)
+    return Number.isFinite(numeric) ? numeric : null
+  }, [companyExpansion?.crew_rate_per_hour])
+
+  // Parse rental factor config from company expansion
+  const rentalFactorConfig = React.useMemo(() => {
+    if (!companyExpansion?.rental_factor_config) return null
+    try {
+      const config =
+        typeof companyExpansion.rental_factor_config === 'string'
+          ? JSON.parse(companyExpansion.rental_factor_config)
+          : companyExpansion.rental_factor_config
+      return config as RentalFactorConfig
+    } catch {
+      return null
+    }
+  }, [companyExpansion?.rental_factor_config])
+
   // Fetch existing offer if editing or if we have a current offer ID (after saving)
-  const { data: existingOffer } = useQuery({
+  const { data: existingOffer, isLoading: isLoadingOffer } = useQuery({
     ...(currentOfferId
       ? offerDetailQuery(currentOfferId)
       : { queryKey: ['no-offer'], queryFn: () => null }),
@@ -157,11 +332,22 @@ export default function TechnicalOfferEditor({
   // Default title based on job
   const defaultTitle = job?.title ? `Offer for ${job.title}` : ''
 
+  // Calculate default days of use from job duration
+  const defaultDaysOfUse = React.useMemo(() => {
+    if (!job?.start_at || !job?.end_at) return 1
+    const start = new Date(job.start_at)
+    const end = new Date(job.end_at)
+    const diffTime = end.getTime() - start.getTime()
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    return Math.max(1, diffDays) // Ensure at least 1 day
+  }, [job?.start_at, job?.end_at])
+
   // Offer metadata
   const [title, setTitle] = React.useState('')
-  const [daysOfUse, setDaysOfUse] = React.useState(1)
+  const [daysOfUse, setDaysOfUse] = React.useState(defaultDaysOfUse)
   const [discountPercent, setDiscountPercent] = React.useState(0)
   const [vatPercent, setVatPercent] = React.useState(25)
+  const [showPricePerLine, setShowPricePerLine] = React.useState(true)
 
   // Equipment groups and items
   const [equipmentGroups, setEquipmentGroups] = React.useState<
@@ -186,15 +372,29 @@ export default function TechnicalOfferEditor({
     }
   }, [offerId])
 
+  // Update daysOfUse when job duration becomes available (only for new offers)
+  React.useEffect(() => {
+    if (!open || isEditMode || !job?.start_at || !job?.end_at) return
+    setDaysOfUse(defaultDaysOfUse)
+  }, [open, isEditMode, defaultDaysOfUse, job?.start_at, job?.end_at])
+
   // Initialize from existing offer
   React.useEffect(() => {
     if (!open) return
+    // Wait for query to finish loading before initializing
+    if (isLoadingOffer) return
 
     if (existingOffer && currentOfferId) {
       setTitle(existingOffer.title)
       setDaysOfUse(existingOffer.days_of_use)
       setDiscountPercent(existingOffer.discount_percent)
-      setVatPercent(existingOffer.vat_percent)
+      // Normalize VAT to 0 or 25
+      const normalizedVat =
+        existingOffer.vat_percent === 0 || existingOffer.vat_percent === 25
+          ? existingOffer.vat_percent
+          : 25
+      setVatPercent(normalizedVat)
+      setShowPricePerLine(existingOffer.show_price_per_line ?? true)
 
       // Convert equipment groups
       const groups: Array<LocalEquipmentGroup> =
@@ -209,22 +409,66 @@ export default function TechnicalOfferEditor({
             unit_price: item.unit_price,
             is_internal: item.is_internal,
             sort_order: item.sort_order,
-            item: item.item,
+            item: item.item
+              ? {
+                  id: item.item.id,
+                  name: item.item.name,
+                  externally_owned: !(item.item as any).internally_owned,
+                  external_owner_id:
+                    (item.item as any).external_owner_id ?? null,
+                  external_owner_name:
+                    (item.item as any).external_owner?.name ?? null,
+                }
+              : null,
           })),
         })) || []
       setEquipmentGroups(groups)
 
       // Convert crew items
       const crew: Array<LocalCrewItem> =
-        existingOffer.crew_items?.map((item) => ({
-          id: item.id,
-          role_title: item.role_title,
-          crew_count: item.crew_count,
-          start_date: item.start_date,
-          end_date: item.end_date,
-          daily_rate: item.daily_rate,
-          sort_order: item.sort_order,
-        })) || []
+        existingOffer.crew_items?.map((item) => {
+          const rawItem: any = item
+
+          const billingType: 'daily' | 'hourly' =
+            rawItem?.billing_type === 'hourly' ? 'hourly' : 'daily'
+
+          const hoursFromDates = calculateHoursPerDay(
+            item.start_date,
+            item.end_date,
+          )
+
+          const baseHoursPerDay =
+            billingType === 'hourly'
+              ? (hoursFromDates ?? rawItem?.hours_per_day ?? 8)
+              : null
+
+          const baseHourlyRate =
+            billingType === 'hourly'
+              ? (rawItem?.hourly_rate ??
+                (baseHoursPerDay && baseHoursPerDay > 0
+                  ? item.daily_rate / baseHoursPerDay
+                  : (defaultCrewRatePerHour ?? null)))
+              : null
+
+          const normalizedDailyRate =
+            billingType === 'hourly'
+              ? (baseHourlyRate ?? 0) * (baseHoursPerDay ?? 0)
+              : item.daily_rate
+
+          return {
+            id: item.id,
+            role_title: item.role_title,
+            crew_count: item.crew_count,
+            start_date: item.start_date,
+            end_date: item.end_date,
+            daily_rate: normalizedDailyRate,
+            hourly_rate: billingType === 'hourly' ? baseHourlyRate : null,
+            hours_per_day: billingType === 'hourly' ? baseHoursPerDay : null,
+            billing_type: billingType,
+            sort_order: item.sort_order,
+            role_category: null, // Will be derived or set by user
+          }
+        }) || []
       setCrewItems(crew)
 
       // Convert transport items
@@ -233,9 +477,12 @@ export default function TechnicalOfferEditor({
           id: item.id,
           vehicle_name: item.vehicle_name,
           vehicle_id: item.vehicle_id,
+          vehicle_category: item.vehicle_category ?? null,
+          distance_km: item.distance_km ?? null,
           start_date: item.start_date,
           end_date: item.end_date,
-          daily_rate: item.daily_rate,
+          daily_rate: item.daily_rate > 0 ? item.daily_rate : null,
+          distance_rate: item.distance_rate ?? null,
           is_internal: item.is_internal,
           sort_order: item.sort_order,
           vehicle: item.vehicle,
@@ -244,16 +491,45 @@ export default function TechnicalOfferEditor({
     } else {
       // Reset for new offer
       setTitle(defaultTitle)
-      setDaysOfUse(1)
-      setDiscountPercent(0)
+      setDaysOfUse(defaultDaysOfUse)
+
+      // Set default discount based on customer type (partner vs regular customer)
+      let defaultDiscount = 0
+      if (companyExpansion && job?.customer) {
+        if (
+          job.customer.is_partner &&
+          companyExpansion.partner_discount_percent !== null
+        ) {
+          defaultDiscount = companyExpansion.partner_discount_percent
+        } else if (
+          !job.customer.is_partner &&
+          companyExpansion.customer_discount_percent !== null
+        ) {
+          defaultDiscount = companyExpansion.customer_discount_percent
+        }
+      }
+      setDiscountPercent(defaultDiscount)
+
       setVatPercent(25)
+      setShowPricePerLine(true)
       setEquipmentGroups([])
       setCrewItems([])
       setTransportItems([])
       setExpandedGroups(new Set())
       setCurrentOfferId(null)
     }
-  }, [open, existingOffer, currentOfferId, defaultTitle])
+  }, [
+    open,
+    existingOffer,
+    currentOfferId,
+    defaultTitle,
+    defaultDaysOfUse,
+    companyExpansion,
+    job,
+    isLoadingOffer,
+    isEditMode,
+    defaultCrewRatePerHour,
+  ])
 
   // Calculate totals
   const totals = React.useMemo(() => {
@@ -289,23 +565,60 @@ export default function TechnicalOfferEditor({
       offer_id: offerId || '',
       vehicle_name: item.vehicle_name,
       vehicle_id: item.vehicle_id,
+      vehicle_category: item.vehicle_category,
+      distance_km: item.distance_km,
       start_date: item.start_date,
       end_date: item.end_date,
-      daily_rate: item.daily_rate,
+      daily_rate: item.daily_rate ?? companyExpansion?.vehicle_daily_rate ?? 0,
       total_price: 0, // Will be calculated
       is_internal: item.is_internal,
       sort_order: item.sort_order,
       vehicle: item.vehicle,
     }))
 
-    return calculateOfferTotals(
+    // Calculate totals with item-specific rates
+    const transportSubtotal = transportItems.reduce((sum, item) => {
+      const days = Math.ceil(
+        (new Date(item.end_date).getTime() -
+          new Date(item.start_date).getTime()) /
+          (1000 * 60 * 60 * 24),
+      )
+      // Use item's daily_rate if set, otherwise use default from company
+      const effectiveDailyRate =
+        item.daily_rate ?? companyExpansion?.vehicle_daily_rate ?? 0
+      const dailyCost = effectiveDailyRate * Math.max(1, days)
+
+      // Use item's distance_rate if set, otherwise use default from company
+      const distanceRate =
+        item.distance_rate ?? companyExpansion?.vehicle_distance_rate ?? null
+      const increment = companyExpansion?.vehicle_distance_increment ?? 150
+      const distanceIncrements = item.distance_km
+        ? Math.ceil(item.distance_km / increment)
+        : 0
+      const distanceCost =
+        distanceRate && distanceIncrements > 0
+          ? distanceRate * distanceIncrements
+          : 0
+
+      return sum + dailyCost + distanceCost
+    }, 0)
+
+    const totals = calculateOfferTotals(
       equipmentItems,
       crew,
       transport,
       daysOfUse,
       discountPercent,
       vatPercent,
+      companyExpansion?.vehicle_distance_rate,
+      companyExpansion?.vehicle_distance_increment,
     )
+
+    // Override transport subtotal with our custom calculation that uses item-specific rates
+    return {
+      ...totals,
+      transportSubtotal,
+    }
   }, [
     equipmentGroups,
     crewItems,
@@ -314,6 +627,8 @@ export default function TechnicalOfferEditor({
     discountPercent,
     vatPercent,
     offerId,
+    companyExpansion?.vehicle_distance_rate,
+    companyExpansion?.vehicle_distance_increment,
   ])
 
   const saveMutation = useMutation({
@@ -334,6 +649,7 @@ export default function TechnicalOfferEditor({
           daysOfUse,
           discountPercent,
           vatPercent,
+          showPricePerLine,
         })
       } else {
         workingOfferId = offerId
@@ -345,6 +661,7 @@ export default function TechnicalOfferEditor({
             days_of_use: daysOfUse,
             discount_percent: discountPercent,
             vat_percent: vatPercent,
+            show_price_per_line: showPricePerLine,
           })
           .eq('id', workingOfferId)
 
@@ -398,7 +715,19 @@ export default function TechnicalOfferEditor({
 
         let groupId: string
         if (isExistingGroup) {
-          groupId = group.id
+          const { data: upsertedGroup, error: groupErr } = await supabase
+            .from('offer_equipment_groups')
+            .upsert({
+              id: group.id,
+              offer_id: workingOfferId,
+              group_name: group.group_name,
+              sort_order: group.sort_order,
+            })
+            .select('id')
+            .single()
+
+          if (groupErr) throw groupErr
+          groupId = upsertedGroup?.id ?? group.id
         } else {
           // Create new group
           const { data: newGroup, error: groupErr } = await supabase
@@ -419,10 +748,12 @@ export default function TechnicalOfferEditor({
         for (const item of group.items) {
           const isExistingItem = !item.id.startsWith('temp-')
           if (isExistingItem) {
-            // Update existing item
+            // Upsert existing item (handles duplicated offers where items were deleted)
             const { error: itemErr } = await supabase
               .from('offer_equipment_items')
-              .update({
+              .upsert({
+                id: item.id,
+                offer_group_id: groupId,
                 item_id: item.item_id,
                 quantity: item.quantity,
                 unit_price: item.unit_price,
@@ -430,7 +761,6 @@ export default function TechnicalOfferEditor({
                 is_internal: item.is_internal,
                 sort_order: item.sort_order,
               })
-              .eq('id', item.id)
 
             if (itemErr) throw itemErr
           } else {
@@ -465,7 +795,9 @@ export default function TechnicalOfferEditor({
         if (isExistingItem) {
           const { error: itemErr } = await supabase
             .from('offer_crew_items')
-            .update({
+            .upsert({
+              id: item.id,
+              offer_id: workingOfferId,
               role_title: item.role_title,
               crew_count: item.crew_count,
               start_date: item.start_date,
@@ -474,7 +806,6 @@ export default function TechnicalOfferEditor({
               total_price: totalPrice,
               sort_order: item.sort_order,
             })
-            .eq('id', item.id)
 
           if (itemErr) throw itemErr
         } else {
@@ -503,58 +834,54 @@ export default function TechnicalOfferEditor({
             new Date(item.start_date).getTime()) /
             (1000 * 60 * 60 * 24),
         )
-        const totalPrice = item.daily_rate * Math.max(1, days)
+        // Calculate total: daily_rate * days + distance_rate * (distance rounded up to increment)
+        // Use item's daily_rate if set, otherwise use default from company
+        const effectiveDailyRate =
+          item.daily_rate ?? companyExpansion?.vehicle_daily_rate ?? 0
+        // Use item's distance_rate if set, otherwise use default from company
+        const effectiveDistanceRate =
+          item.distance_rate ?? companyExpansion?.vehicle_distance_rate ?? null
+        const distanceIncrement =
+          companyExpansion?.vehicle_distance_increment ?? 150
+        const distanceIncrements = item.distance_km
+          ? Math.ceil(item.distance_km / distanceIncrement)
+          : 0
+        const distanceCost =
+          effectiveDistanceRate && distanceIncrements > 0
+            ? effectiveDistanceRate * distanceIncrements
+            : 0
+        const dailyCost = effectiveDailyRate * Math.max(1, days)
+        const totalPrice = dailyCost + distanceCost
 
         if (isExistingItem) {
-          // For existing items, update all fields
-          const basePayload: any = {
-            vehicle_name: item.vehicle_name,
-            start_date: item.start_date,
-            end_date: item.end_date,
-            daily_rate: item.daily_rate,
-            total_price: totalPrice,
-            is_internal: item.is_internal,
-            sort_order: item.sort_order,
-          }
-
-          // Only include vehicle_id if it has a value to avoid PostgREST relationship issues
-          // If clearing (setting to null), we'll do it in a separate minimal update
-          if (item.vehicle_id !== null && item.vehicle_id !== undefined) {
-            basePayload.vehicle_id = item.vehicle_id
-          }
-
-          // Update main fields (without vehicle_id if it's null)
           const { error: itemErr } = await supabase
             .from('offer_transport_items')
-            .update(basePayload)
-            .eq('id', item.id)
+            .upsert({
+              id: item.id,
+              offer_id: workingOfferId,
+              vehicle_name: item.vehicle_name,
+              vehicle_id: item.vehicle_id ?? null,
+              vehicle_category: item.vehicle_category,
+              distance_km: item.distance_km,
+              start_date: item.start_date,
+              end_date: item.end_date,
+              daily_rate: item.daily_rate ?? 0,
+              total_price: totalPrice,
+              is_internal: item.is_internal,
+              sort_order: item.sort_order,
+            })
 
           if (itemErr) throw itemErr
-
-          // If vehicle_id needs to be cleared, do it in a separate minimal update
-          // Use select('id') to avoid PostgREST relationship embedding issues
-          if (item.vehicle_id === null || item.vehicle_id === undefined) {
-            const { error: clearErr } = await supabase
-              .from('offer_transport_items')
-              .update({ vehicle_id: null })
-              .eq('id', item.id)
-              .select('id') // Only select id to avoid relationship embedding
-
-            if (clearErr) {
-              // If clearing fails due to relationship issues, try using RPC or just log
-              // The vehicle_id will remain as whatever it was before
-              console.warn('Failed to clear vehicle_id:', clearErr)
-              // Don't throw - the other fields were updated successfully
-            }
-          }
         } else {
           // For new items, only include vehicle_id if it has a value
           const insertPayload: any = {
             offer_id: workingOfferId,
             vehicle_name: item.vehicle_name,
+            vehicle_category: item.vehicle_category,
+            distance_km: item.distance_km,
             start_date: item.start_date,
             end_date: item.end_date,
-            daily_rate: item.daily_rate,
+            daily_rate: item.daily_rate ?? 0,
             total_price: totalPrice,
             is_internal: item.is_internal,
             sort_order: item.sort_order,
@@ -663,15 +990,33 @@ export default function TechnicalOfferEditor({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Content
-        maxWidth="1200px"
-        style={{ display: 'flex', flexDirection: 'column', height: '90vh' }}
+        maxWidth="1340px"
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          height: '90vh',
+          position: 'relative',
+        }}
       >
         <Dialog.Title>
           {isEditMode ? 'Edit Technical Offer' : 'Create Technical Offer'}
         </Dialog.Title>
+        <Dialog.Description>
+          {isEditMode
+            ? 'Edit the technical offer details, equipment, crew, and transport items.'
+            : 'Create a new technical offer with equipment, crew, and transport items.'}
+        </Dialog.Description>
         <Separator my="2" />
 
-        <Tabs.Root defaultValue="metadata" style={{ flex: 1, minHeight: 0 }}>
+        <Tabs.Root
+          defaultValue="metadata"
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
           <Tabs.List>
             <Tabs.Trigger value="metadata">Metadata</Tabs.Trigger>
             <Tabs.Trigger value="equipment">Equipment</Tabs.Trigger>
@@ -680,7 +1025,14 @@ export default function TechnicalOfferEditor({
             <Tabs.Trigger value="totals">Totals</Tabs.Trigger>
           </Tabs.List>
 
-          <Box style={{ flex: 1, overflowY: 'auto', paddingTop: '16px' }}>
+          <Box
+            style={{
+              flex: 1,
+              overflowY: 'auto',
+              paddingTop: '16px',
+              paddingBottom: '80px', // Space for fixed buttons
+            }}
+          >
             {/* Metadata Tab */}
             <Tabs.Content value="metadata">
               <Flex direction="column" gap="3">
@@ -691,7 +1043,7 @@ export default function TechnicalOfferEditor({
                       onChange={(e) => setTitle(e.target.value)}
                       placeholder="Enter offer title"
                       readOnly={isReadOnly}
-                      style={{ flex: 1 }}
+                      style={{ width: '400px' }}
                     />
                     {!isReadOnly && !isEditMode && defaultTitle && (
                       <Button
@@ -708,15 +1060,29 @@ export default function TechnicalOfferEditor({
 
                 <Flex gap="3" wrap="wrap">
                   <Field label="Days of Use">
-                    <TextField.Root
-                      type="number"
-                      min="1"
-                      value={String(daysOfUse)}
-                      onChange={(e) =>
-                        setDaysOfUse(Math.max(1, Number(e.target.value) || 1))
-                      }
-                      readOnly={isReadOnly}
-                    />
+                    <Flex direction="column" gap="1">
+                      <TextField.Root
+                        type="number"
+                        min="1"
+                        value={String(daysOfUse)}
+                        onChange={(e) =>
+                          setDaysOfUse(Math.max(1, Number(e.target.value) || 1))
+                        }
+                        readOnly={isReadOnly}
+                      />
+                      <Text
+                        size="1"
+                        color="gray"
+                        style={{ fontStyle: 'italic' }}
+                      >
+                        Rental factor:{' '}
+                        {calculateRentalFactor(
+                          daysOfUse,
+                          rentalFactorConfig,
+                        ).toFixed(2)}
+                        x
+                      </Text>
+                    </Flex>
                   </Field>
 
                   <Field label="Discount (%)">
@@ -738,36 +1104,53 @@ export default function TechnicalOfferEditor({
                   </Field>
 
                   <Field label="VAT (%)">
-                    <TextField.Root
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={String(vatPercent)}
-                      onChange={(e) =>
-                        setVatPercent(
-                          Math.max(
-                            0,
-                            Math.min(100, Number(e.target.value) || 0),
-                          ),
-                        )
+                    <Select.Root
+                      value={
+                        vatPercent === 0 || vatPercent === 25
+                          ? String(vatPercent)
+                          : '25'
                       }
-                      readOnly={isReadOnly}
-                    />
+                      onValueChange={(value) => setVatPercent(Number(value))}
+                      disabled={isReadOnly}
+                    >
+                      <Select.Trigger placeholder="Select VAT" />
+                      <Select.Content style={{ zIndex: 10000 }}>
+                        <Select.Item value="0">0%</Select.Item>
+                        <Select.Item value="25">25%</Select.Item>
+                      </Select.Content>
+                    </Select.Root>
                   </Field>
                 </Flex>
+
+                <Field label="Pricing Display">
+                  <Flex align="center" gap="2">
+                    <Checkbox
+                      checked={showPricePerLine}
+                      onCheckedChange={(checked) =>
+                        setShowPricePerLine(checked === true)
+                      }
+                      disabled={isReadOnly}
+                    />
+                    <Text size="2" as="label" style={{ cursor: 'pointer' }}>
+                      Show price per line to customer
+                    </Text>
+                  </Flex>
+                  <Text
+                    size="1"
+                    color="gray"
+                    mt="1"
+                    style={{ fontStyle: 'italic' }}
+                  >
+                    {showPricePerLine
+                      ? 'Prices will be shown for each line item in the offer.'
+                      : 'Only group totals will be shown. Prices per line item will be hidden.'}
+                  </Text>
+                </Field>
               </Flex>
             </Tabs.Content>
 
             {/* Equipment Tab */}
-            <Tabs.Content
-              value="equipment"
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                height: '100%',
-                minHeight: 0,
-              }}
-            >
+            <Tabs.Content value="equipment">
               <EquipmentSection
                 groups={equipmentGroups}
                 onGroupsChange={setEquipmentGroups}
@@ -785,6 +1168,10 @@ export default function TechnicalOfferEditor({
                 onItemsChange={setCrewItems}
                 companyId={companyId}
                 readOnly={isReadOnly}
+                jobStartAt={job?.start_at}
+                jobEndAt={job?.end_at}
+                defaultRatePerDay={defaultCrewRatePerDay}
+                defaultRatePerHour={defaultCrewRatePerHour}
               />
             </Tabs.Content>
 
@@ -795,6 +1182,15 @@ export default function TechnicalOfferEditor({
                 onItemsChange={setTransportItems}
                 companyId={companyId}
                 readOnly={isReadOnly}
+                jobStartAt={job?.start_at}
+                jobEndAt={job?.end_at}
+                vehicleDailyRate={companyExpansion?.vehicle_daily_rate ?? null}
+                vehicleDistanceRate={
+                  companyExpansion?.vehicle_distance_rate ?? null
+                }
+                vehicleDistanceIncrement={
+                  companyExpansion?.vehicle_distance_increment ?? 150
+                }
               />
             </Tabs.Content>
 
@@ -805,7 +1201,23 @@ export default function TechnicalOfferEditor({
           </Box>
         </Tabs.Root>
 
-        <Flex justify="between" align="center" mt="3">
+        <Flex
+          justify="between"
+          align="center"
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            zIndex: 100,
+            backgroundColor: 'var(--color-panel-solid)',
+            paddingTop: '12px',
+            paddingBottom: '12px',
+            paddingLeft: '24px',
+            paddingRight: '24px',
+            borderTop: '1px solid var(--gray-a6)',
+          }}
+        >
           <Flex gap="2">
             {existingOffer?.access_token && (
               <>
@@ -891,7 +1303,15 @@ function ItemSearchField({
 }: {
   searchTerm: string
   onSearchChange: (term: string) => void
-  searchResults: Array<{ id: string; name: string; price: number | null }>
+  searchResults: Array<{
+    id: string
+    name: string
+    price: number | null
+    internally_owned: boolean
+    external_owner_name: string | null
+    brand_name: string | null
+    model: string | null
+  }>
   onSelectItem: (itemId: string) => void
   formatCurrency: (amount: number) => string
 }) {
@@ -971,10 +1391,21 @@ function ItemSearchField({
                 e.currentTarget.style.backgroundColor = 'transparent'
               }}
             >
-              <Flex justify="between">
-                <Text>{item.name}</Text>
+              <Flex justify="between" align="center" gap="2">
+                <Flex align="center" gap="2" style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={{ flex: 1, minWidth: 0 }}>{item.name}</Text>
+                  {item.internally_owned ? (
+                    <Badge size="1" variant="soft" color="indigo">
+                      Internal
+                    </Badge>
+                  ) : (
+                    <Badge size="1" variant="soft" color="amber">
+                      {item.external_owner_name ?? 'External'}
+                    </Badge>
+                  )}
+                </Flex>
                 {item.price !== null && (
-                  <Text size="2" color="gray">
+                  <Text size="2" color="gray" style={{ flexShrink: 0 }}>
                     {formatCurrency(item.price)}
                   </Text>
                 )}
@@ -1011,7 +1442,15 @@ function EquipmentSection({
     string | null
   >(null)
   const [searchResults, setSearchResults] = React.useState<
-    Array<{ id: string; name: string; price: number | null }>
+    Array<{
+      id: string
+      name: string
+      price: number | null
+      internally_owned: boolean
+      external_owner_name: string | null
+      brand_name: string | null
+      model: string | null
+    }>
   >([])
 
   const groupNameSuggestions = ['Audio', 'Lights', 'Rigging', 'AV', 'General']
@@ -1039,7 +1478,17 @@ function EquipmentSection({
 
       const { data, error } = await supabase
         .from('items')
-        .select('id, name')
+        .select(
+          `
+          id,
+          name,
+          internally_owned,
+          external_owner_id,
+          model,
+          brand:item_brands ( id, name ),
+          external_owner:customers!items_external_owner_id_fkey ( id, name )
+        `,
+        )
         .eq('company_id', companyId)
         .eq('active', true)
         .or('deleted.is.null,deleted.eq.false')
@@ -1051,7 +1500,7 @@ function EquipmentSection({
         return
       }
 
-      const ids = data.map((r) => r.id)
+      const ids = data.map((r: any) => r.id)
       let prices: Record<string, number | null> = {}
       if (ids.length) {
         const { data: cp } = await supabase
@@ -1070,11 +1519,18 @@ function EquipmentSection({
       }
 
       setSearchResults(
-        data.map((r) => ({
-          id: r.id,
-          name: r.name,
-          price: r.id ? (prices[r.id] ?? null) : null,
-        })),
+        data.map((r: any) => {
+          const brand = Array.isArray(r.brand) ? r.brand[0] : r.brand
+          return {
+            id: r.id,
+            name: r.name,
+            price: r.id ? (prices[r.id] ?? null) : null,
+            internally_owned: !!r.internally_owned,
+            external_owner_name: r.external_owner?.name ?? null,
+            brand_name: brand?.name ?? null,
+            model: r.model ?? null,
+          }
+        }),
       )
     },
     [companyId],
@@ -1117,14 +1573,23 @@ function EquipmentSection({
       item_id: itemId || null,
       quantity: 1,
       unit_price: selectedItem?.price || 0,
-      is_internal: true,
+      is_internal: selectedItem?.internally_owned ?? true,
       sort_order: group.items.length,
       item: selectedItem
         ? {
             id: selectedItem.id,
             name: selectedItem.name,
-            externally_owned: false,
-            external_owner_id: null,
+            externally_owned: !selectedItem.internally_owned,
+            external_owner_id: selectedItem.internally_owned
+              ? null
+              : selectedItem.external_owner_name
+                ? 'temp'
+                : null,
+            external_owner_name: selectedItem.external_owner_name,
+            brand: selectedItem.brand_name
+              ? { id: 'temp', name: selectedItem.brand_name }
+              : null,
+            model: selectedItem.model ?? null,
           }
         : null,
     }
@@ -1218,10 +1683,8 @@ function EquipmentSection({
       direction="column"
       gap="3"
       style={{
-        height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        minHeight: 0,
       }}
     >
       <Flex justify="between" align="center" style={{ flexShrink: 0 }}>
@@ -1233,25 +1696,8 @@ function EquipmentSection({
         )}
       </Flex>
 
-      {groups.length === 0 ? (
-        <Box
-          p="4"
-          style={{
-            border: '2px dashed var(--gray-a6)',
-            borderRadius: 8,
-            textAlign: 'center',
-          }}
-        >
-          <Text size="2" color="gray">
-            No equipment groups yet. Add your first group to get started.
-          </Text>
-        </Box>
-      ) : (
-        <Flex
-          direction="column"
-          gap="2"
-          style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}
-        >
+      {groups.length > 0 && (
+        <Flex direction="column" gap="2">
           {groups.map((group) => {
             const isExpanded = expandedGroups.has(group.id)
             const groupTotal = group.items.reduce(
@@ -1263,7 +1709,7 @@ function EquipmentSection({
               <Box
                 key={group.id}
                 style={{
-                  border: '1px solid var(--gray-a5)',
+                  border: '1px solid var(--gray-a6)',
                   borderRadius: 8,
                   overflow: 'hidden',
                 }}
@@ -1368,6 +1814,12 @@ function EquipmentSection({
                             <Table.ColumnHeaderCell>
                               Item
                             </Table.ColumnHeaderCell>
+                            <Table.ColumnHeaderCell>
+                              Brand
+                            </Table.ColumnHeaderCell>
+                            <Table.ColumnHeaderCell>
+                              Model
+                            </Table.ColumnHeaderCell>
                             <Table.ColumnHeaderCell>Qty</Table.ColumnHeaderCell>
                             <Table.ColumnHeaderCell>
                               Unit Price
@@ -1382,7 +1834,33 @@ function EquipmentSection({
                           {group.items.map((item) => (
                             <Table.Row key={item.id}>
                               <Table.Cell>
-                                <Text>{item.item?.name || '—'}</Text>
+                                <Flex align="center" gap="2" wrap="wrap">
+                                  <Text>{item.item?.name || '—'}</Text>
+                                  {item.item?.externally_owned ? (
+                                    <Badge
+                                      size="1"
+                                      variant="soft"
+                                      color="amber"
+                                    >
+                                      {item.item?.external_owner_name ??
+                                        'External'}
+                                    </Badge>
+                                  ) : (
+                                    <Badge
+                                      size="1"
+                                      variant="soft"
+                                      color="indigo"
+                                    >
+                                      Internal
+                                    </Badge>
+                                  )}
+                                </Flex>
+                              </Table.Cell>
+                              <Table.Cell>
+                                <Text>{item.item?.brand?.name ?? '—'}</Text>
+                              </Table.Cell>
+                              <Table.Cell>
+                                <Text>{item.item?.model ?? '—'}</Text>
                               </Table.Cell>
                               <Table.Cell>
                                 <TextField.Root
@@ -1456,6 +1934,40 @@ function EquipmentSection({
           })}
         </Flex>
       )}
+
+      {/* Always show empty state box at bottom */}
+      <Box
+        p="4"
+        style={{
+          border: '2px dashed var(--gray-a6)',
+          borderRadius: 8,
+          textAlign: 'center',
+          cursor: readOnly ? 'default' : 'pointer',
+          transition: 'all 100ms',
+        }}
+        onClick={readOnly ? undefined : addGroup}
+        onMouseEnter={(e) => {
+          if (!readOnly) {
+            e.currentTarget.style.borderColor = 'var(--gray-a8)'
+            e.currentTarget.style.background = 'var(--gray-a2)'
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!readOnly) {
+            e.currentTarget.style.borderColor = 'var(--gray-a6)'
+            e.currentTarget.style.background = 'transparent'
+          }
+        }}
+      >
+        <Flex direction="column" align="center" gap="2">
+          {!readOnly && <Plus width={24} height={24} />}
+          <Text size="2" color="gray">
+            {readOnly
+              ? 'No equipment groups yet'
+              : 'Add another equipment group'}
+          </Text>
+        </Flex>
+      </Box>
     </Flex>
   )
 }
@@ -1466,32 +1978,142 @@ function CrewSection({
   onItemsChange,
   companyId: _companyId,
   readOnly = false,
+  jobStartAt,
+  jobEndAt,
+  defaultRatePerDay,
+  defaultRatePerHour,
 }: {
   items: Array<LocalCrewItem>
   onItemsChange: (items: Array<LocalCrewItem>) => void
   companyId: string
   readOnly?: boolean
+  jobStartAt?: string | null
+  jobEndAt?: string | null
+  defaultRatePerDay?: number | null
+  defaultRatePerHour?: number | null
 }) {
+  const [expandedItems, setExpandedItems] = React.useState<Set<string>>(
+    new Set(),
+  )
+
+  const roleSuggestions = [
+    'Technician',
+    'Loader',
+    'FOH',
+    'Monitors',
+    'Hands',
+    'Driver',
+  ]
+
+  const categorySuggestions = ['Audio', 'Lights', 'AV', 'Transport', 'Rigging']
+
+  // Group items by category
+  const groupedItems = React.useMemo(() => {
+    const groups = new Map<string | null, Array<LocalCrewItem>>()
+    const noCategory: Array<LocalCrewItem> = []
+
+    for (const item of items) {
+      const cat = item.role_category || null
+      if (!cat) {
+        noCategory.push(item)
+      } else {
+        const existing = groups.get(cat) || []
+        existing.push(item)
+        groups.set(cat, existing)
+      }
+    }
+
+    // Convert map to sorted array: no category first, then sorted categories
+    const result: Array<{
+      category: string | null
+      items: Array<LocalCrewItem>
+    }> = []
+    if (noCategory.length > 0) {
+      result.push({ category: null, items: noCategory })
+    }
+
+    const sortedCategories = Array.from(groups.keys()).sort()
+    for (const cat of sortedCategories) {
+      result.push({ category: cat, items: groups.get(cat)! })
+    }
+
+    return result
+  }, [items])
+
+  const toggleItem = (itemId: string) => {
+    setExpandedItems((prev) => {
+      const next = new Set(prev)
+      if (next.has(itemId)) {
+        next.delete(itemId)
+      } else {
+        next.add(itemId)
+      }
+      return next
+    })
+  }
+
   const addItem = () => {
-    const now = new Date()
-    const endDate = new Date(now.getTime() + 24 * 60 * 60 * 1000) // +1 day
+    // Default to job duration if available, otherwise use current time + 1 day
+    const startDate = jobStartAt ? new Date(jobStartAt) : new Date()
+    const endDate = jobEndAt
+      ? new Date(jobEndAt)
+      : new Date(startDate.getTime() + 24 * 60 * 60 * 1000) // +1 day if no job end
+
+    const startIso = startDate.toISOString()
+    const endIso = endDate.toISOString()
+    const hasProvidedWindow = Boolean(jobStartAt && jobEndAt)
+    const computedHours = calculateHoursPerDay(startIso, endIso)
+    const hoursPerDay = hasProvidedWindow ? (computedHours ?? 8) : 8
+    const hourlyRate = defaultRatePerHour ?? 0
+    const dailyRate = hourlyRate * hoursPerDay
 
     const newItem: LocalCrewItem = {
       id: `temp-${Date.now()}`,
       role_title: '',
       crew_count: 1,
-      start_date: now.toISOString(),
-      end_date: endDate.toISOString(),
-      daily_rate: 0,
+      start_date: startIso,
+      end_date: endIso,
+      daily_rate: dailyRate,
+      hourly_rate: hourlyRate,
+      hours_per_day: hoursPerDay,
+      billing_type: 'hourly',
       sort_order: items.length,
+      role_category: null,
     }
     onItemsChange([...items, newItem])
+    setExpandedItems((prev) => new Set([...prev, newItem.id]))
+  }
+
+  const normalizeCrewItem = (item: LocalCrewItem): LocalCrewItem => {
+    if (item.billing_type === 'hourly') {
+      const computedHours =
+        calculateHoursPerDay(item.start_date, item.end_date) ??
+        (item.hours_per_day != null ? Math.max(0, item.hours_per_day) : null) ??
+        0
+      const normalizedHourly = Math.max(
+        0,
+        item.hourly_rate != null ? item.hourly_rate : (defaultRatePerHour ?? 0),
+      )
+      return {
+        ...item,
+        hours_per_day: computedHours,
+        hourly_rate: normalizedHourly,
+        daily_rate: normalizedHourly * computedHours,
+      }
+    }
+
+    return {
+      ...item,
+      hourly_rate: null,
+      hours_per_day: null,
+      daily_rate: Math.max(0, item.daily_rate),
+    }
   }
 
   const updateItem = (itemId: string, updates: Partial<LocalCrewItem>) => {
     onItemsChange(
       items.map((item) =>
-        item.id === itemId ? { ...item, ...updates } : item,
+        item.id === itemId ? normalizeCrewItem({ ...item, ...updates }) : item,
       ),
     )
   }
@@ -1519,203 +2141,635 @@ function CrewSection({
         )}
       </Flex>
 
-      {items.length === 0 ? (
-        <Box
-          p="4"
-          style={{
-            border: '2px dashed var(--gray-a6)',
-            borderRadius: 8,
-            textAlign: 'center',
-          }}
-        >
-          <Text size="2" color="gray">
-            No crew items yet. Add your first crew item to get started.
-          </Text>
-        </Box>
-      ) : (
-        <Table.Root variant="surface">
-          <Table.Header>
-            <Table.Row>
-              <Table.ColumnHeaderCell>Role</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell>Crew Count</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell>Start Date</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell>End Date</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell>Daily Rate</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell>Total</Table.ColumnHeaderCell>
-              {!readOnly && <Table.ColumnHeaderCell />}
-            </Table.Row>
-          </Table.Header>
-          <Table.Body>
-            {items.map((item) => {
-              const days = Math.ceil(
-                (new Date(item.end_date).getTime() -
-                  new Date(item.start_date).getTime()) /
-                  (1000 * 60 * 60 * 24),
-              )
-              const total =
-                item.daily_rate * item.crew_count * Math.max(1, days)
+      {items.length > 0 && (
+        <Box style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {groupedItems.map((group) => (
+            <Box key={group.category || 'no-category'}>
+              {group.category && (
+                <Heading
+                  size="4"
+                  mb="2"
+                  style={{ textTransform: 'capitalize' }}
+                >
+                  {group.category}
+                </Heading>
+              )}
+              <Box
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                }}
+              >
+                {group.items.map((item) => {
+                  const isExpanded = expandedItems.has(item.id)
+                  const days = Math.ceil(
+                    (new Date(item.end_date).getTime() -
+                      new Date(item.start_date).getTime()) /
+                      (1000 * 60 * 60 * 24),
+                  )
+                  const total =
+                    item.daily_rate * item.crew_count * Math.max(1, days)
+                  const computedHoursPerDay =
+                    item.billing_type === 'hourly'
+                      ? (item.hours_per_day ??
+                        calculateHoursPerDay(item.start_date, item.end_date) ??
+                        0)
+                      : null
+                  const formattedHoursPerDay =
+                    computedHoursPerDay != null
+                      ? Number(computedHoursPerDay.toFixed(2))
+                      : null
+                  const displayHourlyRate =
+                    item.billing_type === 'hourly'
+                      ? (item.hourly_rate ?? defaultRatePerHour ?? 0)
+                      : null
 
-              return (
-                <Table.Row key={item.id}>
-                  <Table.Cell>
-                    <TextField.Root
-                      value={item.role_title}
-                      onChange={(e) =>
-                        updateItem(item.id, { role_title: e.target.value })
-                      }
-                      placeholder="e.g., Technician"
-                      readOnly={readOnly}
-                    />
-                  </Table.Cell>
-                  <Table.Cell>
-                    <TextField.Root
-                      type="number"
-                      min="1"
-                      value={String(item.crew_count)}
-                      onChange={(e) =>
-                        updateItem(item.id, {
-                          crew_count: Math.max(1, Number(e.target.value) || 1),
-                        })
-                      }
-                      style={{ width: 80 }}
-                      readOnly={readOnly}
-                    />
-                  </Table.Cell>
-                  <Table.Cell>
-                    {readOnly ? (
-                      <Text>
-                        {item.start_date
-                          ? new Date(item.start_date).toLocaleDateString(
-                              'nb-NO',
-                            )
-                          : '—'}
-                      </Text>
-                    ) : (
-                      <DateTimePicker
-                        value={item.start_date}
-                        onChange={(value) =>
-                          updateItem(item.id, { start_date: value })
-                        }
-                      />
-                    )}
-                  </Table.Cell>
-                  <Table.Cell>
-                    {readOnly ? (
-                      <Text>
-                        {item.end_date
-                          ? new Date(item.end_date).toLocaleDateString('nb-NO')
-                          : '—'}
-                      </Text>
-                    ) : (
-                      <DateTimePicker
-                        value={item.end_date}
-                        onChange={(value) =>
-                          updateItem(item.id, { end_date: value })
-                        }
-                      />
-                    )}
-                  </Table.Cell>
-                  <Table.Cell>
-                    <TextField.Root
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={String(item.daily_rate)}
-                      onChange={(e) =>
-                        updateItem(item.id, {
-                          daily_rate: Math.max(0, Number(e.target.value) || 0),
-                        })
-                      }
-                      style={{ width: 120 }}
-                      readOnly={readOnly}
-                    />
-                  </Table.Cell>
-                  <Table.Cell>
-                    <Text>{formatCurrency(total)}</Text>
-                  </Table.Cell>
-                  {!readOnly && (
-                    <Table.Cell align="right">
-                      <Button
-                        size="1"
-                        variant="soft"
-                        color="red"
-                        onClick={() => deleteItem(item.id)}
+                  return (
+                    <Box
+                      key={item.id}
+                      p="3"
+                      style={{
+                        border: '1px solid var(--gray-a6)',
+                        borderRadius: 8,
+                        background: 'var(--gray-a2)',
+                      }}
+                    >
+                      <Box
+                        style={{
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                        }}
+                        onClick={() => toggleItem(item.id)}
                       >
-                        <Trash width={14} height={14} />
-                      </Button>
-                    </Table.Cell>
-                  )}
-                </Table.Row>
-              )
-            })}
-          </Table.Body>
-        </Table.Root>
+                        <Flex align="center" gap="2">
+                          {isExpanded ? (
+                            <NavArrowDown width={18} height={18} />
+                          ) : (
+                            <NavArrowRight width={18} height={18} />
+                          )}
+                          <Text weight="bold">{item.role_title || '—'}</Text>
+                          <Text size="2" color="gray">
+                            ({item.crew_count} crew
+                            {item.crew_count !== 1 ? 's' : ''})
+                          </Text>
+                          <Text size="2" color="gray">
+                            • {formatCurrency(total)}
+                          </Text>
+                        </Flex>
+                        {!readOnly && (
+                          <Button
+                            size="1"
+                            variant="soft"
+                            color="red"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              deleteItem(item.id)
+                            }}
+                          >
+                            <Trash width={14} height={14} />
+                          </Button>
+                        )}
+                      </Box>
+
+                      {isExpanded && (
+                        <Box
+                          mt="3"
+                          pt="3"
+                          style={{ borderTop: '1px solid var(--gray-a6)' }}
+                        >
+                          <Flex direction="column" gap="3">
+                            <Flex gap="3" wrap="wrap">
+                              {/* Role Title */}
+                              <Box style={{ flex: '1 1 260px' }}>
+                                <Text size="2" color="gray" mb="1">
+                                  Role Title
+                                </Text>
+                                <TextField.Root
+                                  value={item.role_title}
+                                  onChange={(e) =>
+                                    updateItem(item.id, {
+                                      role_title: e.target.value,
+                                    })
+                                  }
+                                  placeholder="e.g., Technician"
+                                  readOnly={readOnly}
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                                {!readOnly && !item.role_title && (
+                                  <Flex gap="2" wrap="wrap" mt="2">
+                                    <Text
+                                      size="1"
+                                      color="gray"
+                                      style={{ width: '100%' }}
+                                    >
+                                      Quick suggestions:
+                                    </Text>
+                                    {roleSuggestions.map((suggestion) => (
+                                      <Button
+                                        key={suggestion}
+                                        size="1"
+                                        variant="soft"
+                                        color="gray"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          updateItem(item.id, {
+                                            role_title: suggestion,
+                                          })
+                                        }}
+                                      >
+                                        {suggestion}
+                                      </Button>
+                                    ))}
+                                  </Flex>
+                                )}
+                              </Box>
+
+                              {/* Role Category */}
+                              <Box style={{ flex: '1 1 220px' }}>
+                                <Text size="2" color="gray" mb="1">
+                                  Role Category
+                                </Text>
+                                <TextField.Root
+                                  placeholder="e.g. Audio, Lights, AV"
+                                  value={item.role_category || ''}
+                                  onChange={(e) =>
+                                    updateItem(item.id, {
+                                      role_category:
+                                        e.target.value.trim() || null,
+                                    })
+                                  }
+                                  readOnly={readOnly}
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                                {!readOnly && (
+                                  <Flex gap="2" wrap="wrap" mt="2">
+                                    <Text
+                                      size="1"
+                                      color="gray"
+                                      style={{ width: '100%' }}
+                                    >
+                                      Quick suggestions:
+                                    </Text>
+                                    {categorySuggestions.map((suggestion) => (
+                                      <Button
+                                        key={suggestion}
+                                        size="1"
+                                        variant="soft"
+                                        color="gray"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          updateItem(item.id, {
+                                            role_category:
+                                              suggestion.toLowerCase(),
+                                          })
+                                        }}
+                                      >
+                                        {suggestion}
+                                      </Button>
+                                    ))}
+                                  </Flex>
+                                )}
+                              </Box>
+                            </Flex>
+
+                            {/* Rate Type */}
+                            <Box>
+                              <Text size="2" color="gray" mb="1">
+                                Rate Type
+                              </Text>
+                              {readOnly ? (
+                                <Badge size="1" variant="soft" color="gray">
+                                  {item.billing_type === 'hourly'
+                                    ? 'Hourly rate'
+                                    : 'Daily rate'}
+                                </Badge>
+                              ) : (
+                                <Flex gap="2">
+                                  <Button
+                                    size="1"
+                                    variant={
+                                      item.billing_type === 'daily'
+                                        ? 'classic'
+                                        : 'soft'
+                                    }
+                                    color={
+                                      item.billing_type === 'daily'
+                                        ? 'blue'
+                                        : 'gray'
+                                    }
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      if (item.billing_type !== 'daily') {
+                                        const fallbackDaily = Math.max(
+                                          0,
+                                          defaultRatePerDay ?? item.daily_rate,
+                                        )
+                                        updateItem(item.id, {
+                                          billing_type: 'daily',
+                                          daily_rate: fallbackDaily,
+                                        })
+                                      }
+                                    }}
+                                  >
+                                    Daily
+                                  </Button>
+                                  <Button
+                                    size="1"
+                                    variant={
+                                      item.billing_type === 'hourly'
+                                        ? 'classic'
+                                        : 'soft'
+                                    }
+                                    color={
+                                      item.billing_type === 'hourly'
+                                        ? 'blue'
+                                        : 'gray'
+                                    }
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      if (item.billing_type !== 'hourly') {
+                                        const computedHours =
+                                          calculateHoursPerDay(
+                                            item.start_date,
+                                            item.end_date,
+                                          ) ??
+                                          (item.hours_per_day &&
+                                          item.hours_per_day > 0
+                                            ? item.hours_per_day
+                                            : 8)
+                                        const baseHourly =
+                                          defaultRatePerHour ??
+                                          (item.hourly_rate != null &&
+                                          item.hourly_rate > 0
+                                            ? item.hourly_rate
+                                            : computedHours > 0
+                                              ? item.daily_rate / computedHours
+                                              : 0)
+                                        const resolvedHourly = Number.isFinite(
+                                          baseHourly,
+                                        )
+                                          ? baseHourly
+                                          : 0
+
+                                        updateItem(item.id, {
+                                          billing_type: 'hourly',
+                                          hours_per_day: computedHours,
+                                          hourly_rate: Math.max(
+                                            0,
+                                            resolvedHourly,
+                                          ),
+                                        })
+                                      }
+                                    }}
+                                  >
+                                    Hourly
+                                  </Button>
+                                </Flex>
+                              )}
+                            </Box>
+
+                            {/* Details Grid */}
+                            <Flex gap="3" wrap="wrap">
+                              <Box style={{ minWidth: 120 }}>
+                                <Text size="2" color="gray" mb="1">
+                                  Crew Count
+                                </Text>
+                                <TextField.Root
+                                  type="number"
+                                  min="1"
+                                  value={String(item.crew_count)}
+                                  onChange={(e) =>
+                                    updateItem(item.id, {
+                                      crew_count: Math.max(
+                                        1,
+                                        Number(e.target.value) || 1,
+                                      ),
+                                    })
+                                  }
+                                  style={{ width: 120 }}
+                                  readOnly={readOnly}
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </Box>
+
+                              <Box style={{ minWidth: 200 }}>
+                                <Text size="2" color="gray" mb="1">
+                                  Start Date
+                                </Text>
+                                {readOnly ? (
+                                  <Text>
+                                    {item.start_date
+                                      ? new Date(
+                                          item.start_date,
+                                        ).toLocaleDateString('nb-NO')
+                                      : '—'}
+                                  </Text>
+                                ) : (
+                                  <div onClick={(e) => e.stopPropagation()}>
+                                    <DateTimePicker
+                                      value={item.start_date}
+                                      onChange={(value) =>
+                                        updateItem(item.id, {
+                                          start_date: value,
+                                        })
+                                      }
+                                    />
+                                  </div>
+                                )}
+                              </Box>
+
+                              <Box style={{ minWidth: 200 }}>
+                                <Text size="2" color="gray" mb="1">
+                                  End Date
+                                </Text>
+                                {readOnly ? (
+                                  <Text>
+                                    {item.end_date
+                                      ? new Date(
+                                          item.end_date,
+                                        ).toLocaleDateString('nb-NO')
+                                      : '—'}
+                                  </Text>
+                                ) : (
+                                  <div onClick={(e) => e.stopPropagation()}>
+                                    <DateTimePicker
+                                      value={item.end_date}
+                                      onChange={(value) =>
+                                        updateItem(item.id, { end_date: value })
+                                      }
+                                    />
+                                  </div>
+                                )}
+                              </Box>
+
+                              {item.billing_type === 'daily' ? (
+                                <Box style={{ minWidth: 120 }}>
+                                  <Text size="2" color="gray" mb="1">
+                                    Daily Rate
+                                  </Text>
+                                  <TextField.Root
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={String(item.daily_rate)}
+                                    onChange={(e) =>
+                                      updateItem(item.id, {
+                                        daily_rate: Math.max(
+                                          0,
+                                          Number(e.target.value) || 0,
+                                        ),
+                                      })
+                                    }
+                                    placeholder={
+                                      defaultRatePerDay != null
+                                        ? String(defaultRatePerDay)
+                                        : undefined
+                                    }
+                                    style={{ width: 110 }}
+                                    readOnly={readOnly}
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                </Box>
+                              ) : (
+                                <>
+                                  <Box style={{ minWidth: 120 }}>
+                                    <Text size="2" color="gray" mb="1">
+                                      Hourly Rate
+                                    </Text>
+                                    <TextField.Root
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={
+                                        item.hourly_rate == null
+                                          ? ''
+                                          : String(item.hourly_rate)
+                                      }
+                                      onChange={(e) => {
+                                        const value = e.target.value
+                                        if (value === '') {
+                                          updateItem(item.id, {
+                                            hourly_rate: null,
+                                          })
+                                          return
+                                        }
+                                        updateItem(item.id, {
+                                          hourly_rate: Math.max(
+                                            0,
+                                            Number(value) || 0,
+                                          ),
+                                        })
+                                      }}
+                                      onBlur={() => {
+                                        if (item.hourly_rate == null) {
+                                          updateItem(item.id, {
+                                            hourly_rate:
+                                              defaultRatePerHour ?? 0,
+                                          })
+                                        }
+                                      }}
+                                      placeholder={
+                                        defaultRatePerHour != null
+                                          ? String(defaultRatePerHour)
+                                          : undefined
+                                      }
+                                      style={{ width: 110 }}
+                                      readOnly={readOnly}
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                    {!readOnly &&
+                                      defaultRatePerHour != null && (
+                                        <Text
+                                          size="1"
+                                          color="gray"
+                                          style={{ fontStyle: 'italic' }}
+                                          mt="1"
+                                        >
+                                          Default:{' '}
+                                          {formatCurrency(defaultRatePerHour)}
+                                          /hour
+                                        </Text>
+                                      )}
+                                  </Box>
+                                  <Box style={{ minWidth: 120 }}>
+                                    <Text size="2" color="gray" mb="1">
+                                      Hours per Day
+                                    </Text>
+                                    <TextField.Root
+                                      type="number"
+                                      min="0"
+                                      step="0.25"
+                                      value={
+                                        formattedHoursPerDay != null
+                                          ? formattedHoursPerDay.toFixed(2)
+                                          : ''
+                                      }
+                                      style={{ width: 110 }}
+                                      disabled
+                                      readOnly
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                  </Box>
+                                  <Box style={{ minWidth: 160 }}>
+                                    <Text size="2" color="gray" mb="1">
+                                      Daily Equivalent
+                                    </Text>
+                                    <Flex direction="column" gap="1">
+                                      <Text weight="medium">
+                                        {formatCurrency(item.daily_rate)}
+                                      </Text>
+                                      <Text size="1" color="gray">
+                                        per day
+                                      </Text>
+                                    </Flex>
+                                  </Box>
+                                </>
+                              )}
+                            </Flex>
+
+                            {/* Summary */}
+                            <Box
+                              p="2"
+                              style={{
+                                background: 'var(--gray-a3)',
+                                borderRadius: 4,
+                              }}
+                            >
+                              <Flex justify="between" align="center">
+                                <Text size="2" color="gray">
+                                  {days} day{days !== 1 ? 's' : ''} ×{' '}
+                                  {item.crew_count} crew
+                                  {item.crew_count !== 1 ? 's' : ''}{' '}
+                                  {item.billing_type === 'hourly'
+                                    ? `• ${(formattedHoursPerDay ?? 0).toFixed(2)}h/day @ ${formatCurrency(displayHourlyRate ?? 0)}/hour`
+                                    : `• ${formatCurrency(item.daily_rate)}/day`}
+                                </Text>
+                                <Text weight="medium">
+                                  Total: {formatCurrency(total)}
+                                </Text>
+                              </Flex>
+                            </Box>
+                          </Flex>
+                        </Box>
+                      )}
+                    </Box>
+                  )
+                })}
+              </Box>
+            </Box>
+          ))}
+        </Box>
       )}
+
+      {/* Always show empty state box at bottom */}
+      <Box
+        p="4"
+        style={{
+          border: '2px dashed var(--gray-a6)',
+          borderRadius: 8,
+          textAlign: 'center',
+          cursor: readOnly ? 'default' : 'pointer',
+          transition: 'all 100ms',
+        }}
+        onClick={readOnly ? undefined : addItem}
+        onMouseEnter={(e) => {
+          if (!readOnly) {
+            e.currentTarget.style.borderColor = 'var(--gray-a8)'
+            e.currentTarget.style.background = 'var(--gray-a2)'
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!readOnly) {
+            e.currentTarget.style.borderColor = 'var(--gray-a6)'
+            e.currentTarget.style.background = 'transparent'
+          }
+        }}
+      >
+        <Flex direction="column" align="center" gap="2">
+          {!readOnly && <Plus width={24} height={24} />}
+          <Text size="2" color="gray">
+            {readOnly ? 'No crew items yet' : 'Add another crew item'}
+          </Text>
+        </Flex>
+      </Box>
     </Flex>
   )
+}
+
+// Helper function to format vehicle category for display
+function formatVehicleCategory(
+  category:
+    | 'passenger_car_small'
+    | 'passenger_car_medium'
+    | 'passenger_car_big'
+    | 'van_small'
+    | 'van_medium'
+    | 'van_big'
+    | 'C1'
+    | 'C1E'
+    | 'C'
+    | 'CE'
+    | null,
+): string {
+  if (!category) return '—'
+  const map: Record<string, string> = {
+    passenger_car_small: 'Passenger Car - Small',
+    passenger_car_medium: 'Passenger Car - Medium',
+    passenger_car_big: 'Passenger Car - Big',
+    van_small: 'Van - Small',
+    van_medium: 'Van - Medium',
+    van_big: 'Van - Big',
+    C1: 'C1',
+    C1E: 'C1E',
+    C: 'C',
+    CE: 'CE',
+  }
+  return map[category] || category
 }
 
 // Transport Section Component
 function TransportSection({
   items,
   onItemsChange,
-  companyId,
+  companyId: _companyId,
   readOnly = false,
+  jobStartAt,
+  jobEndAt,
+  vehicleDailyRate,
+  vehicleDistanceRate,
+  vehicleDistanceIncrement,
 }: {
   items: Array<LocalTransportItem>
   onItemsChange: (items: Array<LocalTransportItem>) => void
   companyId: string
   readOnly?: boolean
+  jobStartAt?: string | null
+  jobEndAt?: string | null
+  vehicleDailyRate?: number | null
+  vehicleDistanceRate?: number | null
+  vehicleDistanceIncrement?: number
 }) {
-  const [searchTerm, setSearchTerm] = React.useState('')
-  const [searchResults, setSearchResults] = React.useState<
-    Array<{ id: string; name: string }>
-  >([])
-
-  // Search for vehicles
-  const searchVehicles = React.useCallback(
-    async (term: string) => {
-      if (!term.trim()) {
-        setSearchResults([])
-        return
-      }
-
-      const { data, error } = await supabase
-        .from('vehicles')
-        .select('id, name')
-        .eq('company_id', companyId)
-        .or('deleted.is.null,deleted.eq.false')
-        .ilike('name', `%${term}%`)
-        .limit(20)
-
-      if (error) {
-        console.error('Search error:', error)
-        return
-      }
-
-      setSearchResults(data)
-    },
-    [companyId],
-  )
-
-  React.useEffect(() => {
-    const timeout = setTimeout(() => {
-      searchVehicles(searchTerm)
-    }, 300)
-    return () => clearTimeout(timeout)
-  }, [searchTerm, searchVehicles])
-
   const addItem = () => {
-    const now = new Date()
-    const endDate = new Date(now.getTime() + 24 * 60 * 60 * 1000) // +1 day
+    // Default to job duration if available, otherwise use current time + 1 day
+    const startDate = jobStartAt ? new Date(jobStartAt) : new Date()
+    const endDate = jobEndAt
+      ? new Date(jobEndAt)
+      : new Date(startDate.getTime() + 24 * 60 * 60 * 1000) // +1 day if no job end
+    const increment = Math.max(1, vehicleDistanceIncrement ?? 150)
 
     const newItem: LocalTransportItem = {
       id: `temp-${Date.now()}`,
       vehicle_name: '',
       vehicle_id: null,
-      start_date: now.toISOString(),
+      vehicle_category: null,
+      distance_km: increment,
+      start_date: startDate.toISOString(),
       end_date: endDate.toISOString(),
-      daily_rate: 0,
+      daily_rate: null,
+      distance_rate: null,
       is_internal: true,
       sort_order: items.length,
     }
@@ -1753,102 +2807,210 @@ function TransportSection({
         )}
       </Flex>
 
-      {items.length === 0 ? (
-        <Box
-          p="4"
-          style={{
-            border: '2px dashed var(--gray-a6)',
-            borderRadius: 8,
-            textAlign: 'center',
-          }}
-        >
-          <Text size="2" color="gray">
-            No transport items yet. Add your first transport item to get
-            started.
-          </Text>
-        </Box>
-      ) : (
+      {items.length > 0 && (
         <Table.Root variant="surface">
           <Table.Header>
             <Table.Row>
-              <Table.ColumnHeaderCell>Vehicle</Table.ColumnHeaderCell>
+              <Table.ColumnHeaderCell>Vehicle Category</Table.ColumnHeaderCell>
+              <Table.ColumnHeaderCell>Distance (km)</Table.ColumnHeaderCell>
               <Table.ColumnHeaderCell>Start Date</Table.ColumnHeaderCell>
               <Table.ColumnHeaderCell>End Date</Table.ColumnHeaderCell>
               <Table.ColumnHeaderCell>Daily Rate</Table.ColumnHeaderCell>
+              <Table.ColumnHeaderCell>Distance Rate</Table.ColumnHeaderCell>
               <Table.ColumnHeaderCell>Total</Table.ColumnHeaderCell>
               {!readOnly && <Table.ColumnHeaderCell />}
             </Table.Row>
           </Table.Header>
           <Table.Body>
             {items.map((item) => {
+              const companyDailyRate = vehicleDailyRate ?? null
+              const companyDistanceRate = vehicleDistanceRate ?? null
+              const distanceIncrement = Math.max(
+                1,
+                vehicleDistanceIncrement ?? 150,
+              )
+              const dailyRateValue = item.daily_rate ?? companyDailyRate
+              const distanceRateValue =
+                item.distance_rate ?? companyDistanceRate
+              const adjustDistance = (delta: number) => {
+                const step = distanceIncrement
+                const current = item.distance_km ?? step
+                const next = current + delta
+                const minValue = step
+                let snapped: number
+                if (delta >= 0) {
+                  snapped = Math.ceil(next / step) * step
+                } else {
+                  snapped = Math.floor(next / step) * step
+                }
+                if (snapped < minValue) snapped = minValue
+                updateItem(item.id, { distance_km: snapped })
+              }
+
               const days = Math.ceil(
                 (new Date(item.end_date).getTime() -
                   new Date(item.start_date).getTime()) /
                   (1000 * 60 * 60 * 24),
               )
-              const total = item.daily_rate * Math.max(1, days)
+              // Calculate total: daily_rate * days + distance_rate * (distance rounded up to increment)
+              // Use item's daily_rate if set, otherwise use default from company
+              const effectiveDailyRate = dailyRateValue ?? 0
+              const dailyCost = effectiveDailyRate * Math.max(1, days)
+
+              // Use item's distance_rate if set, otherwise use default from company
+              const effectiveDistanceRate = distanceRateValue
+              const distanceIncrements = item.distance_km
+                ? Math.ceil(item.distance_km / distanceIncrement)
+                : 0
+              const distanceCost =
+                effectiveDistanceRate && distanceIncrements > 0
+                  ? effectiveDistanceRate * distanceIncrements
+                  : 0
+              const total = dailyCost + distanceCost
+              const isUsingDefaultDistanceRate =
+                companyDistanceRate !== null &&
+                (item.distance_rate === null ||
+                  item.distance_rate === companyDistanceRate)
+              const isUsingDefaultDailyRate =
+                companyDailyRate !== null &&
+                (item.daily_rate === null ||
+                  item.daily_rate === companyDailyRate)
 
               return (
-                <Table.Row key={item.id}>
+                <Table.Row key={item.id} style={{ verticalAlign: 'middle' }}>
                   <Table.Cell>
-                    <Box style={{ position: 'relative' }}>
-                      <TextField.Root
-                        value={item.vehicle_name}
-                        onChange={(e) => {
-                          setSearchTerm(e.target.value)
-                          updateItem(item.id, { vehicle_name: e.target.value })
-                        }}
-                        placeholder="Search or enter vehicle name"
-                        readOnly={readOnly}
-                      />
-                      {searchResults.length > 0 && searchTerm && (
-                        <Box
-                          style={{
-                            position: 'absolute',
-                            top: '100%',
-                            left: 0,
-                            right: 0,
-                            zIndex: 1000,
-                            background: 'var(--gray-a1)',
-                            border: '1px solid var(--gray-a5)',
-                            borderRadius: 4,
-                            marginTop: 4,
-                            maxHeight: 200,
-                            overflowY: 'auto',
-                          }}
-                        >
-                          {searchResults.map((vehicle) => (
-                            <Box
-                              key={vehicle.id}
-                              p="2"
-                              style={{
-                                cursor: 'pointer',
-                                borderBottom: '1px solid var(--gray-a4)',
-                              }}
-                              onClick={() => {
-                                updateItem(item.id, {
-                                  vehicle_name: vehicle.name,
-                                  vehicle_id: vehicle.id,
-                                })
-                                setSearchTerm('')
-                                setSearchResults([])
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.background =
-                                  'var(--gray-a2)'
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.background = 'transparent'
-                              }}
-                            >
-                              <Text>{vehicle.name}</Text>
-                            </Box>
-                          ))}
-                        </Box>
-                      )}
-                    </Box>
+                    {readOnly ? (
+                      <Text>
+                        {formatVehicleCategory(item.vehicle_category)}
+                      </Text>
+                    ) : (
+                      <Select.Root
+                        value={item.vehicle_category ?? ''}
+                        onValueChange={(value) =>
+                          updateItem(item.id, {
+                            vehicle_category: (value ||
+                              null) as LocalTransportItem['vehicle_category'],
+                          })
+                        }
+                      >
+                        <Select.Trigger placeholder="Select category" />
+                        <Select.Content style={{ zIndex: 10000 }}>
+                          <Select.Item value="passenger_car_small">
+                            Passenger Car - Small
+                          </Select.Item>
+                          <Select.Item value="passenger_car_medium">
+                            Passenger Car - Medium
+                          </Select.Item>
+                          <Select.Item value="passenger_car_big">
+                            Passenger Car - Big
+                          </Select.Item>
+                          <Select.Item value="van_small">
+                            Van - Small
+                          </Select.Item>
+                          <Select.Item value="van_medium">
+                            Van - Medium
+                          </Select.Item>
+                          <Select.Item value="van_big">Van - Big</Select.Item>
+                          <Select.Item value="C1">C1</Select.Item>
+                          <Select.Item value="C1E">C1E</Select.Item>
+                          <Select.Item value="C">C</Select.Item>
+                          <Select.Item value="CE">CE</Select.Item>
+                        </Select.Content>
+                      </Select.Root>
+                    )}
                   </Table.Cell>
-                  <Table.Cell>
+                  <Table.Cell style={{ verticalAlign: 'middle' }}>
+                    {readOnly ? (
+                      <Text>{item.distance_km ?? '—'}</Text>
+                    ) : (
+                      <Flex align="center" gap="1">
+                        <TextField.Root
+                          type="number"
+                          min={distanceIncrement}
+                          step={String(distanceIncrement)}
+                          value={String(item.distance_km ?? '')}
+                          onChange={(e) => {
+                            const value = e.target.value
+                            if (value === '') {
+                              updateItem(item.id, { distance_km: null })
+                            } else {
+                              const numValue = Number(value) || 0
+                              // Force to nearest increment (round to nearest)
+                              const rounded =
+                                Math.round(numValue / distanceIncrement) *
+                                distanceIncrement
+                              updateItem(item.id, {
+                                distance_km: Math.max(
+                                  distanceIncrement,
+                                  rounded,
+                                ),
+                              })
+                            }
+                          }}
+                          onBlur={() => {
+                            // Ensure value is rounded to increment on blur
+                            if (
+                              item.distance_km !== null &&
+                              item.distance_km > 0
+                            ) {
+                              const rounded =
+                                Math.round(
+                                  item.distance_km / distanceIncrement,
+                                ) * distanceIncrement
+                              const nextValue = Math.max(
+                                distanceIncrement,
+                                rounded,
+                              )
+                              if (nextValue !== item.distance_km) {
+                                updateItem(item.id, { distance_km: nextValue })
+                              }
+                            }
+                            if (
+                              item.distance_km !== null &&
+                              item.distance_km < distanceIncrement
+                            ) {
+                              updateItem(item.id, {
+                                distance_km: distanceIncrement,
+                              })
+                            }
+                          }}
+                          placeholder="Distance"
+                          style={{ width: 80 }}
+                        />
+                        <Flex
+                          direction="column"
+                          gap="1"
+                          style={{ alignSelf: 'stretch' }}
+                        >
+                          <IconButton
+                            size="1"
+                            variant="soft"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              adjustDistance(distanceIncrement)
+                            }}
+                            style={{ width: 20, height: 18, padding: 0 }}
+                          >
+                            <NavArrowUp width={12} height={12} />
+                          </IconButton>
+                          <IconButton
+                            size="1"
+                            variant="soft"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              adjustDistance(-distanceIncrement)
+                            }}
+                            style={{ width: 20, height: 18, padding: 0 }}
+                          >
+                            <NavArrowDown width={12} height={12} />
+                          </IconButton>
+                        </Flex>
+                      </Flex>
+                    )}
+                  </Table.Cell>
+                  <Table.Cell style={{ verticalAlign: 'middle' }}>
                     {readOnly ? (
                       <Text>
                         {item.start_date
@@ -1866,7 +3028,7 @@ function TransportSection({
                       />
                     )}
                   </Table.Cell>
-                  <Table.Cell>
+                  <Table.Cell style={{ verticalAlign: 'middle' }}>
                     {readOnly ? (
                       <Text>
                         {item.end_date
@@ -1882,20 +3044,92 @@ function TransportSection({
                       />
                     )}
                   </Table.Cell>
-                  <Table.Cell>
-                    <TextField.Root
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={String(item.daily_rate)}
-                      onChange={(e) =>
-                        updateItem(item.id, {
-                          daily_rate: Math.max(0, Number(e.target.value) || 0),
-                        })
-                      }
-                      style={{ width: 120 }}
-                      readOnly={readOnly}
-                    />
+                  <Table.Cell style={{ verticalAlign: 'middle' }}>
+                    <Flex direction="column" gap="1">
+                      <TextField.Root
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={
+                          dailyRateValue == null ? '' : String(dailyRateValue)
+                        }
+                        onChange={(e) => {
+                          const value = e.target.value
+                          // If empty, set to null (use default)
+                          if (value === '') {
+                            updateItem(item.id, { daily_rate: null })
+                          } else {
+                            const numValue = Number(value) || 0
+                            updateItem(item.id, {
+                              daily_rate: Math.max(0, numValue),
+                            })
+                          }
+                        }}
+                        placeholder={
+                          companyDailyRate !== null
+                            ? String(companyDailyRate)
+                            : 'Not set'
+                        }
+                        style={{ width: 100 }}
+                        readOnly={readOnly}
+                      />
+                      {!readOnly &&
+                        companyDailyRate !== null &&
+                        !isUsingDefaultDailyRate && (
+                          <Text
+                            size="1"
+                            color="gray"
+                            style={{ fontStyle: 'italic' }}
+                          >
+                            Default: {formatCurrency(companyDailyRate)}/day
+                          </Text>
+                        )}
+                    </Flex>
+                  </Table.Cell>
+                  <Table.Cell style={{ verticalAlign: 'middle' }}>
+                    <Flex direction="column" gap="1">
+                      <TextField.Root
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={
+                          distanceRateValue == null
+                            ? ''
+                            : String(distanceRateValue)
+                        }
+                        onChange={(e) => {
+                          const value = e.target.value
+                          // If empty, set to null to use default
+                          if (value === '') {
+                            updateItem(item.id, { distance_rate: null })
+                          } else {
+                            const numValue = Number(value) || 0
+                            updateItem(item.id, {
+                              distance_rate: Math.max(0, numValue),
+                            })
+                          }
+                        }}
+                        placeholder={
+                          companyDistanceRate !== null
+                            ? String(companyDistanceRate)
+                            : 'Not set'
+                        }
+                        style={{ width: 100 }}
+                        readOnly={readOnly}
+                      />
+                      {!readOnly &&
+                        !isUsingDefaultDistanceRate &&
+                        companyDistanceRate !== null && (
+                          <Text
+                            size="1"
+                            color="gray"
+                            style={{ fontStyle: 'italic' }}
+                          >
+                            Default: {formatCurrency(companyDistanceRate)} /{' '}
+                            {distanceIncrement}km
+                          </Text>
+                        )}
+                    </Flex>
                   </Table.Cell>
                   <Table.Cell>
                     <Text>{formatCurrency(total)}</Text>
@@ -1918,6 +3152,38 @@ function TransportSection({
           </Table.Body>
         </Table.Root>
       )}
+
+      {/* Always show empty state box at bottom */}
+      <Box
+        p="4"
+        style={{
+          border: '2px dashed var(--gray-a6)',
+          borderRadius: 8,
+          textAlign: 'center',
+          cursor: readOnly ? 'default' : 'pointer',
+          transition: 'all 100ms',
+        }}
+        onClick={readOnly ? undefined : addItem}
+        onMouseEnter={(e) => {
+          if (!readOnly) {
+            e.currentTarget.style.borderColor = 'var(--gray-a8)'
+            e.currentTarget.style.background = 'var(--gray-a2)'
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!readOnly) {
+            e.currentTarget.style.borderColor = 'var(--gray-a6)'
+            e.currentTarget.style.background = 'transparent'
+          }
+        }}
+      >
+        <Flex direction="column" align="center" gap="2">
+          {!readOnly && <Plus width={24} height={24} />}
+          <Text size="2" color="gray">
+            {readOnly ? 'No transport items yet' : 'Add another transport item'}
+          </Text>
+        </Flex>
+      </Box>
     </Flex>
   )
 }

@@ -7,7 +7,7 @@ import {
   Flex,
   Grid,
   Heading,
-  HoverCard,
+  Popover,
   Progress,
   Avatar as RadixAvatar,
   Separator,
@@ -74,6 +74,7 @@ export default function ProfilePage() {
   const { info, success, error: toastError } = useToast()
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
   const [uploading, setUploading] = React.useState(false)
+  const [stylingMenuOpen, setStylingMenuOpen] = React.useState(false)
 
   // 1) get current user
   const { data: authUser } = useQuery({
@@ -427,13 +428,13 @@ export default function ProfilePage() {
           </Flex>
         </Flex>
         <Flex align="center" gap="4" wrap="wrap">
-          <HoverCard.Root>
-            <HoverCard.Trigger>
+          <Popover.Root open={stylingMenuOpen} onOpenChange={setStylingMenuOpen}>
+            <Popover.Trigger>
               <Button size="2" variant="soft">
                 Styling
               </Button>
-            </HoverCard.Trigger>
-            <HoverCard.Content size="2" style={{ maxWidth: 400 }}>
+            </Popover.Trigger>
+            <Popover.Content size="2" style={{ maxWidth: 400 }}>
               <Flex direction="column" gap="4">
                 <Box>
                   <Text
@@ -653,8 +654,8 @@ export default function ProfilePage() {
                   </Flex>
                 </Box>
               </Flex>
-            </HoverCard.Content>
-          </HoverCard.Root>
+            </Popover.Content>
+          </Popover.Root>
         </Flex>
       </Flex>
 

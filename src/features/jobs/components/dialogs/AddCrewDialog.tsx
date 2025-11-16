@@ -187,7 +187,7 @@ export default function AddCrewDialog({
             onValueChange={(v) => setTimePeriodId(v)}
           >
             <Select.Trigger placeholder="Select role…" />
-            <Select.Content>
+            <Select.Content style={{ zIndex: 10000 }}>
               {roles.map((tp) => (
                 <Select.Item key={tp.id} value={tp.id}>
                   {(tp.title || 'Untitled') +
@@ -207,7 +207,7 @@ export default function AddCrewDialog({
             onValueChange={(v: string) => setStatus(v as CrewReqStatus)}
           >
             <Select.Trigger />
-            <Select.Content>
+            <Select.Content style={{ zIndex: 10000 }}>
               <Select.Item value="planned">planned</Select.Item>
               <Select.Item value="requested">requested</Select.Item>
               <Select.Item value="declined">declined</Select.Item>
@@ -288,7 +288,7 @@ export function EditCrewDialog({
             onValueChange={(v: string) => setStatus(v as CrewReqStatus)}
           >
             <Select.Trigger />
-            <Select.Content>
+            <Select.Content style={{ zIndex: 10000 }}>
               <Select.Item value="planned">planned</Select.Item>
               <Select.Item value="requested">requested</Select.Item>
               <Select.Item value="declined">declined</Select.Item>

@@ -1,10 +1,10 @@
-# Driven
+# Grid
 
-A comprehensive business management platform designed for Ekte Lyd AS, an audio production and event services company. Driven provides an all-in-one solution for managing jobs, crew, inventory, vehicles, customers, and scheduling operations.
+A comprehensive business management platform designed for Ekte Lyd AS, an audio production and event services company. Grid provides an all-in-one solution for managing jobs, crew, inventory, vehicles, customers, and scheduling operations.
 
 ## Overview
 
-Driven is a full-stack web application that streamlines business operations for production companies. It enables teams to efficiently manage projects, track equipment inventory, schedule crew and resources, coordinate vehicles, maintain customer relationships, and handle internal communications—all from a single, modern interface.
+Grid is a full-stack web application that streamlines business operations for production companies. It enables teams to efficiently manage projects, track equipment inventory, schedule crew and resources, coordinate vehicles, maintain customer relationships, and handle internal communications—all from a single, modern interface.
 
 ## Features
 

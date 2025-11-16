@@ -78,3 +78,14 @@ code {
 [class*='rt-AlertDialogContent'] {
   z-index: 101 !important;
 }
+
+/* Section resizer cursor - ensure cursor changes on hover */
+.section-resizer,
+.section-resizer * {
+  cursor: col-resize !important;
+}
+
+.section-resizer:hover,
+.section-resizer:hover * {
+  cursor: col-resize !important;
+}

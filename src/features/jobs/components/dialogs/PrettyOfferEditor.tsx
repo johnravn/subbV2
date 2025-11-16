@@ -32,6 +32,7 @@ import {
   recalculateOfferTotals,
 } from '../../api/offerQueries'
 import { calculateOfferTotals } from '../../utils/offerCalculations'
+import { companyExpansionQuery } from '@features/company/api/queries'
 import type {
   OfferDetail,
   OfferEquipmentGroup,
@@ -99,11 +100,17 @@ export default function PrettyOfferEditor({
   const isEditMode = !!offerId
 
   // Fetch existing offer if editing
-  const { data: existingOffer } = useQuery({
+  const { data: existingOffer, isLoading: isLoadingOffer } = useQuery({
     ...(offerId
       ? offerDetailQuery(offerId)
       : { queryKey: ['no-offer'], queryFn: () => null }),
     enabled: open && isEditMode,
+  })
+
+  // Fetch company expansion for vehicle rates
+  const { data: companyExpansion } = useQuery({
+    ...companyExpansionQuery(companyId),
+    enabled: open && !!companyId,
   })
 
   const isReadOnly = existingOffer?.locked || false
@@ -123,6 +130,8 @@ export default function PrettyOfferEditor({
   // Initialize from existing offer
   React.useEffect(() => {
     if (!open) return
+    // Wait for query to finish loading before initializing
+    if (isLoadingOffer) return
 
     if (existingOffer && isEditMode) {
       setTitle(existingOffer.title)
@@ -150,7 +159,7 @@ export default function PrettyOfferEditor({
       setSections([])
       setExpandedSections(new Set())
     }
-  }, [open, existingOffer, isEditMode])
+  }, [open, existingOffer, isEditMode, isLoadingOffer])
 
   // Calculate totals (pretty offers still have underlying equipment/crew/transport)
   const totals = React.useMemo(() => {
@@ -194,8 +203,10 @@ export default function PrettyOfferEditor({
       daysOfUse,
       discountPercent,
       vatPercent,
+      companyExpansion?.vehicle_distance_rate,
+      companyExpansion?.vehicle_distance_increment,
     )
-  }, [existingOffer, daysOfUse, discountPercent, vatPercent])
+  }, [existingOffer, daysOfUse, discountPercent, vatPercent, companyExpansion?.vehicle_distance_rate, companyExpansion?.vehicle_distance_increment])
 
   const saveMutation = useMutation({
     mutationFn: async () => {

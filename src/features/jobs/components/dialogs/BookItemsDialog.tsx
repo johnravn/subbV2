@@ -1029,7 +1029,7 @@ export default function BookItemsDialog({
                 onValueChange={(v) => setCategoryFilter(v === ALL ? null : v)}
               >
                 <Select.Trigger placeholder="Filter category…" />
-                <Select.Content>
+                <Select.Content style={{ zIndex: 10000 }}>
                   <Select.Item value={ALL}>All</Select.Item>
                   {categories.map((name: string) => (
                     <Select.Item key={name} value={name}>

@@ -52,13 +52,13 @@ export default function EquipmentTab({ jobId }: { jobId: string }) {
 
       // Return time periods too for external equipment sections
       const externalTimePeriods = timePeriods
-        .filter(
-          (tp) =>
-            tp.category === 'equipment' &&
-            tp.title &&
-            tp.title.includes('Equipment period') &&
-            tp.title !== 'Equipment period', // Exclude internal
-        )
+        .filter((tp) => {
+          if (tp.category !== 'equipment' || !tp.title) return false
+          const match = tp.title.match(/^(.+?)\s+Equipment period$/)
+          if (!match) return false
+          const ownerName = match[1].trim()
+          return ownerName.toLowerCase() !== 'equipment'
+        })
         .map((tp) => ({
           id: tp.id,
           title: tp.title as string,
@@ -308,8 +308,6 @@ function InternalEquipmentTable({
           <Table.Row>
             <Table.ColumnHeaderCell>Item</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Qty</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>Price pr</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>Price total</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Category</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Time period</Table.ColumnHeaderCell>
             {editMode && <Table.ColumnHeaderCell />}
@@ -332,11 +330,6 @@ function InternalEquipmentTable({
               (sum, r) => sum + (r.quantity ?? 0),
               0,
             )
-            const totalPrice = groupRows.reduce((sum, r) => {
-              const item = firstItem(r.item)
-              const pricePr = item?.price ?? 0
-              return sum + pricePr * (r.quantity ?? 0)
-            }, 0)
 
             return (
               <React.Fragment key={groupId}>
@@ -367,10 +360,6 @@ function InternalEquipmentTable({
                   <Table.Cell>
                     <Text weight="bold">{totalQty}</Text>
                   </Table.Cell>
-                  <Table.Cell>—</Table.Cell>
-                  <Table.Cell>
-                    <Text weight="bold">{totalPrice.toFixed(2)}</Text>
-                  </Table.Cell>
                   <Table.Cell>{groupCategory ?? '—'}</Table.Cell>
                   <Table.Cell>
                     {firstRow?.time_period?.title ??
@@ -398,8 +387,6 @@ function InternalEquipmentTable({
                   !editMode &&
                   groupRows.map((r) => {
                     const item = firstItem(r.item)
-                    const pricePr = item?.price ?? 0
-                    const total = pricePr * (r.quantity ?? 0)
                     return (
                       <Table.Row
                         key={r.id}
@@ -409,8 +396,6 @@ function InternalEquipmentTable({
                           <Text color="gray">↳ {item?.name ?? '—'}</Text>
                         </Table.Cell>
                         <Table.Cell>{r.quantity}</Table.Cell>
-                        <Table.Cell>{pricePr.toFixed(2)}</Table.Cell>
-                        <Table.Cell>{total.toFixed(2)}</Table.Cell>
                         <Table.Cell>{item?.category?.name ?? '—'}</Table.Cell>
                         <Table.Cell>—</Table.Cell>
                       </Table.Row>
@@ -423,8 +408,6 @@ function InternalEquipmentTable({
           {/* Render direct items */}
           {directRows.map((r) => {
             const item = firstItem(r.item)
-            const pricePr = item?.price ?? 0
-            const total = pricePr * (r.quantity ?? 0)
             const isEditing = editingQty?.id === r.id
             return (
               <Table.Row key={r.id}>
@@ -464,8 +447,6 @@ function InternalEquipmentTable({
                     r.quantity
                   )}
                 </Table.Cell>
-                <Table.Cell>{pricePr.toFixed(2)}</Table.Cell>
-                <Table.Cell>{total.toFixed(2)}</Table.Cell>
                 <Table.Cell>{item?.category?.name ?? '—'}</Table.Cell>
                 <Table.Cell>
                   {r.time_period?.title ??
@@ -1050,16 +1031,12 @@ function ExternalEquipmentTable({
                                 <Table.ColumnHeaderCell>
                                   Qty
                                 </Table.ColumnHeaderCell>
-                                <Table.ColumnHeaderCell>
-                                  Price
-                                </Table.ColumnHeaderCell>
                                 {editMode && <Table.ColumnHeaderCell />}
                               </Table.Row>
                             </Table.Header>
                             <Table.Body>
                               {ownerItems.map((r: ReservedItemRow) => {
                                 const rowItem = firstItem(r.item) as any
-                                const price = rowItem?.price ?? 0
                                 return (
                                   <Table.Row key={r.id}>
                                     <Table.Cell>
@@ -1112,7 +1089,6 @@ function ExternalEquipmentTable({
                                         r.quantity
                                       )}
                                     </Table.Cell>
-                                    <Table.Cell>{formatNOK(price)}</Table.Cell>
                                     {editMode && (
                                       <Table.Cell align="right">
                                         <Button
@@ -1271,10 +1247,4 @@ function extOwnerId(it: ReservedItemRow['item']) {
 }
 function fmtDate(v?: string) {
   return v ? new Date(v).toLocaleDateString() : ''
-}
-function formatNOK(n: number) {
-  return new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency: 'NOK',
-  }).format(Number(n))
 }

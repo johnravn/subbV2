@@ -2,6 +2,7 @@ import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Badge,
+  Box,
   Button,
   Flex,
   Spinner,
@@ -52,7 +53,14 @@ export default function CrewTable({
   const [search, setSearch] = React.useState('')
   const [sortColumn, setSortColumn] = React.useState<SortColumn | null>(null)
   const [sortDirection, setSortDirection] = React.useState<SortDirection>('asc')
+  const [page, setPage] = React.useState(1)
+  const [pageSize, setPageSize] = React.useState(10)
   const { success } = useToast()
+
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const controlsRef = React.useRef<HTMLDivElement>(null)
+  const theadRef = React.useRef<HTMLTableSectionElement>(null)
+  const pagerRef = React.useRef<HTMLDivElement>(null)
 
   const { data: employees = [], isLoading: empLoading } = useQuery({
     ...crewIndexQuery({ companyId: companyId!, kind: 'employee' }),
@@ -205,6 +213,94 @@ export default function CrewTable({
     sortDirection,
   ])
 
+  // Recompute page size based on available space
+  const recomputePageSize = React.useCallback(() => {
+    if (!containerRef.current) return
+
+    const containerRect = containerRef.current.getBoundingClientRect()
+    const screenH = containerRect.height
+
+    if (screenH === 0) return
+
+    const controlsH = controlsRef.current?.offsetHeight ?? 0
+    const theadH = theadRef.current?.offsetHeight ?? 0
+    const pagerH = pagerRef.current?.offsetHeight ?? 0
+
+    const miscPadding = 40 // Slightly reduced to allow one more row
+
+    const available = Math.max(
+      0,
+      screenH - controlsH - theadH - pagerH - miscPadding,
+    )
+
+    if (available < 100) {
+      setPageSize(5)
+      return
+    }
+
+    const visibleRow = containerRef.current?.querySelector<HTMLTableRowElement>(
+      'tbody tr:not([data-row-probe])',
+    )
+    const rowH = visibleRow?.getBoundingClientRect().height || 60
+
+    // Allow one more row for crew table
+    const rows = Math.max(5, Math.min(50, Math.floor(available / rowH) + 1))
+    setPageSize(rows)
+  }, [])
+
+  React.useEffect(() => {
+    if (!containerRef.current) return
+
+    const onResize = () => recomputePageSize()
+    window.addEventListener('resize', onResize)
+
+    const resizeObserver = new ResizeObserver(() => {
+      recomputePageSize()
+    })
+
+    resizeObserver.observe(containerRef.current)
+
+    const timeoutId = setTimeout(() => {
+      recomputePageSize()
+    }, 0)
+
+    const rafId = requestAnimationFrame(() => {
+      recomputePageSize()
+    })
+
+    return () => {
+      window.removeEventListener('resize', onResize)
+      resizeObserver.disconnect()
+      clearTimeout(timeoutId)
+      cancelAnimationFrame(rafId)
+    }
+  }, [recomputePageSize])
+
+  React.useEffect(() => {
+    if (
+      !empLoading &&
+      !frLoading &&
+      !invLoading &&
+      !owLoading &&
+      rows.length > 0
+    ) {
+      requestAnimationFrame(() => {
+        recomputePageSize()
+      })
+    }
+  }, [empLoading, frLoading, invLoading, owLoading, rows.length, recomputePageSize])
+
+  // Reset to page 1 when filters change
+  React.useEffect(() => {
+    setPage(1)
+  }, [search, sortColumn, sortDirection, showEmployees, showFreelancers, showMyPending])
+
+  // Paginate the rows
+  const totalPages = Math.ceil(rows.length / pageSize)
+  const startIndex = (page - 1) * pageSize
+  const endIndex = startIndex + pageSize
+  const paginatedRows = rows.slice(startIndex, endIndex)
+
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
@@ -229,8 +325,9 @@ export default function CrewTable({
   })
 
   return (
-    <div style={{ height: '100%', minHeight: 0 }}>
-      <Flex gap="2" align="center" wrap="wrap">
+    <Box ref={containerRef} style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div ref={controlsRef}>
+        <Flex gap="2" align="center" wrap="wrap">
         <TextField.Root
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -270,9 +367,11 @@ export default function CrewTable({
           }}
         />
       </Flex>
+      </div>
 
-      <Table.Root variant="surface" style={{ marginTop: 16 }}>
-        <Table.Header>
+      <Box style={{ flex: 1, minHeight: 0 }}>
+        <Table.Root variant="surface" style={{ marginTop: 16 }}>
+          <Table.Header ref={theadRef}>
           <Table.Row>
             <Table.ColumnHeaderCell
               style={{ cursor: 'pointer', userSelect: 'none' }}
@@ -307,13 +406,13 @@ export default function CrewTable({
             />
           </Table.Row>
         </Table.Header>
-        <Table.Body>
-          {rows.length === 0 ? (
-            <Table.Row>
-              <Table.Cell colSpan={3}>No results</Table.Cell>
-            </Table.Row>
-          ) : (
-            rows.map((r) => {
+          <Table.Body>
+            {paginatedRows.length === 0 ? (
+              <Table.Row>
+                <Table.Cell colSpan={3}>No results</Table.Cell>
+              </Table.Row>
+            ) : (
+              paginatedRows.map((r) => {
               const active = r.kind !== 'invite' && r.id === selectedUserId
               return (
                 <Table.Row
@@ -374,9 +473,48 @@ export default function CrewTable({
                 </Table.Row>
               )
             })
-          )}
-        </Table.Body>
-      </Table.Root>
-    </div>
+            )}
+            {/* Probe row for height measurement */}
+            <Table.Row
+              data-row-probe
+              style={{
+                display: 'none',
+              }}
+            >
+              <Table.Cell colSpan={3}>probe</Table.Cell>
+            </Table.Row>
+          </Table.Body>
+        </Table.Root>
+      </Box>
+
+      {rows.length > 0 && (
+        <div ref={pagerRef}>
+          <Flex align="center" justify="between" mt="3">
+            <Text size="2" color="gray">
+              Showing {startIndex + 1}-
+              {Math.min(endIndex, rows.length)} of {rows.length} crew members
+            </Text>
+            <Flex gap="2">
+              <Button
+                disabled={page === 1}
+                onClick={() => setPage((p) => p - 1)}
+                variant="classic"
+                size="2"
+              >
+                Prev
+              </Button>
+              <Button
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+                variant="classic"
+                size="2"
+              >
+                Next
+              </Button>
+            </Flex>
+          </Flex>
+        </div>
+      )}
+    </Box>
   )
 }

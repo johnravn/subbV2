@@ -3,12 +3,25 @@ import { supabase } from '@shared/api/supabase'
 
 export type FuelType = 'electric' | 'diesel' | 'petrol'
 
+export type VehicleCategory =
+  | 'passenger_car_small'
+  | 'passenger_car_medium'
+  | 'passenger_car_big'
+  | 'van_small'
+  | 'van_medium'
+  | 'van_big'
+  | 'C1'
+  | 'C1E'
+  | 'C'
+  | 'CE'
+
 export type VehicleIndexRow = {
   id: string
   name: string
   registration_no: string | null
   image_path: string | null
   fuel: FuelType | null
+  vehicle_category: VehicleCategory | null
   internally_owned: boolean
   external_owner_id: string | null
   external_owner_name: string | null
@@ -22,6 +35,7 @@ export type VehicleDetail = {
   image_path: string | null
   notes: string | null
   fuel: FuelType | null
+  vehicle_category: VehicleCategory | null
   internally_owned: boolean
   external_owner_id: string | null
   external_owner_name: string | null
@@ -56,6 +70,7 @@ export function vehiclesIndexQuery({
           registration_no,
           image_path,
           fuel,
+          vehicle_category,
           internally_owned,
           external_owner_id,
           deleted,
@@ -94,6 +109,7 @@ export function vehiclesIndexQuery({
         registration_no: r.registration_no ?? null,
         image_path: r.image_path ?? null,
         fuel: r.fuel ?? null,
+        vehicle_category: r.vehicle_category ?? null,
         internally_owned: !!r.internally_owned,
         external_owner_id: r.external_owner_id ?? null,
         external_owner_name: r.external_owner?.name ?? null,
@@ -124,6 +140,7 @@ export function vehicleDetailQuery({
           image_path,
           notes,
           fuel,
+          vehicle_category,
           internally_owned,
           external_owner_id,
           created_at,
@@ -145,6 +162,7 @@ export function vehicleDetailQuery({
         image_path: d.image_path ?? null,
         notes: d.notes ?? null,
         fuel: d.fuel ?? null,
+        vehicle_category: d.vehicle_category ?? null,
         internally_owned: !!d.internally_owned,
         external_owner_id: d.external_owner_id ?? null,
         external_owner_name: d.external_owner?.name ?? null,
@@ -161,6 +179,7 @@ export type UpsertVehiclePayload = {
   name: string
   registration_no?: string | null
   fuel?: FuelType | null
+  vehicle_category?: VehicleCategory | null
   internally_owned: boolean
   external_owner_id?: string | null
   image_path?: string | null

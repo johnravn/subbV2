@@ -96,7 +96,7 @@ export default function EditItemBookingDialog({
             onValueChange={(v) => setStatus(v as ExternalReqStatus)}
           >
             <Select.Trigger />
-            <Select.Content>
+            <Select.Content style={{ zIndex: 10000 }}>
               <Select.Item value="planned">planned</Select.Item>
               <Select.Item value="requested">requested</Select.Item>
               <Select.Item value="confirmed">confirmed</Select.Item>

@@ -23,6 +23,7 @@ import { vehiclesIndexQuery } from '@features/vehicles/api/queries'
 import { inventoryIndexQuery } from '@features/inventory/api/queries'
 import { crewIndexQuery } from '@features/crew/api/queries'
 import { jobsIndexQuery } from '@features/jobs/api/queries'
+import { fuzzySearch } from '@shared/lib/generalFunctions'
 
 type Category = 'jobDuration' | 'equipment' | 'crew' | 'transport' | 'all'
 
@@ -163,7 +164,6 @@ export default function CalendarPage() {
     
     // Apply fuzzy search filtering if search query exists
     if (searchQuery.trim()) {
-      const { fuzzySearch } = require('@shared/lib/generalFunctions')
       return fuzzySearch(
         allSuggestions,
         searchQuery,

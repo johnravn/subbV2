@@ -365,7 +365,7 @@ export default function JobDialog({
                   onValueChange={(v) => setStatus(v as JobStatus)}
                 >
                   <Select.Trigger />
-                  <Select.Content>
+                  <Select.Content style={{ zIndex: 10000 }}>
                     {(
                       [
                         'draft',
@@ -393,7 +393,7 @@ export default function JobDialog({
                   onValueChange={(v) => setProjectLead(v)}
                 >
                   <Select.Trigger placeholder="None" />
-                  <Select.Content>
+                  <Select.Content style={{ zIndex: 10000 }}>
                     {leads.map((u) => (
                       <Select.Item key={u.user_id} value={u.user_id}>
                         {u.display_name ?? u.email}
@@ -411,7 +411,7 @@ export default function JobDialog({
                   onValueChange={(v) => setCustomerId(v)}
                 >
                   <Select.Trigger placeholder="None" />
-                  <Select.Content>
+                  <Select.Content style={{ zIndex: 10000 }}>
                     {customers.map((c) => (
                       <Select.Item key={c.id} value={c.id}>
                         {c.name}
@@ -440,7 +440,7 @@ export default function JobDialog({
                             : 'None'
                     }
                   />
-                  <Select.Content>
+                  <Select.Content style={{ zIndex: 10000 }}>
                     {contacts.map((c) => (
                       <Select.Item key={c.id} value={c.id}>
                         {contactLabel(c)}

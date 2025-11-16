@@ -431,6 +431,49 @@ export default function CrewTab({
     })
   }
 
+  // Helper function to determine role status
+  const getRoleStatus = (
+    roleCrew: Array<ReservedCrewRow>,
+    counts: Record<string, number>,
+    neededCount: number | null | undefined,
+  ): { label: string; color: 'red' | 'yellow' | 'green' } => {
+    // Crew accepted (green) - when all needed crew are accepted
+    if ((counts['accepted'] ?? 0) >= (neededCount ?? 1)) {
+      return { label: 'crew accepted', color: 'green' }
+    }
+
+    // No crew assigned (red)
+    if (roleCrew.length === 0) {
+      return { label: 'no crew assigned', color: 'red' }
+    }
+
+    // Check if there are any requested crew members
+    const hasRequested = (counts['requested'] ?? 0) > 0
+
+    // Waiting for crew response (yellow) - when there are requested crew
+    if (hasRequested) {
+      return { label: 'waiting for crew response', color: 'yellow' }
+    }
+
+    // No crew requested (yellow) - when there's crew but all are planned
+    return { label: 'no crew requested', color: 'yellow' }
+  }
+
+  // Helper function to format date and time
+  const formatDateTime = (iso: string | null) => {
+    if (!iso) return '—'
+    const d = new Date(iso)
+    const hours = String(d.getHours()).padStart(2, '0')
+    const minutes = String(d.getMinutes()).padStart(2, '0')
+    return (
+      d.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      }) + `, ${hours}:${minutes}`
+    )
+  }
+
   if (view === 'roles') {
     return (
       <div>
@@ -525,6 +568,7 @@ export default function CrewTab({
                   const isExpanded = expandedRoles.has(role.id)
                   const counts = role.counts ?? {}
                   const roleCrew = crewByRoleId.get(role.id) || []
+                  const roleStatus = getRoleStatus(roleCrew, counts, role.needed_count)
                   return (
                     <Box
                       key={role.id}
@@ -550,18 +594,16 @@ export default function CrewTab({
                           ) : (
                             <NavArrowRight width={18} height={18} />
                           )}
-                          <Text
-                            weight="bold"
-                            style={{
-                              color:
-                                (counts['accepted'] ?? 0) >=
-                                (role.needed_count ?? 1)
-                                  ? 'var(--green-9)'
-                                  : undefined,
-                            }}
-                          >
+                          <Text weight="bold">
                             {role.title ?? '—'}
                           </Text>
+                          <Badge
+                            radius="full"
+                            highContrast
+                            color={roleStatus.color}
+                          >
+                            {roleStatus.label}
+                          </Badge>
                         </Flex>
                         {!isReadOnly && (
                           <Flex gap="2">
@@ -927,46 +969,55 @@ export default function CrewTab({
           <Table.Row>
             <Table.ColumnHeaderCell>Name</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Role</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>Time</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {(data ?? []).map((r) => (
-            <Table.Row key={r.id}>
-              <Table.Cell>
-                {r.user?.display_name ?? r.user?.email ?? '—'}
-              </Table.Cell>
-              <Table.Cell>
-                {(() => {
-                  const tp = r.time_period_id
-                    ? roleById.get(r.time_period_id)
-                    : undefined
-                  if (!tp) return '—'
-                  return tp.title ?? 'Role'
-                })()}
-              </Table.Cell>
-              <Table.Cell>
-                <Badge
-                  radius="full"
-                  highContrast
-                  color={
-                    r.status === 'accepted'
-                      ? 'green'
-                      : r.status === 'declined'
-                        ? 'red'
-                        : r.status === 'requested'
-                          ? 'blue'
-                          : 'gray'
-                  }
-                >
-                  {r.status}
-                </Badge>
-              </Table.Cell>
-            </Table.Row>
-          ))}
+          {(data ?? []).map((r) => {
+            const tp = r.time_period_id
+              ? roleById.get(r.time_period_id)
+              : undefined
+            return (
+              <Table.Row key={r.id}>
+                <Table.Cell>
+                  {r.user?.display_name ?? r.user?.email ?? '—'}
+                </Table.Cell>
+                <Table.Cell>
+                  {tp ? tp.title ?? 'Role' : '—'}
+                </Table.Cell>
+                <Table.Cell>
+                  {tp && tp.start_at && tp.end_at ? (
+                    <Text size="2">
+                      {formatDateTime(tp.start_at)} - {formatDateTime(tp.end_at)}
+                    </Text>
+                  ) : (
+                    '—'
+                  )}
+                </Table.Cell>
+                <Table.Cell>
+                  <Badge
+                    radius="full"
+                    highContrast
+                    color={
+                      r.status === 'accepted'
+                        ? 'green'
+                        : r.status === 'declined'
+                          ? 'red'
+                          : r.status === 'requested'
+                            ? 'blue'
+                            : 'gray'
+                    }
+                  >
+                    {r.status}
+                  </Badge>
+                </Table.Cell>
+              </Table.Row>
+            )
+          })}
           {(data ?? []).length === 0 && (
             <Table.Row>
-              <Table.Cell colSpan={3}>
+              <Table.Cell colSpan={4}>
                 <Text color="gray">No crew</Text>
               </Table.Cell>
             </Table.Row>

@@ -14,7 +14,8 @@ import {
   Text,
   TextArea,
 } from '@radix-ui/themes'
-import { Check, Download, Edit, Send, Trash, Xmark } from 'iconoir-react'
+import { Check, Download, Edit, Send, Trash, Xmark, ArrowRight } from 'iconoir-react'
+import { useNavigate } from '@tanstack/react-router'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { supabase } from '@shared/api/supabase'
 import { useAuth } from '@app/providers/AuthProvider'
@@ -45,6 +46,7 @@ export default function MatterDetail({
   const { user } = useAuth()
   const { companyId } = useCompany()
   const { companyRole } = useAuthz()
+  const navigate = useNavigate()
   const [newMessage, setNewMessage] = React.useState('')
   const [isEditingResponse, setIsEditingResponse] = React.useState(false)
 
@@ -223,18 +225,53 @@ export default function MatterDetail({
     }
   }, [recipients])
 
-  // Mark as viewed when component mounts
+  // Track if we've already marked this matter as viewed to prevent duplicate calls
+  const hasMarkedAsViewedRef = React.useRef<string | null>(null)
+
+  // Mark as viewed when component mounts (only once per matterId)
   React.useEffect(() => {
-    if (matter) {
-      markMatterAsViewed(matterId)
-        .then(() => {
-          // Invalidate unread count and matters list when viewing a matter
-          qc.invalidateQueries({ queryKey: ['matters', 'unread-count'] })
-          qc.invalidateQueries({ queryKey: ['matters', 'index'] })
-        })
-        .catch(console.error)
+    // Skip if we've already marked this matter as viewed
+    if (hasMarkedAsViewedRef.current === matterId) return
+    
+    // Skip if matter is not loaded yet
+    if (!matter) return
+
+    // Skip if user is the creator (creators' matters are always considered read)
+    if (user?.id === matter.created_by_user_id) {
+      hasMarkedAsViewedRef.current = matterId
+      return
     }
-  }, [matterId, matter, qc])
+
+    // Mark that we're processing this matter
+    hasMarkedAsViewedRef.current = matterId
+
+    // Mark as viewed and then invalidate queries
+    markMatterAsViewed(matterId)
+      .then(async () => {
+        // Invalidate and refetch queries to ensure UI updates immediately
+        await Promise.all([
+          qc.invalidateQueries({ queryKey: ['matters', 'unread-count'] }),
+          qc.invalidateQueries({ queryKey: ['matters', 'index'] }),
+        ])
+        // Force refetch to ensure fresh data
+        await Promise.all([
+          qc.refetchQueries({ queryKey: ['matters', 'unread-count'] }),
+          qc.refetchQueries({ queryKey: ['matters', 'index'] }),
+        ])
+      })
+      .catch((error) => {
+        // If marking as viewed fails, reset the ref so we can try again
+        console.error('Failed to mark matter as viewed:', error)
+        hasMarkedAsViewedRef.current = null
+      })
+
+    // Reset ref when matterId changes
+    return () => {
+      if (hasMarkedAsViewedRef.current === matterId) {
+        hasMarkedAsViewedRef.current = null
+      }
+    }
+  }, [matterId, matter, user?.id, qc])
 
   const respond = useMutation({
     mutationFn: async (response: string) => {
@@ -650,6 +687,24 @@ export default function MatterDetail({
         <Box mb="4">
           <Separator size="4" mb="3" />
           <Text style={{ whiteSpace: 'pre-line' }}>{matter.content}</Text>
+        </Box>
+      )}
+
+      {/* Link to latest update if this is a notification about an activity */}
+      {matter.metadata?.activity_id && (
+        <Box mb="4">
+          <Separator size="4" mb="3" />
+          <Button
+            variant="soft"
+            onClick={() => {
+              navigate({
+                to: '/latest',
+                search: { activityId: matter.metadata.activity_id },
+              })
+            }}
+          >
+            View Update <ArrowRight width={16} height={16} />
+          </Button>
         </Box>
       )}
 

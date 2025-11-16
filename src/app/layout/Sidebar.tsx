@@ -2,8 +2,6 @@
 import * as React from 'react'
 import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import logoBlack from '@shared/assets/drivenLogo/driven_logo_black.svg'
-import logoWhite from '@shared/assets/drivenLogo/driven_logo_white.svg'
 import {
   Avatar,
   Badge,
@@ -32,6 +30,8 @@ import {
   User,
   UserLove,
 } from 'iconoir-react'
+import logoBlack from '@shared/assets/gridLogo/grid_logo_black.svg'
+import logoWhite from '@shared/assets/gridLogo/grid_logo_white.svg'
 import { useAuthz } from '@shared/auth/useAuthz'
 import { canVisit } from '@shared/auth/permissions'
 import { useCompany } from '@shared/companies/CompanyProvider'
@@ -422,13 +422,13 @@ function SidebarContent({
         </ScrollArea.Root>
       </Box>
 
-      {/* Footer image (only when open) */}
+      {/* Footer logo (only when open) */}
       {open && (
         <Box px="3" py="3">
           <Flex direction="column" align="center" justify="center" gap="2">
             <img
               src={logo}
-              alt="Driven Logo"
+              alt="Grid Logo"
               style={{ maxWidth: '70%', height: 'auto', borderRadius: 6 }}
             />
             <Text

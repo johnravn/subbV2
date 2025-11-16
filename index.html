@@ -6,7 +6,7 @@
     <link
       rel="icon"
       type="image/svg+xml"
-      href="/peaceHand-light.svg"
+      href="/grid-icon-light.svg"
       id="favicon"
     />
     <meta name="theme-color" content="#000000" />
@@ -16,7 +16,7 @@
     />
     <link rel="apple-touch-icon" href="/logo192.png" />
     <link rel="manifest" href="/manifest.json" />
-    <title>driven</title>
+    <title>grid</title>
     <script>
       // Update favicon based on theme
       function updateFavicon() {
@@ -26,11 +26,9 @@
         // Check the actual class on the html element (this is what ThemeToggle sets)
         const htmlElement = document.documentElement
         const isDark = htmlElement.classList.contains('dark')
-        
+
         // Update favicon based on the html class
-        favicon.href = isDark
-          ? '/peaceHand-dark.svg'
-          : '/peaceHand-light.svg'
+        favicon.href = isDark ? '/grid-icon-dark.svg' : '/grid-icon-light.svg'
       }
 
       // Update on load
@@ -40,7 +38,7 @@
       const observer = new MutationObserver(updateFavicon)
       observer.observe(document.documentElement, {
         attributes: true,
-        attributeFilter: ['class']
+        attributeFilter: ['class'],
       })
 
       // Also listen for localStorage changes (cross-tab sync)

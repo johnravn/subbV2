@@ -15,4 +15,8 @@ export default defineConfig({
       '@features': path.resolve(__dirname, 'src/features'),
     },
   },
+  preview: {
+    // Ensure preview server handles SPA routing correctly
+    port: 3000,
+  },
 })

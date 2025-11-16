@@ -65,6 +65,7 @@ export default function LatestFeed({
   activityTypes?: Array<ActivityType>
 }) {
   const { companyId } = useCompany()
+  const [hoveredId, setHoveredId] = React.useState<string | null>(null)
 
   const { data, isLoading, isError } = useQuery({
     ...latestFeedQuery({
@@ -120,6 +121,9 @@ export default function LatestFeed({
           addSuffix: true,
         })
 
+        const isSelected = selectedId === activity.id
+        const isHovered = hoveredId === activity.id
+
         return (
           <React.Fragment key={activity.id}>
             <Box
@@ -127,54 +131,80 @@ export default function LatestFeed({
                 cursor: 'pointer',
                 padding: 'var(--space-3)',
                 borderRadius: 'var(--radius-3)',
-                backgroundColor:
-                  selectedId === activity.id
-                    ? 'var(--accent-3)'
+                backgroundColor: isSelected
+                  ? 'var(--accent-3)'
+                  : isHovered
+                    ? 'var(--gray-2)'
                     : 'transparent',
-                border: '1px solid transparent',
+                border: isSelected
+                  ? '1px solid transparent'
+                  : isHovered
+                    ? '1px solid var(--gray-a6)'
+                    : '1px solid transparent',
+                transition: 'background-color 0.15s ease, border-color 0.15s ease',
               }}
               onClick={() => onSelect(activity.id)}
-              onMouseEnter={(e) => {
-                if (selectedId !== activity.id) {
-                  e.currentTarget.style.backgroundColor = 'var(--gray-2)'
-                  e.currentTarget.style.borderColor = 'var(--gray-a6)'
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (selectedId !== activity.id) {
-                  e.currentTarget.style.backgroundColor = 'transparent'
-                  e.currentTarget.style.borderColor = 'transparent'
-                }
-              }}
+              onMouseEnter={() => setHoveredId(activity.id)}
+              onMouseLeave={() => setHoveredId(null)}
             >
-              <Flex gap="3" align="start">
-                <Flex
-                  align="center"
-                  justify="center"
-                  style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: 'var(--radius-2)',
-                    backgroundColor: 'var(--accent-3)',
-                    flexShrink: 0,
-                  }}
-                >
-                  <Text size="4">
-                    {getActivityIcon(activity.activity_type)}
-                  </Text>
+              <Flex gap="3" align="start" justify="between">
+                <Flex gap="3" align="start" style={{ flex: 1, minWidth: 0 }}>
+                  <Flex
+                    align="center"
+                    justify="center"
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: 'var(--radius-2)',
+                      backgroundColor: 'var(--accent-3)',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Text size="4">
+                      {getActivityIcon(activity.activity_type)}
+                    </Text>
+                  </Flex>
+
+                  <Box style={{ flex: 1, minWidth: 0 }}>
+                    {/* Title only */}
+                    <Text size="2" style={{ lineHeight: 1.5 }} mb="1">
+                      {getActivityGenericMessage(
+                        'isGrouped' in activity
+                          ? 'grouped_inventory'
+                          : activity.activity_type,
+                      )}
+                    </Text>
+
+                    <Flex align="center" gap="3" mt="2">
+                      {activity.like_count > 0 && (
+                        <Text size="1" color="gray">
+                          ❤️ {activity.like_count}
+                        </Text>
+                      )}
+                      {activity.comment_count > 0 && (
+                        <Text size="1" color="gray">
+                          💬 {activity.comment_count}
+                        </Text>
+                      )}
+                    </Flex>
+                  </Box>
                 </Flex>
 
-                <Box style={{ flex: 1, minWidth: 0 }}>
-                  <Flex align="center" gap="2" mb="1">
-                    <Avatar
-                      size="1"
-                      radius="full"
-                      src={avatarUrl ?? undefined}
-                      fallback={getInitials(
-                        activity.created_by.display_name,
-                        activity.created_by.email,
-                      )}
-                    />
+                <Flex
+                  align="center"
+                  gap="2"
+                  style={{ flexShrink: 0, marginLeft: 'var(--space-2)' }}
+                >
+                  <Avatar
+                    size="1"
+                    radius="full"
+                    src={avatarUrl ?? undefined}
+                    fallback={getInitials(
+                      activity.created_by.display_name,
+                      activity.created_by.email,
+                    )}
+                  />
+                  <Flex direction="column" align="end" gap="0">
                     <Text size="2" weight="medium">
                       {displayName}
                     </Text>
@@ -182,44 +212,7 @@ export default function LatestFeed({
                       {timeAgo}
                     </Text>
                   </Flex>
-
-                  {/* Title only */}
-                  <Text size="2" style={{ lineHeight: 1.5 }}>
-                    {getActivityGenericMessage(
-                      'isGrouped' in activity
-                        ? 'grouped_inventory'
-                        : activity.activity_type,
-                    )}
-                  </Text>
-
-                  {'description' in activity &&
-                    activity.description &&
-                    activity.activity_type === 'announcement' && (
-                      <Box
-                        mt="2"
-                        p="2"
-                        style={{
-                          backgroundColor: 'var(--gray-2)',
-                          borderRadius: 'var(--radius-2)',
-                        }}
-                      >
-                        <Text size="2">{activity.description}</Text>
-                      </Box>
-                    )}
-
-                  <Flex align="center" gap="3" mt="2">
-                    {activity.like_count > 0 && (
-                      <Text size="1" color="gray">
-                        ❤️ {activity.like_count}
-                      </Text>
-                    )}
-                    {activity.comment_count > 0 && (
-                      <Text size="1" color="gray">
-                        💬 {activity.comment_count}
-                      </Text>
-                    )}
-                  </Flex>
-                </Box>
+                </Flex>
               </Flex>
             </Box>
           </React.Fragment>

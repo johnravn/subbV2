@@ -50,6 +50,12 @@ const guarded = (need: Capability, Page: React.ComponentType) => () => (
 const landingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
+  beforeLoad: async () => {
+    const { data } = await supabase.auth.getSession()
+    if (data.session?.user) {
+      throw redirect({ to: '/dashboard' })
+    }
+  },
   component: LandingPage,
 })
 

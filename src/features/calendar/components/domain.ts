@@ -1,5 +1,6 @@
 // src/features/calendar/domain.ts
 import type { EventInput } from '@fullcalendar/core'
+import { fuzzySearch } from '@shared/lib/generalFunctions'
 
 /** What kinds of things can appear in the calendar */
 export type CalendarKind = 'job' | 'item' | 'vehicle' | 'crew'
@@ -109,7 +110,6 @@ export function applyCalendarFilter(
 
   // Apply fuzzy text search if query provided
   if (q) {
-    const { fuzzySearch } = require('@shared/lib/generalFunctions')
     filteredEvents = fuzzySearch(
       filteredEvents,
       q,

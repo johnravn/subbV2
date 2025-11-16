@@ -52,7 +52,7 @@ export function jobsIndexQuery({
         .from('jobs')
         .select(
           `
-          id, company_id, title, jobnr, status, start_at, end_at,
+          id, company_id, title, jobnr, status, start_at, end_at, customer_contact_id,
           customer:customer_id ( id, name ),
           project_lead:project_lead_user_id ( user_id, display_name, email, avatar_url )
         `,

@@ -305,39 +305,36 @@ export default function CompanyExpansionsTab() {
     },
   })
 
-  // Cancel configuration - set to 'none'
+  // Cancel configuration - reset form without saving
   const handleCancelConfig = () => {
     if (!companyId) return
 
-    setForm((s) => ({ ...s, accounting_software: 'none' }))
+    // Reset form to the original state from database
+    if (expansionData) {
+      setForm({
+        accounting_software:
+          expansionData.accounting_software === 'conta' ? 'conta' : 'none',
+        accounting_api_key: null,
+        accounting_organization_id:
+          expansionData.accounting_organization_id || null,
+        accounting_api_read_only: expansionData.accounting_api_read_only,
+      })
+    } else {
+      setForm({
+        accounting_software: 'none',
+        accounting_api_key: null,
+        accounting_organization_id: null,
+        accounting_api_read_only: true,
+      })
+    }
+
+    // Close configuration/editing UI
     setIsConfiguring(false)
     setIsEditing(false)
     setApiKeyInput('')
     setPermissionsChanged(false)
 
-    // Save 'none' selection
-    updateCompanyExpansion({
-      companyId,
-      accountingSoftware: 'none',
-      apiKey: undefined, // Preserve existing if any
-      organizationId: undefined, // Preserve existing if any
-      readOnly: undefined, // Preserve existing if any
-    })
-      .then(() => {
-        qc.invalidateQueries({
-          queryKey: ['company', companyId, 'expansion'],
-        })
-        success(
-          'Configuration Cancelled',
-          'Accounting software has been set to None.',
-        )
-      })
-      .catch((e) => {
-        toastError(
-          'Failed to cancel configuration',
-          e?.message ?? 'Please try again.',
-        )
-      })
+    // No database changes - just reset the UI state
   }
 
   // Update accounting software selection
@@ -692,14 +689,16 @@ export default function CompanyExpansionsTab() {
                               borderRadius: 6,
                             }}
                           >
-                            <Text size="2" color="red" weight="medium" mb="1">
-                              Error loading organizations
-                            </Text>
-                            <Text size="1" color="red">
-                              {orgsError instanceof Error
-                                ? orgsError.message
-                                : 'Failed to fetch organizations from API'}
-                            </Text>
+                            <Flex direction="column" gap="1">
+                              <Text size="2" color="red" weight="medium">
+                                Error loading organizations
+                              </Text>
+                              <Text size="1" color="red">
+                                {orgsError instanceof Error
+                                  ? orgsError.message
+                                  : 'Failed to fetch organizations from API'}
+                              </Text>
+                            </Flex>
                           </Box>
                         ) : availableOrganizations &&
                           availableOrganizations.length > 0 ? (

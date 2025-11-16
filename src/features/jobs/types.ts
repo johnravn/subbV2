@@ -23,6 +23,7 @@ export type JobListRow = {
   status: JobStatus
   start_at: string | null
   end_at: string | null
+  customer_contact_id: UUID | null
   customer?: {
     id: UUID
     name: string | null
@@ -212,6 +213,13 @@ export type ReservedVehicleRow = {
     image_path: string | null
     external_owner_id: UUID | null
   } | null
+  time_period?: {
+    id: UUID
+    title: string | null
+    notes: string | null
+    start_at: string
+    end_at: string
+  } | null
 }
 
 /* ---------- Offers system ---------- */
@@ -244,6 +252,7 @@ export type JobOffer = {
   days_of_use: number
   discount_percent: number
   vat_percent: number
+  show_price_per_line: boolean
   equipment_subtotal: number
   crew_subtotal: number
   transport_subtotal: number
@@ -260,6 +269,14 @@ export type JobOffer = {
   accepted_by_name: string | null
   accepted_by_email: string | null
   accepted_by_phone: string | null
+  rejected_at: string | null
+  rejected_by_name: string | null
+  rejected_by_phone: string | null
+  rejection_comment: string | null
+  revision_requested_at: string | null
+  revision_requested_by_name: string | null
+  revision_requested_by_phone: string | null
+  revision_comment: string | null
 }
 
 export type OfferEquipmentGroup = {
@@ -285,6 +302,9 @@ export type OfferEquipmentItem = {
     name: string
     externally_owned?: boolean | null
     external_owner_id?: UUID | null
+    external_owner_name?: string | null
+    brand?: { id: UUID; name: string } | null
+    model?: string | null
   } | null
 }
 
@@ -305,9 +325,23 @@ export type OfferTransportItem = {
   offer_id: UUID
   vehicle_name: string
   vehicle_id: UUID | null
+  vehicle_category:
+    | 'passenger_car_small'
+    | 'passenger_car_medium'
+    | 'passenger_car_big'
+    | 'van_small'
+    | 'van_medium'
+    | 'van_big'
+    | 'C1'
+    | 'C1E'
+    | 'C'
+    | 'CE'
+    | null
+  distance_km: number | null
   start_date: string
   end_date: string
   daily_rate: number
+  distance_rate?: number | null
   total_price: number
   is_internal: boolean
   sort_order: number
@@ -335,11 +369,60 @@ export type OfferDetail = JobOffer & {
   crew_items?: Array<OfferCrewItem>
   transport_items?: Array<OfferTransportItem>
   pretty_sections?: Array<OfferPrettySection>
+  company_terms?: {
+    type: 'pdf' | 'text' | null
+    text: string | null
+    pdf_path: string | null
+  }
+  customer?: {
+    id: string
+    name: string | null
+    email: string | null
+    phone: string | null
+    address: string | null
+    logo_path: string | null
+  }
+  customer_contact?: {
+    id: string
+    name: string | null
+    phone: string | null
+    email: string | null
+  }
+  project_lead?: {
+    user_id: string
+    display_name: string | null
+    email: string
+    phone: string | null
+  }
+  company?: {
+    id: string
+    name: string
+    address: string | null
+    logo_light_path: string | null
+    logo_dark_path: string | null
+  }
 }
 
 // Acceptance data
 export type OfferAcceptance = {
-  name: string
-  email: string
+  first_name: string
+  last_name: string
   phone: string
+  terms_accepted: boolean
+}
+
+// Rejection data
+export type OfferRejection = {
+  first_name: string
+  last_name: string
+  phone: string
+  comment: string
+}
+
+// Revision request data
+export type OfferRevisionRequest = {
+  first_name: string
+  last_name: string
+  phone: string
+  comment: string
 }

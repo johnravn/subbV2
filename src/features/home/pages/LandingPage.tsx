@@ -14,12 +14,11 @@ import {
   GoogleDocs,
   Group,
   Message,
+  ReportColumns,
   Shield,
   Sparks,
   User,
 } from 'iconoir-react'
-import logoBlack from '@shared/assets/drivenLogo/driven_logo_black.svg'
-import logoWhite from '@shared/assets/drivenLogo/driven_logo_white.svg'
 import { useTheme } from '@app/hooks/useTheme'
 import { useMediaQuery } from '@app/hooks/useMediaQuery'
 
@@ -36,7 +35,6 @@ export default function LandingPage() {
     [0, 100],
     ['var(--color-panel-translucent)', 'var(--color-panel-solid)'],
   )
-  const logo = isDark ? logoWhite : logoBlack
 
   return (
     <Box
@@ -79,14 +77,16 @@ export default function LandingPage() {
               transition={{ type: 'spring', stiffness: 400, damping: 17 }}
             >
               <Flex align="center" gap="3" style={{ cursor: 'pointer' }}>
-                <img
-                  src={logo}
-                  alt="Driven Logo"
+                <Box
                   style={{
-                    height: isMd ? '40px' : '32px',
-                    width: 'auto',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--gray-12)',
                   }}
-                />
+                >
+                  <ReportColumns width={isMd ? 40 : 32} height={isMd ? 40 : 32} />
+                </Box>
               </Flex>
             </motion.div>
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
@@ -361,7 +361,7 @@ export default function LandingPage() {
                   size={isMd ? '8' : isSm ? '7' : '6'}
                   style={{ marginBottom: '1rem', color: 'var(--gray-12)' }}
                 >
-                  Why Driven?
+                  Why Grid?
                 </Heading>
                 <Text
                   size={isSm ? '4' : '3'}
@@ -373,7 +373,7 @@ export default function LandingPage() {
                 >
                   Running a company means juggling multiple systems and
                   spreadsheets, leading to missed deadlines, double-bookings,
-                  and frustrated teams. Driven brings everything together in one
+                  and frustrated teams. Grid brings everything together in one
                   intuitive platform.
                 </Text>
                 <Box
@@ -539,7 +539,7 @@ export default function LandingPage() {
                       marginRight: 'auto',
                     }}
                   >
-                    Join companies already using Driven to streamline their
+                    Join companies already using Grid to streamline their
                     operations and boost productivity.
                   </Text>
                   <motion.div
@@ -648,19 +648,21 @@ export default function LandingPage() {
               gap="2"
               direction={{ initial: 'column', sm: 'row' }}
             >
-              <img
-                src={logo}
-                alt="Driven Logo"
+              <Box
                 style={{
-                  height: isMd ? '32px' : '28px',
-                  width: 'auto',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--gray-12)',
                 }}
-              />
+              >
+                <ReportColumns width={isMd ? 32 : 28} height={isMd ? 32 : 28} />
+              </Box>
               <Text
                 size={isSm ? '3' : '2'}
                 style={{ color: 'var(--gray-11)', textAlign: 'center' }}
               >
-                © 2025 Driven. All rights reserved.
+                © 2025 Grid. All rights reserved.
               </Text>
             </Flex>
             <Flex gap="4">

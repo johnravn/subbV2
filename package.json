@@ -1,5 +1,5 @@
 {
-  "name": "driven",
+  "name": "grid",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,7 +12,7 @@
     "format": "prettier",
     "check": "prettier --write . && eslint --fix",
     "db:types": "supabase gen types typescript --local > src/shared/types/database.types.ts",
-    "db:types:remote": "supabase gen types typescript --linked > src/shared/types/database.types.ts",
+    "db:types:remote": "supabase gen types typescript --project-id tlpgejkglrgoljgvpubn > src/shared/types/database.types.ts",
     "db:diff": "supabase db diff --use-migra -f",
     "db:reset": "supabase db reset",
     "db:push": "supabase db push",
@@ -61,7 +61,7 @@
     "jsdom": "^26.0.0",
     "openapi-typescript": "^7.10.1",
     "prettier": "^3.5.3",
-    "supabase": "^2.54.11",
+    "supabase": "^2.58.5",
     "typescript": "^5.7.2",
     "vite": "^6.3.5",
     "vitest": "^3.0.5",

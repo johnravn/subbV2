@@ -1,9 +1,5 @@
 // src/features/company/components/AccentColorPicker.tsx
 import { Box, Flex, Grid, Text } from '@radix-ui/themes'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCompany } from '@shared/companies/CompanyProvider'
-import { useToast } from '@shared/ui/toast/ToastProvider'
-import { companyDetailQuery, updateCompanyAccentColor } from '../api/queries'
 import type { RadixAccentColor } from '../api/queries'
 
 const RADIX_COLORS: Array<{ value: RadixAccentColor; label: string }> = [
@@ -34,114 +30,28 @@ const RADIX_COLORS: Array<{ value: RadixAccentColor; label: string }> = [
   { value: 'gray', label: 'Gray' },
 ]
 
-export default function AccentColorPicker() {
-  const { companyId } = useCompany()
-  const qc = useQueryClient()
-  const { success, error: toastError } = useToast()
-
-  const { data: companyData } = useQuery({
-    ...(companyId
-      ? companyDetailQuery({ companyId })
-      : {
-          queryKey: ['company', 'none', 'company-detail'] as const,
-          queryFn: () => Promise.resolve(null),
-        }),
-    enabled: !!companyId,
-  })
-
-  // Get current color, defaulting to indigo if not set or invalid
-  const currentColor: RadixAccentColor = (() => {
-    const color = companyData?.accent_color
-    if (!color) return 'indigo'
-    // Check if it's a valid Radix accent color (not 'conta' or 'none')
-    const validColors: Array<RadixAccentColor> = [
-      'gray',
-      'gold',
-      'bronze',
-      'brown',
-      'yellow',
-      'amber',
-      'orange',
-      'tomato',
-      'red',
-      'ruby',
-      'pink',
-      'plum',
-      'purple',
-      'violet',
-      'iris',
-      'indigo',
-      'blue',
-      'cyan',
-      'teal',
-      'jade',
-      'green',
-      'grass',
-      'mint',
-      'lime',
-      'sky',
-    ]
-    // Type guard to check if color is a valid Radix accent color
-    const isValidColor = (
-      c: string | null | undefined,
-    ): c is RadixAccentColor => {
-      return (
-        c !== null &&
-        c !== undefined &&
-        validColors.includes(c as RadixAccentColor)
-      )
-    }
-    return isValidColor(color) ? color : 'indigo'
-  })()
-
-  const updateColorMutation = useMutation({
-    mutationFn: async (color: RadixAccentColor) => {
-      if (!companyId) throw new Error('No company selected')
-      return updateCompanyAccentColor({
-        companyId,
-        accentColor: color,
-      })
-    },
-    onSuccess: (_, color: RadixAccentColor) => {
-      qc.invalidateQueries({
-        queryKey: ['company', companyId, 'company-detail'],
-      })
-      success('Updated', 'Accent color has been updated.')
-      // Apply color to document root for immediate preview
-      document.documentElement.setAttribute('data-accent-color', color)
-      // Dispatch custom event to notify Theme component
-      window.dispatchEvent(
-        new CustomEvent('accent-color-changed', { detail: { color } }),
-      )
-    },
-    onError: (e: any) => {
-      toastError('Failed to update color', e?.message ?? 'Please try again.')
-    },
-  })
-
-  const handleColorChange = (color: RadixAccentColor) => {
-    updateColorMutation.mutate(color)
-  }
-
+export default function AccentColorPicker({
+  value,
+  onChange,
+}: {
+  value: RadixAccentColor
+  onChange: (color: RadixAccentColor) => void
+}) {
   return (
     <Box>
-      <Text as="div" size="2" weight="bold" mb="3">
-        Accent Color
+      <Text as="div" size="2" weight="bold" mb="2">
+        Accent color
       </Text>
-      <Text as="div" size="1" color="gray" mb="3">
-        Choose the accent color for your company theme. This color will be
-        applied to all users in the company.
-      </Text>
-      <Grid columns="6" gap="2" style={{ maxWidth: 420 }}>
+      <Grid columns="6" gap="1.5" style={{ maxWidth: '100%' }}>
         {RADIX_COLORS.map((color) => {
-          const isSelected = currentColor === color.value
+          const isSelected = value === color.value
           return (
             <ColorSwatch
               key={color.value}
               color={color.value}
               label={color.label}
               isSelected={isSelected}
-              onClick={() => handleColorChange(color.value)}
+              onClick={() => onChange(color.value)}
             />
           )
         })}
@@ -193,29 +103,29 @@ function ColorSwatch({
   const colorValue = colorMap[color] || colorMap.blue
 
   return (
-    <Flex direction="column" align="center" gap="1">
+    <Flex direction="column" align="center" gap="0.5">
       <button
         type="button"
         onClick={onClick}
         style={{
-          width: 40,
-          height: 40,
-          borderRadius: 8,
+          width: 32,
+          height: 32,
+          borderRadius: 6,
           background: colorValue,
           border: isSelected
-            ? '3px solid var(--gray-12)'
-            : '2px solid var(--gray-a6)',
+            ? '2px solid var(--gray-12)'
+            : '1px solid var(--gray-a6)',
           cursor: 'pointer',
           transition: 'all 0.2s',
           boxShadow: isSelected
-            ? '0 0 0 2px var(--gray-a3)'
+            ? '0 0 0 1px var(--gray-a3)'
             : '0 1px 2px rgba(0, 0, 0, 0.1)',
           outline: 'none',
         }}
         aria-label={`Select ${label} color`}
         title={label}
       />
-      <Text size="1" color={isSelected ? undefined : 'gray'}>
+      <Text size="1" color={isSelected ? undefined : 'gray'} style={{ fontSize: '10px' }}>
         {label}
       </Text>
     </Flex>

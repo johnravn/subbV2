@@ -15,6 +15,7 @@ import { prettyPhone } from '@shared/phone/phone'
 import { useAuthz } from '@shared/auth/useAuthz'
 import { Edit } from 'iconoir-react'
 import AddressDialog from '../dialogs/AddressDialog'
+import ContactDialog from '../dialogs/ContactDialog'
 import type { JobDetail } from '../../types'
 
 const OverviewTab = ({ job }: { job: JobDetail }) => {
@@ -32,6 +33,7 @@ const OverviewTab = ({ job }: { job: JobDetail }) => {
     : ''
 
   const [editOpen, setEditOpen] = React.useState(false)
+  const [contactOpen, setContactOpen] = React.useState(false)
 
   return (
     <Box>
@@ -45,33 +47,69 @@ const OverviewTab = ({ job }: { job: JobDetail }) => {
             </span>
           </KV>
           <KV label="Customer">{job.customer?.name ?? '—'}</KV>
-          <Grid columns={{ initial: '1', sm: '3' }} gap="4">
-            <KV label="Contact">{job.customer_contact?.name ?? '—'}</KV>
-            <KV label="Email">
-              {job.customer_contact?.email ? (
-                <a
-                  href={`mailto:${job.customer_contact.email}`}
-                  style={{ color: 'inherit' }}
+          <Box>
+            <Flex align={'center'} gap={'2'} mb={'2'}>
+              <Text size="2" color="gray" style={{ display: 'block' }}>
+                Contact
+              </Text>
+              {!isReadOnly && job.customer && job.customer_contact && (
+                <IconButton
+                  variant="ghost"
+                  size="1"
+                  onClick={() => setContactOpen(true)}
                 >
-                  {job.customer_contact.email}
-                </a>
-              ) : (
-                '—'
+                  <Edit fontSize={'0.8rem'} />
+                </IconButton>
               )}
-            </KV>
-            <KV label="Phone">
-              {job.customer_contact?.phone ? (
-                <a
-                  href={`tel:${job.customer_contact.phone}`}
-                  style={{ color: 'inherit' }}
+            </Flex>
+            {job.customer_contact ? (
+              <Grid columns={{ initial: '1', sm: '3' }} gap="4">
+                <KV label="Name">{job.customer_contact.name ?? '—'}</KV>
+                <KV label="Email">
+                  {job.customer_contact.email ? (
+                    <a
+                      href={`mailto:${job.customer_contact.email}`}
+                      style={{ color: 'inherit' }}
+                    >
+                      {job.customer_contact.email}
+                    </a>
+                  ) : (
+                    '—'
+                  )}
+                </KV>
+                <KV label="Phone">
+                  {job.customer_contact.phone ? (
+                    <a
+                      href={`tel:${job.customer_contact.phone}`}
+                      style={{ color: 'inherit' }}
+                    >
+                      {prettyPhone(job.customer_contact.phone)}
+                    </a>
+                  ) : (
+                    '—'
+                  )}
+                </KV>
+              </Grid>
+            ) : (
+              !isReadOnly &&
+              job.customer && (
+                <Button
+                  size="3"
+                  variant="soft"
+                  onClick={() => setContactOpen(true)}
+                  style={{ marginBottom: '16px' }}
                 >
-                  {prettyPhone(job.customer_contact.phone)}
-                </a>
-              ) : (
-                '—'
-              )}
-            </KV>
-          </Grid>
+                  Add contact
+                </Button>
+              )
+            )}
+            <ContactDialog
+              open={contactOpen}
+              onOpenChange={setContactOpen}
+              companyId={job.company_id}
+              job={job}
+            />
+          </Box>
           <Separator size="4" mb="2" />
           <Grid columns={{ initial: '1', sm: '2' }} gap="4">
             <KV label="Start">

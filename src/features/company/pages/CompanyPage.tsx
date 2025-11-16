@@ -8,6 +8,7 @@ import CompanyUsersTab from '../components/CompanyUsersTab'
 import CompanyExpansionsTab from '../components/CompanyExpansionsTab'
 import CompanyPersonalizationTab from '../components/CompanyPersonalizationTab'
 import CompanySetupTab from '../components/CompanySetupTab'
+import CompanyRatesTab from '../components/CompanyRatesTab'
 
 export default function CompanyPage() {
   const { companyId } = useCompany()
@@ -77,6 +78,7 @@ export default function CompanyPage() {
           <Tabs.Trigger value="users">Users</Tabs.Trigger>
           <Tabs.Trigger value="expansions">Expansions</Tabs.Trigger>
           <Tabs.Trigger value="personalization">Personalization</Tabs.Trigger>
+          <Tabs.Trigger value="rates">Rates</Tabs.Trigger>
           <Tabs.Trigger value="setup">Setup</Tabs.Trigger>
         </Tabs.List>
 
@@ -135,6 +137,18 @@ export default function CompanyPage() {
             }}
           >
             <CompanyPersonalizationTab />
+          </Tabs.Content>
+
+          <Tabs.Content
+            value="rates"
+            style={{
+              flex: 1,
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <CompanyRatesTab />
           </Tabs.Content>
 
           <Tabs.Content

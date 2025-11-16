@@ -78,15 +78,22 @@ export default function JobsTable({
   const [statusFilter, setStatusFilter] = React.useState<string | null>(null)
   const [sortBy, setSortBy] = React.useState<SortBy>('start_at')
   const [sortDir, setSortDir] = React.useState<SortDir>('asc')
+  const [page, setPage] = React.useState(1)
+  const [pageSize, setPageSize] = React.useState(10)
 
   const [createOpen, setCreateOpen] = React.useState(false)
+
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const controlsRef = React.useRef<HTMLDivElement>(null)
+  const theadRef = React.useRef<HTMLTableSectionElement>(null)
+  const pagerRef = React.useRef<HTMLDivElement>(null)
 
   const { data: customers } = useQuery({
     ...customersForFilterQuery(companyId ?? '__none__'),
     enabled: !!companyId,
   })
 
-  const { data, isFetching, refetch } = useQuery({
+  const { data: allData = [], isFetching, refetch } = useQuery({
     ...jobsIndexQuery({
       companyId: companyId ?? '__none__',
       search,
@@ -100,6 +107,88 @@ export default function JobsTable({
     }),
     enabled: !!companyId,
   })
+
+  // Recompute page size based on available space
+  const recomputePageSize = React.useCallback(() => {
+    if (!containerRef.current) return
+
+    const containerRect = containerRef.current.getBoundingClientRect()
+    const screenH = containerRect.height
+
+    if (screenH === 0) return
+
+    const controlsH = controlsRef.current?.offsetHeight ?? 0
+    const theadH = theadRef.current?.offsetHeight ?? 0
+    const pagerH = pagerRef.current?.offsetHeight ?? 0
+
+    const miscPadding = 48 // Increased to account for pagination controls
+
+    const available = Math.max(
+      0,
+      screenH - controlsH - theadH - pagerH - miscPadding,
+    )
+
+    if (available < 100) {
+      setPageSize(5)
+      return
+    }
+
+    const visibleRow = containerRef.current?.querySelector<HTMLTableRowElement>(
+      'tbody tr:not([data-row-probe])',
+    )
+    const rowH = visibleRow?.getBoundingClientRect().height || 60
+
+    // Be conservative - don't add extra rows, and use floor to ensure we don't overflow
+    const rows = Math.max(5, Math.min(50, Math.floor(available / rowH)))
+    setPageSize(rows)
+  }, [])
+
+  React.useEffect(() => {
+    if (!containerRef.current) return
+
+    const onResize = () => recomputePageSize()
+    window.addEventListener('resize', onResize)
+
+    const resizeObserver = new ResizeObserver(() => {
+      recomputePageSize()
+    })
+
+    resizeObserver.observe(containerRef.current)
+
+    const timeoutId = setTimeout(() => {
+      recomputePageSize()
+    }, 0)
+
+    const rafId = requestAnimationFrame(() => {
+      recomputePageSize()
+    })
+
+    return () => {
+      window.removeEventListener('resize', onResize)
+      resizeObserver.disconnect()
+      clearTimeout(timeoutId)
+      cancelAnimationFrame(rafId)
+    }
+  }, [recomputePageSize])
+
+  React.useEffect(() => {
+    if (allData.length > 0) {
+      requestAnimationFrame(() => {
+        recomputePageSize()
+      })
+    }
+  }, [allData.length, recomputePageSize])
+
+  // Reset to page 1 when filters change
+  React.useEffect(() => {
+    setPage(1)
+  }, [search, selectedDate, customerIdFilter, statusFilter, sortBy, sortDir])
+
+  // Paginate the data
+  const totalPages = Math.ceil(allData.length / pageSize)
+  const startIndex = (page - 1) * pageSize
+  const endIndex = startIndex + pageSize
+  const data = allData.slice(startIndex, endIndex)
 
   const handleSort = (column: SortBy) => {
     if (sortBy === column) {
@@ -143,8 +232,9 @@ export default function JobsTable({
   }, [])
 
   return (
-    <>
-      <Flex direction="column" gap="2" mb="3">
+    <Box ref={containerRef} style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div ref={controlsRef}>
+        <Flex direction="column" gap="2" mb="3">
         <Flex gap="2" align="center">
           <TextField.Root
             placeholder="Search title, customer, project lead, or date…"
@@ -397,6 +487,7 @@ export default function JobsTable({
           </Select.Root>
         </Flex>
       </Flex>
+      </div>
       <JobDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
@@ -410,8 +501,9 @@ export default function JobsTable({
         }}
       />
 
-      <Table.Root variant="surface">
-        <Table.Header>
+      <Box style={{ flex: 1, minHeight: 0 }}>
+        <Table.Root variant="surface">
+          <Table.Header ref={theadRef}>
           <Table.Row>
             <Table.ColumnHeaderCell style={{ width: 50 }} />
             <Table.ColumnHeaderCell>
@@ -481,7 +573,12 @@ export default function JobsTable({
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {(data ?? []).map((j: JobListRow) => {
+          {data.length === 0 ? (
+            <Table.Row>
+              <Table.Cell colSpan={5}>No jobs found</Table.Cell>
+            </Table.Row>
+          ) : (
+            data.map((j: JobListRow) => {
             const active = j.id === selectedId
             const projectLead = j.project_lead
             const avatarUrl = projectLead?.avatar_url
@@ -573,16 +670,49 @@ export default function JobsTable({
                 </Table.Cell>
               </Table.Row>
             )
-          })}
-          {(!data || data.length === 0) && (
-            <Table.Row>
-              <Table.Cell colSpan={5}>
-                <Text color="gray">No jobs</Text>
-              </Table.Cell>
-            </Table.Row>
+            })
           )}
+          {/* Probe row for height measurement */}
+          <Table.Row
+            data-row-probe
+            style={{
+              display: 'none',
+            }}
+          >
+            <Table.Cell colSpan={5}>probe</Table.Cell>
+          </Table.Row>
         </Table.Body>
       </Table.Root>
-    </>
+      </Box>
+
+      {allData.length > 0 && (
+        <div ref={pagerRef}>
+          <Flex align="center" justify="between" mt="3">
+            <Text size="2" color="gray">
+              Showing {startIndex + 1}-
+              {Math.min(endIndex, allData.length)} of {allData.length} jobs
+            </Text>
+            <Flex gap="2">
+              <Button
+                disabled={page === 1}
+                onClick={() => setPage((p) => p - 1)}
+                variant="classic"
+                size="2"
+              >
+                Prev
+              </Button>
+              <Button
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+                variant="classic"
+                size="2"
+              >
+                Next
+              </Button>
+            </Flex>
+          </Flex>
+        </div>
+      )}
+    </Box>
   )
 }

@@ -1,6 +1,6 @@
 // src/features/legal/pages/TermsPrivacyPage.tsx
 import * as React from 'react'
-import { Link, useNavigate } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import {
   Box,
   Button,
@@ -11,22 +11,70 @@ import {
   Separator,
   Text,
 } from '@radix-ui/themes'
+import { AnimatedBackground } from '@shared/ui/components/AnimatedBackground'
 
 type Lang = 'en' | 'no'
 
 export default function TermsPrivacyPage() {
   const [lang, setLang] = React.useState<Lang>('en')
-  const navigate = useNavigate()
+
+  // Prevent body scroll and padding issues
+  React.useEffect(() => {
+    const originalStyle = {
+      overflow: document.body.style.overflow,
+      padding: document.body.style.padding,
+      margin: document.body.style.margin,
+    }
+    const originalHtmlStyle = {
+      overflow: document.documentElement.style.overflow,
+      padding: document.documentElement.style.padding,
+      margin: document.documentElement.style.margin,
+    }
+
+    document.body.style.overflow = 'hidden'
+    document.body.style.padding = '0'
+    document.body.style.margin = '0'
+    document.documentElement.style.overflow = 'hidden'
+    document.documentElement.style.padding = '0'
+    document.documentElement.style.margin = '0'
+
+    return () => {
+      document.body.style.overflow = originalStyle.overflow
+      document.body.style.padding = originalStyle.padding
+      document.body.style.margin = originalStyle.margin
+      document.documentElement.style.overflow = originalHtmlStyle.overflow
+      document.documentElement.style.padding = originalHtmlStyle.padding
+      document.documentElement.style.margin = originalHtmlStyle.margin
+    }
+  }, [])
 
   return (
-    <Flex
-      align="center"
-      justify="center"
-      style={{ minHeight: '100dvh', padding: 24 }}
+    <Box
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '24px',
+        zIndex: 1,
+        boxSizing: 'border-box',
+        overflow: 'auto',
+      }}
     >
+      <AnimatedBackground intensity={0.1} shapeType="circles" speed={0.5} />
       <Card
         size="4"
-        style={{ width: '100%', maxWidth: 860, background: 'var(--gray-a2)' }}
+        style={{
+          width: '100%',
+          maxWidth: 860,
+          background: 'var(--gray-a2)',
+          position: 'relative',
+          zIndex: 1,
+        }}
       >
         <Flex direction="column" gap="4">
           {/* Header */}
@@ -66,7 +114,7 @@ export default function TermsPrivacyPage() {
           </Flex>
         </Flex>
       </Card>
-    </Flex>
+    </Box>
   )
 }
 

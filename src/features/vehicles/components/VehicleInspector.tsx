@@ -22,6 +22,69 @@ import { markVehicleDeleted, vehicleDetailQuery } from '../api/queries'
 import AddEditVehicleDialog from './dialogs/AddEditVehicleDialog'
 import type { EventInput } from '@fullcalendar/core'
 
+const INSPECTOR_TIME_ZONE = 'Europe/Oslo'
+
+function convertDateToTimeZoneIso(
+  value: EventInput['start'],
+  timeZone: string,
+) {
+  if (!value) return undefined
+
+  const date =
+    value instanceof Date
+      ? value
+      : typeof value === 'string' || typeof value === 'number'
+        ? new Date(value)
+        : null
+
+  if (!date || Number.isNaN(date.getTime())) return undefined
+
+  const parts = new Intl.DateTimeFormat('sv-SE', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date)
+
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? ''
+
+  const year = get('year')
+  const month = get('month')
+  const day = get('day')
+  const hour = get('hour')
+  const minute = get('minute')
+  const second = get('second')
+
+  if (!year || !month || !day || !hour || !minute || !second) return undefined
+
+  return `${year}-${month}-${day}T${hour}:${minute}:${second}`
+}
+
+function normalizeEventsForTimeZone(
+  events: Array<EventInput>,
+  timeZone: string,
+) {
+  return events.map((event) => {
+    if (event.allDay) return event
+
+    const normalized: EventInput = { ...event }
+    const normalizedStart = convertDateToTimeZoneIso(event.start, timeZone)
+    if (normalizedStart) normalized.start = normalizedStart
+
+    if (event.end) {
+      const normalizedEnd = convertDateToTimeZoneIso(event.end, timeZone)
+      if (normalizedEnd) normalized.end = normalizedEnd
+    }
+
+    return normalized
+  })
+}
+
 export default function VehicleInspector({ id }: { id: string | null }) {
   const { companyId } = useCompany()
   const { error: toastError, success } = useToast()
@@ -78,7 +141,10 @@ export default function VehicleInspector({ id }: { id: string | null }) {
     lastProcessedOffsetRef.current = calendarOffset
 
     if (calendarRecords.length > 0) {
-      const newEvents = toEventInputs(calendarRecords)
+      const newEvents = normalizeEventsForTimeZone(
+        toEventInputs(calendarRecords),
+        INSPECTOR_TIME_ZONE,
+      )
 
       if (calendarOffset === 0) {
         // First page - replace
@@ -273,6 +339,28 @@ export default function VehicleInspector({ id }: { id: string | null }) {
           }
         />
         <Field
+          label="Vehicle Category"
+          value={
+            v.vehicle_category
+              ? (() => {
+                  const map: Record<string, string> = {
+                    passenger_car_small: 'Passenger Car - Small',
+                    passenger_car_medium: 'Passenger Car - Medium',
+                    passenger_car_big: 'Passenger Car - Big',
+                    van_small: 'Van - Small',
+                    van_medium: 'Van - Medium',
+                    van_big: 'Van - Big',
+                    C1: 'C1',
+                    C1E: 'C1E',
+                    C: 'C',
+                    CE: 'CE',
+                  }
+                  return map[v.vehicle_category] || v.vehicle_category
+                })()
+              : '—'
+          }
+        />
+        <Field
           label="Created"
           value={new Date(v.created_at).toLocaleString(undefined, {
             year: 'numeric',
@@ -306,6 +394,7 @@ export default function VehicleInspector({ id }: { id: string | null }) {
           name: v.name,
           registration_no: v.registration_no ?? '',
           fuel: v.fuel ?? null,
+          vehicle_category: v.vehicle_category ?? null,
           internally_owned: v.internally_owned,
           external_owner_id: v.external_owner_id,
           image_path: v.image_path ?? null,
