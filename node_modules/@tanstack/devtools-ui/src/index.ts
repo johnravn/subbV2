@@ -1,4 +1,0 @@
-export { Checkbox } from './components/checkbox'
-export { Input } from './components/input'
-export { Select } from './components/select'
-export { TanStackLogo } from './components/logo'
