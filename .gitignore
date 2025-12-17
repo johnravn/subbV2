@@ -1,13 +1,12 @@
-node_modules
-.DS_Store
-dist
-dist-ssr
-*.local
-count.txt
-.env
-.nitro
-.tanstack
-.sql
+# Environment files
+.env.local
+.env.local.db
+.env.remote.db
+.env*.local
 
-# Large API specifications
-src/shared/api/conta/conta-external-api.json
+# Keep the example file
+!.env.example
+
+# Lockfiles (use npm, ignore pnpm/yarn)
+pnpm-lock.yaml
+yarn.lock
