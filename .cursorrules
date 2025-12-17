@@ -1,0 +1,61 @@
+# Project Rules for AI Agents
+
+This project is primarily developed using AI agents. Follow these rules strictly.
+
+## 🚨 CRITICAL: Database Migration Workflow
+
+**ALL database schema changes MUST go through the migration workflow. Never make changes directly in the Supabase Dashboard.**
+
+### Required Steps for ANY Database Change:
+
+1. **Create migration**: `npm run db:migrate descriptive_name`
+2. **Write SQL** in the generated migration file
+3. **Test locally**: `npm run db:reset`
+4. **Push to production**: `npm run db:push`
+5. **Update types**: `npm run db:types:remote`
+
+### RLS (Row Level Security) Requirements:
+
+- **Every table MUST have RLS enabled**: `ALTER TABLE table_name ENABLE ROW LEVEL SECURITY;`
+- **Every table MUST have RLS policies** for SELECT, INSERT, UPDATE, DELETE
+- **Always use idempotent SQL**: `DROP POLICY IF EXISTS` before creating policies
+- **Follow the pattern**: Check `company_users` for company-scoped data, `profiles.user_id` for personal data, allow superusers
+
+### Migration Best Practices:
+
+- ✅ One logical change per migration
+- ✅ Use descriptive names (e.g., `add_rls_to_addresses`)
+- ✅ Test locally before pushing
+- ✅ Use `IF EXISTS` / `IF NOT EXISTS` for idempotency
+- ❌ Never edit applied migrations (create new one instead)
+- ❌ Never skip RLS policies
+- ❌ Never make schema changes in Dashboard without capturing as migration
+
+## Code Style
+
+- Use TypeScript for all new code
+- Follow existing patterns in the codebase
+- Use TanStack Query for data fetching
+- Use Radix UI Themes for components
+- Follow the feature-based folder structure in `src/features/`
+
+## Documentation
+
+- **Deployment Workflow**: See `DEPLOYMENT_WORKFLOW.md` - Branch strategy, Vercel deployment, migration timing
+- **Migration Workflow**: See `CONTRIBUTING.md`
+- **Supabase Development**: See `supabase/DEVELOPMENT_WORKFLOW.md`
+- **Migrations Directory**: See `supabase/migrations/README.md`
+
+## When Making Database Changes
+
+**Before writing any SQL that modifies schema:**
+
+1. Check `CONTRIBUTING.md` for the complete workflow
+2. Check `supabase/migrations/README.md` for RLS patterns
+3. Look at existing migrations for examples (e.g., `20250119000000_add_invoice_tracking.sql`)
+4. Always create a migration file - never modify schema directly
+
+---
+
+**Remember**: When in doubt about database changes, always create a migration file and test it locally first!
+
