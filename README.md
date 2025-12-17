@@ -2,6 +2,8 @@
 
 A comprehensive business management platform designed for Ekte Lyd AS, an audio production and event services company. Grid provides an all-in-one solution for managing jobs, crew, inventory, vehicles, customers, and scheduling operations.
 
+> **Note**: This is a test deployment workflow change.
+
 ## Overview
 
 Grid is a full-stack web application that streamlines business operations for production companies. It enables teams to efficiently manage projects, track equipment inventory, schedule crew and resources, coordinate vehicles, maintain customer relationships, and handle internal communications—all from a single, modern interface.
@@ -188,7 +190,34 @@ The application uses Supabase Authentication with role-based access control. Use
 
 ## Database
 
-The project uses Supabase (PostgreSQL) for data storage. Database schema is managed through migrations located in `supabase/migrations/`. See `SUPABASE_SETUP.md` for detailed setup instructions.
+The project uses Supabase (PostgreSQL) for data storage. Database schema is managed through migrations located in `supabase/migrations/`. 
+
+**⚠️ IMPORTANT: All database schema changes MUST go through the migration workflow. See `CONTRIBUTING.md` for the complete migration workflow.**
+
+### Quick Migration Reference
+
+1. Create migration: `npm run db:migrate descriptive_name`
+2. Test locally: `npm run db:reset`
+3. Push to production: `npm run db:push`
+4. Update types: `npm run db:types:remote`
+
+## Deployment
+
+The application is deployed to **gridsolutions.app** via Vercel. The `main` branch auto-deploys to production.
+
+**⚠️ IMPORTANT: See `DEPLOYMENT_WORKFLOW.md` for complete deployment and branch strategy.**
+
+### Quick Deployment Reference
+
+- **Production**: Merges to `main` auto-deploy to gridsolutions.app
+- **Feature Branches**: Create from `main`, test locally, merge via PR
+- **Migrations**: Push backward-compatible migrations before merging code
+
+For detailed instructions, see:
+- `DEPLOYMENT_WORKFLOW.md` - Complete deployment workflow, branch strategy, and migration timing
+- `CONTRIBUTING.md` - Complete migration workflow and best practices
+- `supabase/DEVELOPMENT_WORKFLOW.md` - Detailed Supabase development guide
+- `SUPABASE_SETUP.md` - Database setup instructions
 
 ## License
 
