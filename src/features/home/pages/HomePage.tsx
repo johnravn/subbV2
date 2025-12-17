@@ -1122,7 +1122,7 @@ function MattersSection({
     <DashboardCard
       title="Matters"
       icon={<Message width={18} height={18} />}
-      footer={
+      headerAction={
         <Button
           size="2"
           variant="soft"
@@ -1402,7 +1402,7 @@ function LatestSection({
     <DashboardCard
       title="Latest"
       icon={<RssFeed width={18} height={18} />}
-      footer={
+      headerAction={
         <Button
           size="2"
           variant="soft"
@@ -1578,12 +1578,7 @@ function DashboardCard({
           {children}
         </Box>
 
-        {footer && (
-          <>
-            <Separator my="2" />
-            <Flex justify="end">{footer}</Flex>
-          </>
-        )}
+        {footer && <Flex justify="end">{footer}</Flex>}
       </Flex>
     </Card>
   )
