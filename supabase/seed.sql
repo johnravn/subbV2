@@ -1,28 +1,63 @@
--- Seed file for local database
--- Generated: 2025-12-16T23:41:28.040Z
+-- Seed file generated from local database
+-- Generated: 2025-12-17T19:28:17.447Z
 -- 
 -- This file contains initial data that will be loaded after migrations
 -- Run: npm run db:reset (this seed file runs automatically)
 --
--- IMPORTANT: This file is currently empty. To populate your local database:
---
--- Option 1: Copy data from remote (RECOMMENDED)
---   npm run db:copy-data
---   This copies all data from your remote database to local
---
--- Option 2: Generate seed from local database
---   First, populate your local DB with data (via copy-data or manually)
---   Then run: npm run db:generate-seed
---   This will generate INSERT statements from your local data
---
--- Option 3: Add manual seed data below
---   Add INSERT statements here for minimal test data
---
--- Note: For large datasets, use db:copy-data instead of seed files
--- Seed files are best for small amounts of test data
+-- Note: This includes ALL data from your local database.
+-- For large datasets, consider using db:copy-data instead.
 
--- Add your seed data below this line
--- Example:
--- INSERT INTO profiles (id, email, display_name) VALUES 
---   ('00000000-0000-0000-0000-000000000001', 'test@example.com', 'Test User')
--- ON CONFLICT (id) DO NOTHING;
+
+-- Seed data for company_users
+
+-- Seed data for dev_auth_logs
+
+-- Seed data for matter_recipients
+
+-- Seed data for company_users
+
+-- Seed data for pending_invites
+
+-- Seed data for company_users
+
+-- Seed data for pending_invites
+
+-- Seed data for matter_recipients
+
+-- Seed data for item_groups
+
+-- Seed data for group_items
+
+-- Seed data for group_price_history
+
+-- Seed data for items
+
+-- Seed data for item_price_history
+
+-- Seed data for items
+
+-- Seed data for item_prices
+
+-- Seed data for time_periods
+
+-- Seed data for activity_log
+
+-- Seed data for matters
+
+-- Seed data for matter_recipients
+
+-- Seed data for matters
+
+-- Seed data for matter_recipients
+
+-- Seed data for dev_auth_logs
+
+-- Seed data for matters
+
+-- Seed data for matter_recipients
+
+-- Seed data for activity_log
+
+-- Seed data for matters
+
+-- Seed data for matter_recipients
