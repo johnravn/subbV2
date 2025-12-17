@@ -25,7 +25,7 @@ import {
   Search,
   Xmark,
 } from 'iconoir-react'
-import { makeWordPresentable } from '@shared/lib/generalFunctions'
+import { makeWordPresentable, getInitials } from '@shared/lib/generalFunctions'
 import { supabase } from '@shared/api/supabase'
 import { customersForFilterQuery, jobsIndexQuery } from '../api/queries'
 import JobDialog from './dialogs/JobDialog'
@@ -48,14 +48,7 @@ function getDisplayStatus(
 type SortBy = 'title' | 'start_at' | 'status' | 'customer_name'
 type SortDir = 'asc' | 'desc'
 
-function getInitials(displayOrEmail: string | null): string {
-  const base = (displayOrEmail || '').trim()
-  if (!base) return '?'
-  const parts = base.split(/\s+/).filter(Boolean)
-  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
-  if (base.includes('@')) return base[0].toUpperCase()
-  return base.slice(0, 2).toUpperCase()
-}
+// Using shared getInitials from generalFunctions
 
 export default function JobsTable({
   selectedId,

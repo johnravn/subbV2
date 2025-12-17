@@ -69,6 +69,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_update_job_offers_updated_at ON job_offers;
 CREATE TRIGGER trigger_update_job_offers_updated_at
 BEFORE UPDATE ON job_offers
 FOR EACH ROW
@@ -163,6 +164,7 @@ ALTER TABLE offer_transport_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE offer_pretty_sections ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Company members can CRUD their company's offers
+DROP POLICY IF EXISTS "Company members can manage their company's offers" ON job_offers;
 CREATE POLICY "Company members can manage their company's offers"
 ON job_offers
 FOR ALL
@@ -173,6 +175,7 @@ USING (
   )
 );
 
+DROP POLICY IF EXISTS "Company members can manage their company's equipment groups" ON offer_equipment_groups;
 CREATE POLICY "Company members can manage their company's equipment groups"
 ON offer_equipment_groups
 FOR ALL
@@ -184,6 +187,7 @@ USING (
   )
 );
 
+DROP POLICY IF EXISTS "Company members can manage their company's equipment items" ON offer_equipment_items;
 CREATE POLICY "Company members can manage their company's equipment items"
 ON offer_equipment_items
 FOR ALL
@@ -196,6 +200,7 @@ USING (
   )
 );
 
+DROP POLICY IF EXISTS "Company members can manage their company's crew items" ON offer_crew_items;
 CREATE POLICY "Company members can manage their company's crew items"
 ON offer_crew_items
 FOR ALL
@@ -207,6 +212,7 @@ USING (
   )
 );
 
+DROP POLICY IF EXISTS "Company members can manage their company's transport items" ON offer_transport_items;
 CREATE POLICY "Company members can manage their company's transport items"
 ON offer_transport_items
 FOR ALL
@@ -218,6 +224,7 @@ USING (
   )
 );
 
+DROP POLICY IF EXISTS "Company members can manage their company's pretty sections" ON offer_pretty_sections;
 CREATE POLICY "Company members can manage their company's pretty sections"
 ON offer_pretty_sections
 FOR ALL
@@ -230,6 +237,7 @@ USING (
 );
 
 -- Policy: Public SELECT on job_offers via access_token (no auth required)
+DROP POLICY IF EXISTS "Public can view non-draft offers via access token" ON job_offers;
 CREATE POLICY "Public can view non-draft offers via access token"
 ON job_offers
 FOR SELECT
@@ -240,6 +248,7 @@ USING (
 );
 
 -- Policy: Public SELECT on related tables via accessible offers
+DROP POLICY IF EXISTS "Public can view equipment groups from accessible offers" ON offer_equipment_groups;
 CREATE POLICY "Public can view equipment groups from accessible offers"
 ON offer_equipment_groups
 FOR SELECT
@@ -250,6 +259,7 @@ USING (
   )
 );
 
+DROP POLICY IF EXISTS "Public can view equipment items from accessible offers" ON offer_equipment_items;
 CREATE POLICY "Public can view equipment items from accessible offers"
 ON offer_equipment_items
 FOR SELECT
@@ -262,6 +272,7 @@ USING (
   )
 );
 
+DROP POLICY IF EXISTS "Public can view crew items from accessible offers" ON offer_crew_items;
 CREATE POLICY "Public can view crew items from accessible offers"
 ON offer_crew_items
 FOR SELECT
@@ -272,6 +283,7 @@ USING (
   )
 );
 
+DROP POLICY IF EXISTS "Public can view transport items from accessible offers" ON offer_transport_items;
 CREATE POLICY "Public can view transport items from accessible offers"
 ON offer_transport_items
 FOR SELECT
@@ -282,6 +294,7 @@ USING (
   )
 );
 
+DROP POLICY IF EXISTS "Public can view pretty sections from accessible offers" ON offer_pretty_sections;
 CREATE POLICY "Public can view pretty sections from accessible offers"
 ON offer_pretty_sections
 FOR SELECT
@@ -293,6 +306,7 @@ USING (
 );
 
 -- Policy: Public UPDATE for acceptance (only for 'sent' offers)
+DROP POLICY IF EXISTS "Public can accept sent offers" ON job_offers;
 CREATE POLICY "Public can accept sent offers"
 ON job_offers
 FOR UPDATE

@@ -1,0 +1,28 @@
+import { TanStackDevtoolsConfig } from '../context/devtools-context.js';
+import { Accessor } from 'solid-js';
+export declare function useStyles(): Accessor<{
+    devtoolsPanelContainer: (panelLocation: TanStackDevtoolsConfig["panelLocation"]) => string;
+    devtoolsPanelContainerVisibility: (isOpen: boolean) => string;
+    devtoolsPanelContainerResizing: (isResizing: Accessor<boolean>) => string;
+    devtoolsPanelContainerAnimation: (isOpen: boolean, height: number) => string;
+    devtoolsPanel: string;
+    dragHandle: (panelLocation: TanStackDevtoolsConfig["panelLocation"]) => string;
+    mainCloseBtn: string;
+    mainCloseBtnPosition: (position: TanStackDevtoolsConfig["position"]) => string;
+    mainCloseBtnAnimation: (isOpen: boolean, hideUntilHover: boolean) => string;
+    tabContainer: string;
+    tab: string;
+    tabContent: string;
+    pluginsTabPanel: string;
+    pluginsTabSidebar: string;
+    pluginName: string;
+    pluginsTabContent: string;
+    settingsContainer: string;
+    settingsSection: string;
+    sectionTitle: string;
+    sectionIcon: string;
+    sectionDescription: string;
+    settingsGroup: string;
+    conditionalSetting: string;
+    settingRow: string;
+}>;

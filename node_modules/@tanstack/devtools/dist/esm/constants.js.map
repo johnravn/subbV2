@@ -1,0 +1,1 @@
+{"version":3,"file":"constants.js","sources":["../../src/constants.ts"],"sourcesContent":["export const PLUGIN_CONTAINER_ID = 'plugin-container'\nexport const PLUGIN_TITLE_CONTAINER_ID = 'plugin-title-container'\n"],"names":[],"mappings":"AAAO,MAAM,sBAAsB;AAC5B,MAAM,4BAA4B;"}

@@ -39,6 +39,7 @@ import { unreadMattersCountQueryAll } from '@features/matters/api/queries'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useTheme } from '../hooks/useTheme'
 import { APP_VERSION } from '../config/version'
+import { getInitials } from '@shared/lib/generalFunctions'
 
 const SIDEBAR_EXPANDED = 200
 const SIDEBAR_COLLAPSED = 64
@@ -261,9 +262,7 @@ function SidebarContent({
                       size="3"
                       radius="full"
                       src={userAvatarUrl ?? undefined}
-                      fallback={(userDisplayName || userEmail || '?')
-                        .slice(0, 2)
-                        .toUpperCase()}
+                      fallback={getInitials(userDisplayName || userEmail || '?')}
                       style={{ border: '1px solid var(--gray-5)' }}
                     />
                     <Flex direction="column" style={{ lineHeight: 1.1 }}>

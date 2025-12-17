@@ -1,0 +1,1 @@
+"use client";import o from"react";const t=o.createContext({});function i({iconProps:e,children:r}){return o.createElement(t.Provider,{value:e||{},children:r})}export{t as IconoirContext,i as IconoirProvider};

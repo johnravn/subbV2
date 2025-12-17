@@ -14,6 +14,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { NAV, Sidebar } from './Sidebar'
 import { AnimatedBackground } from '@shared/ui/components/AnimatedBackground'
+import { getInitials } from '@shared/lib/generalFunctions'
 
 export default function AppShell() {
   const [open, setOpen] = React.useState(true)
@@ -196,7 +197,7 @@ export default function AppShell() {
                       size="2"
                       radius="full"
                       src={avatarUrl ?? undefined}
-                      fallback={(displayName || '?').slice(0, 2).toUpperCase()}
+                      fallback={getInitials(displayName || '?')}
                       style={{ border: '1px solid var(--gray-5)' }}
                     />
                     <Text size="2" style={{ maxWidth: 200 }} truncate>

@@ -23,6 +23,7 @@ import { useCompany } from '@shared/companies/CompanyProvider'
 import { supabase } from '@shared/api/supabase'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import EditWelcomeMatterDialog from './dialogs/EditWelcomeMatterDialog'
+import EditBrandsDialog from '@features/inventory/components/EditBrandsDialog'
 
 type ItemCategory = {
   id: string
@@ -273,6 +274,7 @@ export default function CompanySetupTab() {
   const qc = useQueryClient()
   const { success, error: toastError, info } = useToast()
   const [editCategoriesOpen, setEditCategoriesOpen] = React.useState(false)
+  const [editBrandsOpen, setEditBrandsOpen] = React.useState(false)
   const [welcomeMatterOpen, setWelcomeMatterOpen] = React.useState(false)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const [uploadingPDF, setUploadingPDF] = React.useState(false)
@@ -545,6 +547,12 @@ export default function CompanySetupTab() {
         companyId={companyId}
       />
 
+      <EditBrandsDialog
+        open={editBrandsOpen}
+        onOpenChange={setEditBrandsOpen}
+        companyId={companyId}
+      />
+
       <Card size="4" style={{ minHeight: 0, overflow: 'auto' }}>
         <Box p="4">
           {/* Welcome Matter Section */}
@@ -591,6 +599,13 @@ export default function CompanySetupTab() {
               onClick={() => setEditCategoriesOpen(true)}
             >
               <Edit /> Manage Categories
+            </Button>
+            <Button
+              size="3"
+              variant="outline"
+              onClick={() => setEditBrandsOpen(true)}
+            >
+              <Edit /> Manage Brands
             </Button>
           </Flex>
 

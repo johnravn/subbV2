@@ -22,6 +22,7 @@ import interactionPlugin from '@fullcalendar/interaction'
 import { Calendar, List } from 'iconoir-react'
 import { useNavigate } from '@tanstack/react-router'
 import { supabase } from '@shared/api/supabase'
+import { getInitials } from '@shared/lib/generalFunctions'
 import { applyCalendarFilter } from './domain'
 import type { CalendarFilter, CalendarKind } from './domain'
 import type {
@@ -162,15 +163,7 @@ export default function CompanyCalendarPro({
     }
   }
 
-  // Helper function for initials
-  function getInitials(displayOrEmail: string | null): string {
-    if (!displayOrEmail) return '?'
-    const base = displayOrEmail.trim()
-    const parts = base.split(/\s+/).filter(Boolean)
-    if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
-    if (base.includes('@')) return base[0].toUpperCase()
-    return base.slice(0, 2).toUpperCase()
-  }
+  // Using shared getInitials from generalFunctions
 
   // Get colors for events based on category (from CalendarTab.tsx)
   function getRadixColorsForPeriod(

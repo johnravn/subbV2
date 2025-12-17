@@ -20,7 +20,6 @@ import {
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { Search } from 'iconoir-react'
 import { categoryNamesQuery, inventoryIndexQuery } from '../api/queries'
-import EditBrandsDialog from './EditBrandsDialog'
 import AddItemDialog from './AddItemDialog'
 import AddGroupDialog from './AddGroupDialog'
 import type { ColumnDef, SortingState } from '@tanstack/react-table'
@@ -66,7 +65,6 @@ export default function InventoryTable({
 
   const [addItemOpen, setAddItemOpen] = React.useState(false)
   const [addGroupDialog, setAddGroupDialog] = React.useState(false)
-  const [editBrandsOpen, setEditBrandsOpen] = React.useState(false)
 
   // ⬇️ add these near your other state hooks
   const containerRef = React.useRef<HTMLDivElement | null>(null)
@@ -458,11 +456,6 @@ export default function InventoryTable({
             </Button>
           </Flex>
           <Flex align="center" gap={'1'}>
-            <EditBrandsDialog
-              open={editBrandsOpen}
-              onOpenChange={setEditBrandsOpen}
-              companyId={companyId ?? ''}
-            />
             <AddItemDialog
               open={addItemOpen}
               onOpenChange={setAddItemOpen}

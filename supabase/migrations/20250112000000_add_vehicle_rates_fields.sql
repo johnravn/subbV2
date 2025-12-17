@@ -10,11 +10,30 @@ ADD COLUMN IF NOT EXISTS vehicle_daily_rate NUMERIC(10, 2),
 ADD COLUMN IF NOT EXISTS vehicle_distance_rate NUMERIC(10, 2),
 ADD COLUMN IF NOT EXISTS vehicle_distance_increment INTEGER DEFAULT 150;
 
--- Add constraints
-ALTER TABLE company_expansions
-ADD CONSTRAINT check_vehicle_daily_rate CHECK (vehicle_daily_rate IS NULL OR vehicle_daily_rate >= 0),
-ADD CONSTRAINT check_vehicle_distance_rate CHECK (vehicle_distance_rate IS NULL OR vehicle_distance_rate >= 0),
-ADD CONSTRAINT check_vehicle_distance_increment CHECK (vehicle_distance_increment IS NULL OR vehicle_distance_increment > 0);
+-- Add constraints if they don't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'check_vehicle_daily_rate'
+    ) THEN
+        ALTER TABLE company_expansions
+        ADD CONSTRAINT check_vehicle_daily_rate CHECK (vehicle_daily_rate IS NULL OR vehicle_daily_rate >= 0);
+    END IF;
+    
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'check_vehicle_distance_rate'
+    ) THEN
+        ALTER TABLE company_expansions
+        ADD CONSTRAINT check_vehicle_distance_rate CHECK (vehicle_distance_rate IS NULL OR vehicle_distance_rate >= 0);
+    END IF;
+    
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'check_vehicle_distance_increment'
+    ) THEN
+        ALTER TABLE company_expansions
+        ADD CONSTRAINT check_vehicle_distance_increment CHECK (vehicle_distance_increment IS NULL OR vehicle_distance_increment > 0);
+    END IF;
+END $$;
 
 -- Add comments for documentation
 COMMENT ON COLUMN company_expansions.vehicle_daily_rate IS 'Fixed daily rate for vehicles in technical offers';

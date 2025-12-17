@@ -18,15 +18,16 @@ CREATE TABLE IF NOT EXISTS job_invoices (
 );
 
 -- Indexes for efficient queries
-CREATE INDEX idx_job_invoices_job_id ON job_invoices(job_id);
-CREATE INDEX idx_job_invoices_offer_id ON job_invoices(offer_id);
-CREATE INDEX idx_job_invoices_status ON job_invoices(status);
-CREATE INDEX idx_job_invoices_created_at ON job_invoices(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_job_invoices_job_id ON job_invoices(job_id);
+CREATE INDEX IF NOT EXISTS idx_job_invoices_offer_id ON job_invoices(offer_id);
+CREATE INDEX IF NOT EXISTS idx_job_invoices_status ON job_invoices(status);
+CREATE INDEX IF NOT EXISTS idx_job_invoices_created_at ON job_invoices(created_at DESC);
 
 -- RLS policies
 ALTER TABLE job_invoices ENABLE ROW LEVEL SECURITY;
 
 -- Users can view invoices for jobs in their company
+DROP POLICY IF EXISTS "Users can view invoices for their company jobs" ON job_invoices;
 CREATE POLICY "Users can view invoices for their company jobs"
   ON job_invoices
   FOR SELECT
@@ -40,6 +41,7 @@ CREATE POLICY "Users can view invoices for their company jobs"
   );
 
 -- Users with appropriate permissions can create invoices
+DROP POLICY IF EXISTS "Users can create invoices for their company jobs" ON job_invoices;
 CREATE POLICY "Users can create invoices for their company jobs"
   ON job_invoices
   FOR INSERT
@@ -62,6 +64,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS job_invoices_updated_at ON job_invoices;
 CREATE TRIGGER job_invoices_updated_at
   BEFORE UPDATE ON job_invoices
   FOR EACH ROW

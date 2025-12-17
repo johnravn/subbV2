@@ -12,6 +12,7 @@ import {
 import { Edit, Trash } from 'iconoir-react'
 import InspectorSkeleton from '@shared/ui/components/InspectorSkeleton'
 import { supabase } from '@shared/api/supabase'
+import { getInitials } from '@shared/lib/generalFunctions'
 import { prettyPhone } from '@shared/phone/phone'
 import { userCompanyMembershipsQuery, userDetailQuery } from '../api/queries'
 
@@ -78,7 +79,7 @@ export default function UserInspector({
         <Flex align="center" gap="3">
           <Avatar
             src={avatarUrl ?? undefined}
-            fallback={initials(fullName ?? user.email)}
+            fallback={getInitials(fullName ?? user.email)}
             size="5"
             style={{ border: '1px solid var(--gray-5)' }}
           />
@@ -297,14 +298,7 @@ function DD({ children }: { children: React.ReactNode }) {
   )
 }
 
-function initials(displayOrEmail: string) {
-  const base = displayOrEmail.trim()
-  if (!base) return '?'
-  const parts = base.split(/\s+/).filter(Boolean)
-  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
-  if (base.includes('@')) return base[0].toUpperCase()
-  return base.slice(0, 2).toUpperCase()
-}
+// Using shared getInitials from generalFunctions
 
 function formatMonthYear(iso: string | null | undefined) {
   if (!iso) return '—'

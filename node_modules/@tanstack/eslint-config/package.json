@@ -1,0 +1,52 @@
+{
+  "name": "@tanstack/eslint-config",
+  "version": "0.3.2",
+  "description": "Shared ESLint config used by TanStack projects.",
+  "author": "tannerlinsley",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TanStack/config.git",
+    "directory": "packages/eslint-config"
+  },
+  "homepage": "https://tanstack.com/config",
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/tannerlinsley"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": {
+        "default": "./src/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "preferGlobal": false,
+  "sideEffects": false,
+  "files": [
+    "src"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@eslint/js": "^9.36.0",
+    "@stylistic/eslint-plugin": "^5.4.0",
+    "eslint-plugin-import-x": "^4.16.1",
+    "eslint-plugin-n": "^17.23.1",
+    "globals": "^16.4.0",
+    "typescript-eslint": "^8.44.0",
+    "vue-eslint-parser": "^10.2.0"
+  },
+  "devDependencies": {
+    "@types/eslint": "^9.6.1",
+    "eslint": "^9.36.0"
+  },
+  "scripts": {
+    "test:types": "tsc",
+    "test:eslint": "eslint --concurrency=auto ./src",
+    "test:build": "publint --strict"
+  }
+}

@@ -1078,11 +1078,13 @@ export function unreadMattersCountQueryAll() {
       if (unreadMatterIds.length === 0) return 0
 
       // Filter to only matters in companies the user is a member of
+      // Also exclude matters created by the user (matters created by user are always considered "read")
       const { data: companyMatters, error: matterError } = await supabase
         .from('matters' as any)
-        .select('id')
+        .select('id, created_by_user_id')
         .in('company_id', companyIds)
         .in('id', unreadMatterIds)
+        .neq('created_by_user_id', user.id) // Exclude matters created by the user
 
       if (matterError) throw matterError
 
@@ -1118,11 +1120,13 @@ export function unreadMattersCountQuery(companyId: string) {
       if (unreadMatterIds.length === 0) return 0
 
       // Filter to only matters in the current company
+      // Also exclude matters created by the user (matters created by user are always considered "read")
       const { data: companyMatters, error: matterError } = await supabase
         .from('matters' as any)
-        .select('id')
+        .select('id, created_by_user_id')
         .eq('company_id', companyId)
         .in('id', unreadMatterIds)
+        .neq('created_by_user_id', user.id) // Exclude matters created by the user
 
       if (matterError) throw matterError
 
