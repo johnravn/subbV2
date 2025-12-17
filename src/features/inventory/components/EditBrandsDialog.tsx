@@ -12,6 +12,7 @@ import {
   TextField,
 } from '@radix-ui/themes'
 import { supabase } from '@shared/api/supabase'
+import { useToast } from '@shared/ui/toast/ToastProvider'
 import { Check, Edit, Trash, Xmark } from 'iconoir-react'
 
 type FormState = { name: string }
@@ -32,6 +33,7 @@ export default function EditBrandsDialog({
   companyId: string
 }) {
   const qc = useQueryClient()
+  const { success } = useToast()
   const [form, setForm] = React.useState<FormState>({ name: '' })
   const [editingId, setEditingId] = React.useState<string | null>(null)
   const [editingName, setEditingName] = React.useState<string>('')
@@ -74,13 +76,15 @@ export default function EditBrandsDialog({
       })
       if (error) throw error
     },
-    onSuccess: async () => {
+    onSuccess: async (_, variables) => {
+      const brandName = variables.name.trim()
       setForm({ name: '' })
       await qc.invalidateQueries({ queryKey: brandsQueryKey })
       await qc.invalidateQueries({
         queryKey: ['company', companyId, 'inventory-index'],
         exact: false,
       })
+      success('Brand created', `"${brandName}" has been added.`)
     },
   })
 
@@ -94,7 +98,7 @@ export default function EditBrandsDialog({
         .eq('company_id', companyId)
       if (error) throw error
     },
-    onSuccess: async () => {
+    onSuccess: async (_, variables) => {
       setEditingId(null)
       setEditingName('')
       await qc.invalidateQueries({ queryKey: brandsQueryKey })
@@ -102,6 +106,7 @@ export default function EditBrandsDialog({
         queryKey: ['company', companyId, 'inventory-index'],
         exact: false,
       })
+      success('Brand updated', `"${variables.name.trim()}" has been updated.`)
     },
   })
 
@@ -115,24 +120,22 @@ export default function EditBrandsDialog({
         .eq('company_id', companyId)
       if (error) throw error
     },
-    onSuccess: async () => {
+    onSuccess: async (_, id) => {
+      const deletedBrand = brands?.find((b) => b.id === id)
       await qc.invalidateQueries({ queryKey: brandsQueryKey })
       await qc.invalidateQueries({
         queryKey: ['company', companyId, 'inventory-index'],
         exact: false,
       })
+      if (deletedBrand) {
+        success('Brand removed', `"${deletedBrand.name}" has been removed.`)
+      }
     },
   })
 
   /* ---------- Render ---------- */
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Trigger>
-        <Button size="2" variant="outline">
-          <Edit /> Edit brands
-        </Button>
-      </Dialog.Trigger>
-
       <Dialog.Content maxWidth="640px">
         <Dialog.Title>Edit Brands</Dialog.Title>
 
@@ -144,6 +147,7 @@ export default function EditBrandsDialog({
             border: '1px solid var(--gray-a6)',
             borderRadius: 8,
             padding: 8,
+            paddingRight: 16,
             marginTop: 12,
           }}
         >

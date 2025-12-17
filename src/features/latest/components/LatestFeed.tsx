@@ -5,21 +5,14 @@ import { Avatar, Box, Flex, Spinner, Text } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { supabase } from '@shared/api/supabase'
 import { formatDistanceToNow } from 'date-fns'
+import { getInitialsFromNameOrEmail } from '@shared/lib/generalFunctions'
 import { latestFeedQuery } from '../api/queries'
 import { groupInventoryActivities } from '../utils/groupInventoryActivities'
 import { getActivityGenericMessage } from '../utils/activityNavigation'
 import type { ActivityType, GroupedInventoryActivity } from '../types'
 
-function getInitials(name: string | null, email: string): string {
-  if (name) {
-    const parts = name.trim().split(/\s+/)
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-    }
-    return name.substring(0, 2).toUpperCase()
-  }
-  return email.substring(0, 2).toUpperCase()
-}
+// Using shared getInitialsFromNameOrEmail from generalFunctions
+const getInitials = getInitialsFromNameOrEmail
 
 function getActivityIcon(
   activityType: ActivityType | GroupedInventoryActivity['activity_type'],
@@ -176,6 +169,9 @@ export default function LatestFeed({
                     </Text>
 
                     <Flex align="center" gap="3" mt="2">
+                      <Text size="1" color="gray">
+                        {timeAgo}
+                      </Text>
                       {activity.like_count > 0 && (
                         <Text size="1" color="gray">
                           ❤️ {activity.like_count}
@@ -195,6 +191,9 @@ export default function LatestFeed({
                   gap="2"
                   style={{ flexShrink: 0, marginLeft: 'var(--space-2)' }}
                 >
+                  <Text size="2" weight="medium">
+                    {displayName}
+                  </Text>
                   <Avatar
                     size="1"
                     radius="full"
@@ -204,14 +203,6 @@ export default function LatestFeed({
                       activity.created_by.email,
                     )}
                   />
-                  <Flex direction="column" align="end" gap="0">
-                    <Text size="2" weight="medium">
-                      {displayName}
-                    </Text>
-                    <Text size="1" color="gray">
-                      {timeAgo}
-                    </Text>
-                  </Flex>
                 </Flex>
               </Flex>
             </Box>

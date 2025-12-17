@@ -18,6 +18,7 @@ import { useAuthz } from '@shared/auth/useAuthz'
 import { supabase } from '@shared/api/supabase'
 import { Plus } from 'iconoir-react'
 import { partnerCustomersQuery } from '../api/partners'
+import BrandAutocomplete from './BrandAutocomplete'
 
 type FormState = {
   name: string
@@ -112,24 +113,8 @@ export default function AddItemDialog({
     staleTime: 60_000,
   })
 
-  const {
-    data: brands = [],
-    isLoading: brandLoading,
-    error: brandErr,
-  } = useQuery({
-    queryKey: ['company', companyId, 'item_brands'],
-    enabled: !!companyId && open,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('item_brands')
-        .select('id, name')
-        .eq('company_id', companyId)
-        .order('name', { ascending: true })
-      if (error) throw error
-      return data as Array<Option>
-    },
-    staleTime: 60_000,
-  })
+  // Brand name state (for autocomplete)
+  const [brandName, setBrandName] = React.useState<string | null>(null)
 
   const { data: partners = [] } = useQuery({
     ...partnerCustomersQuery({ companyId: companyId }),
@@ -139,11 +124,27 @@ export default function AddItemDialog({
   // Prefill on EDIT (only once per dialog open)
   React.useEffect(() => {
     if (!open || mode !== 'edit' || !initialData) return
-    // try to map category/brand names to IDs once options are loaded
-    const catId =
-      categories.find((c) => c.name === initialData.categoryName)?.id ?? null
-    const brandId =
-      brands.find((b) => b.name === initialData.brandName)?.id ?? null
+      // try to map category name to ID once options are loaded
+      const catId =
+        categories.find((c) => c.name === initialData.categoryName)?.id ?? null
+      
+      // Set brand name directly (autocomplete will handle ID lookup)
+      setBrandName(initialData.brandName)
+      
+      // Try to find brand ID if brand name exists
+      if (initialData.brandName) {
+        supabase
+          .from('item_brands')
+          .select('id, name')
+          .eq('company_id', companyId)
+          .ilike('name', initialData.brandName)
+          .single()
+          .then(({ data }) => {
+            if (data) {
+              set('brandId', data.id)
+            }
+          })
+      }
 
     originalPriceRef.current = initialData.price ?? null
 
@@ -152,7 +153,6 @@ export default function AddItemDialog({
       if (
         prev.name === initialData.name &&
         prev.categoryId === catId &&
-        prev.brandId === brandId &&
         prev.model === (initialData.model ?? '') &&
         prev.allow_individual_booking ===
           initialData.allow_individual_booking &&
@@ -166,7 +166,7 @@ export default function AddItemDialog({
       return {
         name: initialData.name,
         categoryId: catId,
-        brandId,
+        brandId: null, // Will be set by autocomplete
         model: initialData.model ?? '',
         allow_individual_booking: initialData.allow_individual_booking,
         total_quantity: initialData.total_quantity,
@@ -177,20 +177,51 @@ export default function AddItemDialog({
         external_owner_id: initialData.external_owner_id ?? null,
       }
     })
-    // Only run this effect when dialog is opened in edit mode, or when categories/brands are loaded
-  }, [open, mode, initialData, categories, brands])
+    // Only run this effect when dialog is opened in edit mode, or when categories are loaded
+  }, [open, mode, initialData, categories])
 
   /* ---------------- CREATE ---------------- */
   const createMutation = useMutation({
     mutationFn: async (f: FormState) => {
       if (!companyId) throw new Error('No company selected')
+      
+      // If brand name exists but no brand ID, create or find the brand
+      let brandId = f.brandId
+      if (brandName && brandName.trim() && !brandId) {
+        const brandNameTrimmed = brandName.trim()
+        // Try to find existing brand first (case-insensitive)
+        const { data: existing } = await supabase
+          .from('item_brands')
+          .select('id')
+          .eq('company_id', companyId)
+          .ilike('name', brandNameTrimmed)
+          .single()
+        
+        if (existing) {
+          brandId = existing.id
+        } else {
+          // Create new brand
+          const { data: newBrand, error: brandError } = await supabase
+            .from('item_brands')
+            .insert({
+              company_id: companyId,
+              name: brandNameTrimmed,
+            })
+            .select('id')
+            .single()
+          
+          if (brandError) throw brandError
+          brandId = newBrand.id
+        }
+      }
+      
       const { data: itemId, error } = await supabase.rpc(
         'create_item_with_price',
         {
           p_company_id: companyId,
           p_name: f.name,
           p_category_id: f.categoryId ?? null,
-          p_brand_id: f.brandId ?? null,
+          p_brand_id: brandId ?? null,
           p_model: f.model || null,
           p_allow_individual_booking: f.allow_individual_booking,
           p_total_quantity: f.total_quantity || 0,
@@ -235,6 +266,7 @@ export default function AddItemDialog({
       }
     },
     onSuccess: async () => {
+      setBrandName(null)
       await Promise.all([
         qc.invalidateQueries({
           queryKey: ['company', companyId, 'inventory-index'],
@@ -246,6 +278,10 @@ export default function AddItemDialog({
         }),
         qc.invalidateQueries({
           queryKey: ['company', companyId, 'latest-feed'],
+          exact: false,
+        }),
+        qc.invalidateQueries({
+          queryKey: ['company', companyId, 'item_brands'],
           exact: false,
         }),
       ])
@@ -264,13 +300,43 @@ export default function AddItemDialog({
       if (!companyId) throw new Error('No company selected')
       if (!initialData?.id) throw new Error('Missing item id')
 
+      // If brand name exists but no brand ID, create or find the brand
+      let brandId = f.brandId
+      if (brandName && brandName.trim() && !brandId) {
+        const brandNameTrimmed = brandName.trim()
+        // Try to find existing brand first (case-insensitive)
+        const { data: existing } = await supabase
+          .from('item_brands')
+          .select('id')
+          .eq('company_id', companyId)
+          .ilike('name', brandNameTrimmed)
+          .single()
+        
+        if (existing) {
+          brandId = existing.id
+        } else {
+          // Create new brand
+          const { data: newBrand, error: brandError } = await supabase
+            .from('item_brands')
+            .insert({
+              company_id: companyId,
+              name: brandNameTrimmed,
+            })
+            .select('id')
+            .single()
+          
+          if (brandError) throw brandError
+          brandId = newBrand.id
+        }
+      }
+
       // 1) Update the item row
       const { error: upErr } = await supabase
         .from('items')
         .update({
           name: f.name,
           category_id: f.categoryId ?? null,
-          brand_id: f.brandId ?? null,
+          brand_id: brandId ?? null,
           model: f.model || null,
           allow_individual_booking: f.allow_individual_booking,
           total_quantity: f.total_quantity || 0,
@@ -301,6 +367,7 @@ export default function AddItemDialog({
       }
     },
     onSuccess: async () => {
+      setBrandName(null)
       await Promise.all([
         qc.invalidateQueries({
           queryKey: ['company', companyId, 'inventory-index'],
@@ -314,6 +381,10 @@ export default function AddItemDialog({
           queryKey: ['company', companyId, 'items'],
           exact: false,
         }),
+        qc.invalidateQueries({
+          queryKey: ['company', companyId, 'item_brands'],
+          exact: false,
+        }),
       ])
       onOpenChange(false)
       success('Saved', 'Item was updated.')
@@ -324,7 +395,7 @@ export default function AddItemDialog({
     },
   })
 
-  const loading = catLoading || brandLoading
+  const loading = catLoading
   const saving =
     mode === 'create' ? createMutation.isPending : editMutation.isPending
 
@@ -417,23 +488,19 @@ export default function AddItemDialog({
 
               {/* Brand */}
               <Field label="Brand">
-                <Select.Root
-                  value={form.brandId ?? undefined}
-                  onValueChange={(v) => set('brandId', v === 'none' ? null : v)}
+                <BrandAutocomplete
+                  companyId={companyId}
+                  value={brandName}
+                  onChange={(name) => {
+                    setBrandName(name)
+                    if (!name) {
+                      set('brandId', null)
+                    }
+                  }}
+                  onBrandIdChange={(id) => set('brandId', id)}
                   disabled={loading}
-                >
-                  <Select.Trigger placeholder="Select brand" />
-                  <Select.Content style={{ zIndex: 10000 }}>
-                    <Select.Group>
-                      <Select.Item value="none">(None)</Select.Item>
-                      {brands.map((b: Option) => (
-                        <Select.Item key={b.id} value={b.id}>
-                          {b.name}
-                        </Select.Item>
-                      ))}
-                    </Select.Group>
-                  </Select.Content>
-                </Select.Root>
+                  placeholder="Type brand name..."
+                />
               </Field>
 
               {/* Model */}
@@ -550,12 +617,10 @@ export default function AddItemDialog({
             </Field>
 
             {(catErr ||
-              brandErr ||
               createMutation.isError ||
               editMutation.isError) && (
               <Text color="red">
                 {catErr?.message ||
-                  brandErr?.message ||
                   createMutation.error?.message ||
                   editMutation.error?.message ||
                   'Failed'}

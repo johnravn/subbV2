@@ -123,13 +123,35 @@ If your migration breaks existing code (removes columns, changes types, etc.):
 
 ## 🚀 Deployment Workflow
 
-### Automatic Deployment (Main Branch)
+### Vercel Deployment Types
 
-When you merge to `main`:
-1. Vercel automatically detects the push
+Vercel creates **two types of deployments**:
+
+#### 1. Preview Deployments (Feature Branches/PRs)
+
+**When**: Every push to a feature branch or PR
+**URL**: `https://grid-xxxxx-johnravns-projects.vercel.app` (unique per branch)
+**Purpose**: Test changes before merging to production
+**Environment**: Uses Preview environment variables (or Production if not set)
+
+**Benefits**:
+- ✅ Test changes safely
+- ✅ Share with team for feedback
+- ✅ Catch issues before production
+- ✅ No risk to production site
+
+#### 2. Production Deployment (Main Branch)
+
+**When**: Every merge/push to `main` branch
+**URL**: `https://gridsolutions.app` (your custom domain)
+**Purpose**: Live production site
+**Environment**: Uses Production environment variables
+
+**Process**:
+1. Vercel automatically detects the push to `main`
 2. Builds the application
 3. Deploys to gridsolutions.app
-4. Uses environment variables from Vercel dashboard
+4. Uses environment variables from Vercel dashboard (Production)
 
 ### Manual Deployment Steps
 
@@ -159,7 +181,8 @@ When you merge to `main`:
 
 4. **Monitor Vercel deployment:**
    - Check Vercel dashboard for build status
-   - Verify deployment at gridsolutions.app
+   - **Preview**: Test on preview URL (e.g., `grid-xxxxx.vercel.app`)
+   - **Production**: Verify deployment at gridsolutions.app (after merging to main)
 
 ## 🔐 Environment Variables
 

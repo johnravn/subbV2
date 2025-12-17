@@ -29,6 +29,7 @@ import {
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { useAuthz } from '@shared/auth/useAuthz'
 import { supabase } from '@shared/api/supabase'
+import { getInitialsFromNameOrEmail } from '@shared/lib/generalFunctions'
 import { formatDistanceToNow } from 'date-fns'
 import { jobsIndexQuery } from '@features/jobs/api/queries'
 import { latestFeedQuery } from '@features/latest/api/queries'
@@ -158,16 +159,8 @@ export default function HomePage() {
     })
   }
 
-  const getInitials = (name: string | null, email: string): string => {
-    if (name) {
-      const parts = name.trim().split(/\s+/)
-      if (parts.length >= 2) {
-        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-      }
-      return name.substring(0, 2).toUpperCase()
-    }
-    return email.substring(0, 2).toUpperCase()
-  }
+  // Using shared getInitialsFromNameOrEmail from generalFunctions
+  const getInitials = getInitialsFromNameOrEmail
 
   const getAvatarUrl = (avatarPath: string | null): string | null => {
     if (!avatarPath) return null
@@ -954,7 +947,7 @@ function UpcomingJobsSection({
                 'Unassigned'
               const initials = getInitials(
                 job.project_lead?.display_name ?? null,
-                displayName,
+                job.project_lead?.email ?? '',
               )
               const customerName = job.customer?.name || 'No customer'
 

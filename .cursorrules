@@ -39,9 +39,50 @@ This project is primarily developed using AI agents. Follow these rules strictly
 - Use Radix UI Themes for components
 - Follow the feature-based folder structure in `src/features/`
 
+## GitHub & Deployment Workflow
+
+**ALL code changes must go through Pull Requests. Never push directly to `main`.**
+
+### Pull Request Workflow
+
+1. **Create feature branch**: `git checkout -b feature/description`
+2. **Make changes**: Code, test locally
+3. **Create migration** (if needed): `npm run db:migrate descriptive_name`
+4. **Test locally**: `npm run db:reset && npm run dev`
+5. **Push migration** (if backward-compatible): `npm run db:push` before merging
+6. **Commit and push**: `git push origin feature/description`
+7. **Create PR on GitHub**: Use the PR template
+8. **Test preview deployment**: Vercel creates preview URL automatically
+9. **Merge to main**: Only after testing preview - deploys to gridsolutions.app
+
+### Vercel Deployments
+
+- **Feature branches/PRs** → Preview deployment (`grid-xxxxx.vercel.app`)
+  - Use for testing before merging
+  - Safe to break, not production
+  
+- **Main branch** → Production deployment (`gridsolutions.app`)
+  - Live production site
+  - Only merge stable, tested code
+
+**⚠️ CRITICAL**: Always test on preview URL before merging to `main`. Production deployments happen automatically when merging to `main`.
+
+### PR Best Practices
+
+- ✅ One feature/fix per PR
+- ✅ Test on preview before merging
+- ✅ Fill out PR template completely
+- ✅ Document database changes
+- ✅ Verify build succeeds
+- ❌ Never push directly to `main`
+- ❌ Never merge broken previews
+- ❌ Never skip testing
+
 ## Documentation
 
 - **Deployment Workflow**: See `DEPLOYMENT_WORKFLOW.md` - Branch strategy, Vercel deployment, migration timing
+- **Pull Requests**: See `GITHUB_PULL_REQUESTS.md` - Complete PR guide
+- **Vercel Deployments**: See `VERCEL_DEPLOYMENTS.md` - Preview vs production explained
 - **Migration Workflow**: See `CONTRIBUTING.md`
 - **Supabase Development**: See `supabase/DEVELOPMENT_WORKFLOW.md`
 - **Migrations Directory**: See `supabase/migrations/README.md`
@@ -55,7 +96,20 @@ This project is primarily developed using AI agents. Follow these rules strictly
 3. Look at existing migrations for examples (e.g., `20250119000000_add_invoice_tracking.sql`)
 4. Always create a migration file - never modify schema directly
 
+## When Making Code Changes
+
+**Before writing any code:**
+
+1. Create a feature branch (never work directly on `main`)
+2. Make your changes
+3. Test locally (`npm run dev`)
+4. Create PR with proper description
+5. Test on Vercel preview URL
+6. Only merge to `main` when preview is tested and working
+
 ---
 
-**Remember**: When in doubt about database changes, always create a migration file and test it locally first!
+**Remember**: 
+- Database changes: Always create a migration file and test it locally first!
+- Code changes: Always use feature branches and PRs, test on preview before merging!
 

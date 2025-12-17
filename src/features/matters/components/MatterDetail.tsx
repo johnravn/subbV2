@@ -18,6 +18,7 @@ import { Check, Download, Edit, Send, Trash, Xmark, ArrowRight } from 'iconoir-r
 import { useNavigate } from '@tanstack/react-router'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { supabase } from '@shared/api/supabase'
+import { getInitials } from '@shared/lib/generalFunctions'
 import { useAuth } from '@app/providers/AuthProvider'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { useAuthz } from '@shared/auth/useAuthz'
@@ -338,19 +339,7 @@ export default function MatterDetail({
     return data.publicUrl
   }, [projectLead?.avatar_url])
 
-  // Helper function to get initials
-  const getInitials = React.useCallback(
-    (displayOrEmail: string | null): string => {
-      const base = (displayOrEmail || '').trim()
-      if (!base) return ''
-      const parts = base.split(/\s+/)
-      if (parts.length >= 2) {
-        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-      }
-      return base.slice(0, 2).toUpperCase()
-    },
-    [],
-  )
+  // Using shared getInitials from generalFunctions
 
   const leadName = projectLead?.display_name || projectLead?.email || null
   const leadInitials = leadName ? getInitials(leadName) : ''

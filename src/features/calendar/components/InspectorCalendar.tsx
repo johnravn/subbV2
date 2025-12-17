@@ -48,7 +48,7 @@ export default function InspectorCalendar({
   onLoadNext,
   showPagination = false,
 }: Props) {
-  const [listMode, setListMode] = React.useState(false)
+  const [listMode, setListMode] = React.useState(true)
   const [currentDate, setCurrentDate] = React.useState<Date>(new Date())
   const calendarRef = React.useRef<any>(null)
 

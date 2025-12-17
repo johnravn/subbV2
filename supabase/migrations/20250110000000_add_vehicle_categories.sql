@@ -1,7 +1,10 @@
 -- Add vehicle category enum and update vehicles and offer_transport_items tables
 
--- Create vehicle_category enum
-CREATE TYPE vehicle_category AS ENUM (
+-- Create vehicle_category enum if it doesn't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'vehicle_category') THEN
+        CREATE TYPE vehicle_category AS ENUM (
   'passenger_car_small',
   'passenger_car_medium',
   'passenger_car_big',
@@ -12,7 +15,9 @@ CREATE TYPE vehicle_category AS ENUM (
   'C1E',
   'C',
   'CE'
-);
+        );
+    END IF;
+END $$;
 
 -- Add vehicle_category column to vehicles table
 ALTER TABLE vehicles

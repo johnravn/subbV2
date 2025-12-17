@@ -19,7 +19,7 @@ import { supabase } from '@shared/api/supabase'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import InspectorSkeleton from '@shared/ui/components/InspectorSkeleton'
 import { formatDistanceToNow } from 'date-fns'
-import { makeWordPresentable } from '@shared/lib/generalFunctions'
+import { makeWordPresentable, getInitialsFromNameOrEmail } from '@shared/lib/generalFunctions'
 import {
   createActivityComment,
   deleteActivityComment,
@@ -33,16 +33,8 @@ import {
 } from '../utils/activityNavigation'
 import type { ActivityFeedItem, LatestInspectorData } from '../types'
 
-function getInitials(name: string | null, email: string): string {
-  if (name) {
-    const parts = name.trim().split(/\s+/)
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-    }
-    return name.substring(0, 2).toUpperCase()
-  }
-  return email.substring(0, 2).toUpperCase()
-}
+// Using shared getInitialsFromNameOrEmail from generalFunctions
+const getInitials = getInitialsFromNameOrEmail
 
 function getActivityGenericDescription(
   activity: ActivityFeedItem,

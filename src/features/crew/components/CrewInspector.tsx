@@ -13,6 +13,7 @@ import {
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@shared/api/supabase'
+import { getInitials } from '@shared/lib/generalFunctions'
 import { prettyPhone } from '@shared/phone/phone'
 import { EditPencil } from 'iconoir-react'
 import { toEventInputs } from '@features/calendar/components/domain'
@@ -118,7 +119,7 @@ export default function CrewInspector({ userId }: { userId: string | null }) {
             size="5"
             radius="full"
             src={avatarUrl ?? undefined}
-            fallback={initials(fullName ?? data.email)}
+            fallback={getInitials(fullName ?? data.email)}
             style={{ border: '1px solid var(--gray-5)' }}
           />
           <div>
@@ -381,14 +382,7 @@ function DD({ children }: { children: React.ReactNode }) {
   )
 }
 
-function initials(displayOrEmail: string) {
-  const base = displayOrEmail.trim()
-  if (!base) return '?'
-  const parts = base.split(/\s+/).filter(Boolean)
-  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
-  if (base.includes('@')) return base[0].toUpperCase()
-  return base.slice(0, 2).toUpperCase()
-}
+// Using shared getInitials from generalFunctions
 
 function formatMonthYear(iso: string | null | undefined) {
   if (!iso) return '—'

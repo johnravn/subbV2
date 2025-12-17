@@ -1,0 +1,28 @@
+-- Seed file for local database
+-- Generated: 2025-12-16T23:41:28.040Z
+-- 
+-- This file contains initial data that will be loaded after migrations
+-- Run: npm run db:reset (this seed file runs automatically)
+--
+-- IMPORTANT: This file is currently empty. To populate your local database:
+--
+-- Option 1: Copy data from remote (RECOMMENDED)
+--   npm run db:copy-data
+--   This copies all data from your remote database to local
+--
+-- Option 2: Generate seed from local database
+--   First, populate your local DB with data (via copy-data or manually)
+--   Then run: npm run db:generate-seed
+--   This will generate INSERT statements from your local data
+--
+-- Option 3: Add manual seed data below
+--   Add INSERT statements here for minimal test data
+--
+-- Note: For large datasets, use db:copy-data instead of seed files
+-- Seed files are best for small amounts of test data
+
+-- Add your seed data below this line
+-- Example:
+-- INSERT INTO profiles (id, email, display_name) VALUES 
+--   ('00000000-0000-0000-0000-000000000001', 'test@example.com', 'Test User')
+-- ON CONFLICT (id) DO NOTHING;

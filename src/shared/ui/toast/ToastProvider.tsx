@@ -2,8 +2,8 @@
 import * as React from 'react'
 import { createPortal } from 'react-dom'
 import * as Toast from '@radix-ui/react-toast'
-import { Text } from '@radix-ui/themes'
-import { CheckCircleSolid, InfoCircle, WarningTriangle } from 'iconoir-react'
+import { Button, Flex, Text } from '@radix-ui/themes'
+import { CheckCircleSolid, InfoCircle, WarningTriangle, Undo } from 'iconoir-react'
 
 type ToastKind = 'success' | 'error' | 'info'
 type ToastItem = {
@@ -12,11 +12,13 @@ type ToastItem = {
   description?: string
   kind: ToastKind
   duration?: number
+  onUndo?: () => void
+  undoLabel?: string
 }
 
 type ToastContextValue = {
   show: (opts: Omit<ToastItem, 'id' | 'kind'> & { kind?: ToastKind }) => void
-  success: (title: string, description?: string, duration?: number) => void
+  success: (title: string, description?: string, duration?: number, onUndo?: () => void, undoLabel?: string) => void
   error: (title: string, description?: string, duration?: number) => void
   info: (title: string, description?: string, duration?: number) => void
 }
@@ -27,6 +29,181 @@ export function useToast() {
   const ctx = React.useContext(ToastCtx)
   if (!ctx) throw new Error('useToast must be used within <AppToastProvider>')
   return ctx
+}
+
+// Separate component for each toast to manage its own timer state
+function ToastItem({
+  toast: t,
+  onRemove,
+}: {
+  toast: ToastItem
+  onRemove: (id: string) => void
+}) {
+  const duration = t.duration ?? 3000
+  const [timeRemaining, setTimeRemaining] = React.useState(duration)
+
+  // Timer effect
+  React.useEffect(() => {
+    if (duration <= 0) return
+    
+    const startTime = Date.now()
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - startTime
+      const remaining = Math.max(0, duration - elapsed)
+      setTimeRemaining(remaining)
+      
+      if (remaining === 0) {
+        clearInterval(interval)
+        // Auto-dismiss when countdown reaches 0
+        onRemove(t.id)
+      }
+    }, 100)
+
+    return () => clearInterval(interval)
+  }, [duration, t.id, onRemove])
+
+  const handleUndo = () => {
+    if (t.onUndo) {
+      t.onUndo()
+    }
+    onRemove(t.id)
+  }
+
+  // Get border color based on toast kind
+  const borderColor =
+    t.kind === 'success'
+      ? 'var(--green-9)'
+      : t.kind === 'error'
+        ? 'var(--red-9)'
+        : 'var(--blue-9)'
+
+  // Get icon color - using darker, more readable colors
+  const iconColor =
+    t.kind === 'success'
+      ? 'var(--green-11)'
+      : t.kind === 'error'
+        ? 'var(--red-11)'
+        : 'var(--blue-11)'
+
+  // Get subtle background tint based on toast kind
+  const backgroundTint =
+    t.kind === 'success'
+      ? 'rgba(46, 160, 67, 0.08)'
+      : t.kind === 'error'
+        ? 'rgba(231, 72, 74, 0.08)'
+        : 'rgba(49, 130, 206, 0.08)'
+
+  return (
+    <Toast.Root
+      open
+      onOpenChange={(open) => {
+        if (!open) onRemove(t.id)
+      }}
+      duration={duration}
+      style={{
+        background: backgroundTint,
+        backdropFilter: 'blur(16px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+        border: `1.5px solid ${borderColor}`,
+        borderRadius: 12,
+        padding: 14,
+        boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.15)',
+        display: 'flex',
+        gap: 10,
+        alignItems: 'flex-start',
+        maxWidth: 420,
+        zIndex: 2147483647, // Maximum z-index to appear above dialogs
+        position: 'relative',
+      }}
+    >
+      {/* Timer and undo button in top right */}
+      {t.onUndo && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-end',
+            gap: 6,
+          }}
+        >
+          {duration > 0 && (
+            <Text
+              size="1"
+              color="gray"
+              style={{
+                fontWeight: 500,
+              }}
+            >
+              {Math.ceil(timeRemaining / 1000)}s
+            </Text>
+          )}
+          <Button
+            size="2"
+            variant="ghost"
+            color="gray"
+            onClick={handleUndo}
+            style={{
+              fontWeight: 500,
+            }}
+          >
+            <Undo width={14} height={14} />
+            {t.undoLabel || 'Undo'}
+          </Button>
+        </div>
+      )}
+      
+      <div
+        style={{
+          lineHeight: 0,
+          marginTop: 2,
+          color: iconColor,
+          flexShrink: 0,
+        }}
+      >
+        {t.kind === 'success' ? (
+          <CheckCircleSolid width={20} height={20} />
+        ) : t.kind === 'error' ? (
+          <WarningTriangle width={20} height={20} />
+        ) : (
+          <InfoCircle width={20} height={20} />
+        )}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <Flex direction="column" gap="2">
+          <div>
+            <Toast.Title
+              style={{
+                fontWeight: 600,
+                color: 'var(--gray-12)',
+                fontSize: 14,
+                lineHeight: '20px',
+                marginBottom: t.description ? 4 : 0,
+                paddingRight: t.onUndo ? 100 : 0, // Make room for timer and button
+              }}
+            >
+              {t.title}
+            </Toast.Title>
+            {t.description && (
+              <Toast.Description asChild>
+                <Text
+                  size="2"
+                  style={{
+                    color: 'var(--gray-11)',
+                    lineHeight: '18px',
+                  }}
+                >
+                  {t.description}
+                </Text>
+              </Toast.Description>
+            )}
+          </div>
+        </Flex>
+      </div>
+    </Toast.Root>
+  )
 }
 
 export function AppToastProvider({ children }: { children: React.ReactNode }) {
@@ -58,8 +235,8 @@ export function AppToastProvider({ children }: { children: React.ReactNode }) {
       }
       push({ kind, ...rest })
     },
-    success: (title, description, duration) =>
-      push({ kind: 'success', title, description, duration }),
+    success: (title, description, duration, onUndo, undoLabel) =>
+      push({ kind: 'success', title, description, duration, onUndo, undoLabel }),
     error: (title, description, duration) => {
       // Log error to console for debugging
       console.error('[Toast Error]', {
@@ -99,99 +276,13 @@ export function AppToastProvider({ children }: { children: React.ReactNode }) {
         {children}
 
         {/* Render all active toasts */}
-        {toasts.map((t) => {
-          // Get border color based on toast kind
-          const borderColor =
-            t.kind === 'success'
-              ? 'var(--green-9)'
-              : t.kind === 'error'
-                ? 'var(--red-9)'
-                : 'var(--blue-9)'
-
-          // Get icon color - using darker, more readable colors
-          const iconColor =
-            t.kind === 'success'
-              ? 'var(--green-11)'
-              : t.kind === 'error'
-                ? 'var(--red-11)'
-                : 'var(--blue-11)'
-
-          // Get subtle background tint based on toast kind
-          const backgroundTint =
-            t.kind === 'success'
-              ? 'rgba(46, 160, 67, 0.08)'
-              : t.kind === 'error'
-                ? 'rgba(231, 72, 74, 0.08)'
-                : 'rgba(49, 130, 206, 0.08)'
-
-          return (
-            <Toast.Root
-              key={t.id}
-              open
-              onOpenChange={(open) => {
-                if (!open) remove(t.id)
-              }}
-              duration={t.duration ?? 3000}
-              style={{
-                background: backgroundTint,
-                backdropFilter: 'blur(16px) saturate(180%)',
-                WebkitBackdropFilter: 'blur(16px) saturate(180%)',
-                border: `1.5px solid ${borderColor}`,
-                borderRadius: 12,
-                padding: 14,
-                boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.15)',
-                display: 'flex',
-                gap: 10,
-                alignItems: 'flex-start',
-                maxWidth: 420,
-                zIndex: 2147483647, // Maximum z-index to appear above dialogs
-              }}
-            >
-              <div
-                style={{
-                  lineHeight: 0,
-                  marginTop: 2,
-                  color: iconColor,
-                  flexShrink: 0,
-                }}
-              >
-                {t.kind === 'success' ? (
-                  <CheckCircleSolid width={20} height={20} />
-                ) : t.kind === 'error' ? (
-                  <WarningTriangle width={20} height={20} />
-                ) : (
-                  <InfoCircle width={20} height={20} />
-                )}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <Toast.Title
-                  style={{
-                    fontWeight: 600,
-                    color: 'var(--gray-12)',
-                    fontSize: 14,
-                    lineHeight: '20px',
-                    marginBottom: t.description ? 4 : 0,
-                  }}
-                >
-                  {t.title}
-                </Toast.Title>
-                {t.description && (
-                  <Toast.Description asChild>
-                    <Text
-                      size="2"
-                      style={{
-                        color: 'var(--gray-11)',
-                        lineHeight: '18px',
-                      }}
-                    >
-                      {t.description}
-                    </Text>
-                  </Toast.Description>
-                )}
-              </div>
-            </Toast.Root>
-          )
-        })}
+        {toasts.map((t) => (
+          <ToastItem
+            key={t.id}
+            toast={t}
+            onRemove={remove}
+          />
+        ))}
 
         {/* Portal viewport to document.body to ensure it's rendered after dialogs in DOM order */}
         {mounted && typeof document !== 'undefined'

@@ -19,6 +19,7 @@ import {
 } from '@radix-ui/themes'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@shared/api/supabase'
+import { getInitials } from '@shared/lib/generalFunctions'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import DateTimePicker from '@shared/ui/components/DateTimePicker'
 import { Camera } from 'iconoir-react'
@@ -368,7 +369,7 @@ export default function ProfilePage() {
           <Flex align="center" gap="3">
             <Avatar
               src={avatarUrl ?? undefined}
-              initials={initials(form.display_name || data.email)}
+              initials={getInitials(form.display_name || data.email)}
             />
             <Box>
               <Heading size="4">{form.display_name || data.email}</Heading>
@@ -889,14 +890,7 @@ function Avatar({ src, initials }: { src?: string; initials: string }) {
   )
 }
 
-function initials(displayOrEmail: string) {
-  const base = displayOrEmail.trim()
-  if (!base) return '?'
-  const parts = base.split(/\s+/).filter(Boolean)
-  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
-  if (base.includes('@')) return base[0].toUpperCase()
-  return base.slice(0, 2).toUpperCase()
-}
+// Using shared getInitials from generalFunctions
 
 function BackgroundOption({
   label,
