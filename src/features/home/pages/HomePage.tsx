@@ -10,7 +10,6 @@ import {
   Flex,
   Grid,
   Heading,
-  IconButton,
   Select,
   Separator,
   Spinner,
@@ -21,8 +20,8 @@ import { useQuery } from '@tanstack/react-query'
 import {
   ArrowDown,
   Building,
+  Coins,
   Eye,
-  EyeOff,
   GoogleDocs,
   Message,
   RssFeed,
@@ -49,10 +48,18 @@ export default function HomePage() {
   const { userId, companyRole, caps } = useAuthz()
   const navigate = useNavigate()
 
-  // Calculate date range for next 14 days
+  // Calculate date range for upcoming jobs
   const now = new Date()
-  const fourteenDaysFromNow = new Date(now)
-  fourteenDaysFromNow.setDate(now.getDate() + 14)
+  const [daysFilter, setDaysFilter] = React.useState<'7' | '14' | '30' | 'all'>(
+    '14',
+  )
+
+  const dateRangeEnd = React.useMemo(() => {
+    if (daysFilter === 'all') return null
+    const endDate = new Date(now)
+    endDate.setDate(now.getDate() + parseInt(daysFilter, 10))
+    return endDate
+  }, [daysFilter, now])
 
   // Fetch upcoming jobs
   const isFreelancer = companyRole === 'freelancer'
@@ -70,15 +77,24 @@ export default function HomePage() {
     enabled: !!companyId,
   })
 
-  // Filter jobs for next 14 days
+  // Filter jobs based on selected date range
   const upcomingJobs = React.useMemo(() => {
     if (!jobsData) return []
     return jobsData.filter((job) => {
+      // Always include jobs that are in progress
+      if (job.status === 'in_progress') {
+        return true
+      }
+
       if (!job.start_at) return false
       const startDate = new Date(job.start_at)
-      return startDate >= now && startDate <= fourteenDaysFromNow
+      if (dateRangeEnd === null) {
+        // Show all - include future dates and in-progress jobs
+        return startDate >= now
+      }
+      return startDate >= now && startDate <= dateRangeEnd
     })
-  }, [jobsData, now, fourteenDaysFromNow])
+  }, [jobsData, now, dateRangeEnd])
 
   // Filter to show only my jobs if toggle is on (but not for freelancers - they're already filtered)
   const filteredUpcomingJobs = React.useMemo(() => {
@@ -320,7 +336,7 @@ export default function HomePage() {
     return (
       <Box style={{ width: '100%', height: '100%' }}>
         <Grid columns="1fr" gap="4" style={{ height: '100%' }}>
-          {/* Left Column: Revenue and Upcoming Jobs */}
+          {/* Left Column: Revenue and Latest */}
           <Flex direction="column" gap="4" style={{ height: '100%' }}>
             {!isFreelancer && (
               <Box style={{ flex: 3, minHeight: 0 }}>
@@ -342,20 +358,20 @@ export default function HomePage() {
                 />
               </Box>
             )}
-            <Box style={{ flex: 2, minHeight: 0 }}>
-              <UpcomingJobsSection
-                jobs={filteredUpcomingJobs}
-                loading={jobsLoading}
-                showMyJobsOnly={showMyJobsOnly}
-                onToggleMyJobsOnly={setShowMyJobsOnly}
-                getInitials={getInitials}
-                getAvatarUrl={getAvatarUrl}
-                isFreelancer={isFreelancer}
-              />
-            </Box>
+            {canSeeLatest && (
+              <Box style={{ flex: 1, minHeight: '40%' }}>
+                <LatestSection
+                  activities={latestData?.items || []}
+                  loading={latestLoading}
+                  onActivityClick={handleLatestClick}
+                  getInitials={getInitials}
+                  getAvatarUrl={getAvatarUrl}
+                />
+              </Box>
+            )}
           </Flex>
 
-          {/* Right Column: Notifications and Latest */}
+          {/* Right Column: Notifications and Upcoming Jobs */}
           <Flex direction="column" gap="4" style={{ height: '100%' }}>
             {unreadMatters.length > 0 && (
               <Box style={{ minHeight: 0 }}>
@@ -367,17 +383,19 @@ export default function HomePage() {
                 />
               </Box>
             )}
-            {canSeeLatest && (
-              <Box style={{ flex: 1, minHeight: 0 }}>
-                <LatestSection
-                  activities={latestData?.items || []}
-                  loading={latestLoading}
-                  onActivityClick={handleLatestClick}
-                  getInitials={getInitials}
-                  getAvatarUrl={getAvatarUrl}
-                />
-              </Box>
-            )}
+            <Box style={{ flex: 2, minHeight: 0 }}>
+              <UpcomingJobsSection
+                jobs={filteredUpcomingJobs}
+                loading={jobsLoading}
+                showMyJobsOnly={showMyJobsOnly}
+                onToggleMyJobsOnly={setShowMyJobsOnly}
+                getInitials={getInitials}
+                getAvatarUrl={getAvatarUrl}
+                isFreelancer={isFreelancer}
+                daysFilter={daysFilter}
+                onDaysFilterChange={setDaysFilter}
+              />
+            </Box>
           </Flex>
         </Grid>
       </Box>
@@ -404,7 +422,7 @@ export default function HomePage() {
           minHeight: 0,
         }}
       >
-        {/* Left Column: Revenue and Upcoming Jobs */}
+        {/* Left Column: Revenue and Latest */}
         <Flex
           direction="column"
           gap="4"
@@ -438,17 +456,17 @@ export default function HomePage() {
               />
             </Box>
           )}
-          <Box style={{ flex: 2, minHeight: 0 }}>
-            <UpcomingJobsSection
-              jobs={filteredUpcomingJobs}
-              loading={jobsLoading}
-              showMyJobsOnly={showMyJobsOnly}
-              onToggleMyJobsOnly={setShowMyJobsOnly}
-              getInitials={getInitials}
-              getAvatarUrl={getAvatarUrl}
-              isFreelancer={isFreelancer}
-            />
-          </Box>
+          {canSeeLatest && (
+            <Box style={{ flex: 1, minHeight: '40%' }}>
+              <LatestSection
+                activities={latestData?.items || []}
+                loading={latestLoading}
+                onActivityClick={handleLatestClick}
+                getInitials={getInitials}
+                getAvatarUrl={getAvatarUrl}
+              />
+            </Box>
+          )}
         </Flex>
 
         {/* RESIZER */}
@@ -484,7 +502,7 @@ export default function HomePage() {
           }}
         />
 
-        {/* Right Column: Notifications and Latest */}
+        {/* Right Column: Notifications and Upcoming Jobs */}
         <Flex
           direction="column"
           gap="4"
@@ -508,17 +526,19 @@ export default function HomePage() {
               />
             </Box>
           )}
-          {canSeeLatest && (
-            <Box style={{ flex: 1, minHeight: 0 }}>
-              <LatestSection
-                activities={latestData?.items || []}
-                loading={latestLoading}
-                onActivityClick={handleLatestClick}
-                getInitials={getInitials}
-                getAvatarUrl={getAvatarUrl}
-              />
-            </Box>
-          )}
+          <Box style={{ flex: 2, minHeight: 0 }}>
+            <UpcomingJobsSection
+              jobs={filteredUpcomingJobs}
+              loading={jobsLoading}
+              showMyJobsOnly={showMyJobsOnly}
+              onToggleMyJobsOnly={setShowMyJobsOnly}
+              getInitials={getInitials}
+              getAvatarUrl={getAvatarUrl}
+              isFreelancer={isFreelancer}
+              daysFilter={daysFilter}
+              onDaysFilterChange={setDaysFilter}
+            />
+          </Box>
         </Flex>
       </Flex>
     </Box>
@@ -629,18 +649,20 @@ function RevenueSection({
       headerAction={
         hasAccountingSystem ? (
           <Flex gap="2" align="center">
-            <IconButton
+            <Button
               size="2"
-              variant={showKPIs ? 'soft' : 'ghost'}
+              variant="soft"
               onClick={() => setShowKPIs(!showKPIs)}
-              aria-label={showKPIs ? 'Hide revenue numbers' : 'Show revenue numbers'}
+              aria-label={
+                showKPIs ? 'Hide revenue numbers' : 'Show revenue numbers'
+              }
+              style={{
+                padding: 'var(--space-2) var(--space-3)',
+                minWidth: 'auto',
+              }}
             >
-              {showKPIs ? (
-                <EyeOff width={16} height={16} />
-              ) : (
-                <Eye width={16} height={16} />
-              )}
-            </IconButton>
+              <Coins width={16} height={16} style={{ color: 'currentColor' }} />
+            </Button>
             <Select.Root
               value={chartType}
               onValueChange={(value) =>
@@ -736,7 +758,9 @@ function RevenueSection({
                         <Separator />
                         <KPI
                           label={`${selectedYear} Expenses`}
-                          value={formatCurrency(incomeExpensesData?.sumExpenses)}
+                          value={formatCurrency(
+                            incomeExpensesData?.sumExpenses,
+                          )}
                         />
                         <Separator />
                         <KPI
@@ -756,7 +780,7 @@ function RevenueSection({
                   variant="soft"
                   style={{
                     position: 'absolute',
-                    bottom: '12px',
+                    bottom: '0',
                     right: '12px',
                     borderRadius: '8px',
                     padding: '8px 12px',
@@ -819,6 +843,8 @@ function UpcomingJobsSection({
   getInitials,
   getAvatarUrl,
   isFreelancer,
+  daysFilter,
+  onDaysFilterChange,
 }: {
   jobs: Array<{
     id: string
@@ -843,6 +869,8 @@ function UpcomingJobsSection({
   getInitials: (name: string | null, email: string) => string
   getAvatarUrl: (avatarPath: string | null) => string | null
   isFreelancer: boolean
+  daysFilter: '7' | '14' | '30' | 'all'
+  onDaysFilterChange: (value: '7' | '14' | '30' | 'all') => void
 }) {
   const navigate = useNavigate()
   const scrollContainerRef = React.useRef<HTMLDivElement>(null)
@@ -903,21 +931,34 @@ function UpcomingJobsSection({
     }
   }
 
+  const getDaysLabel = (value: '7' | '14' | '30' | 'all') => {
+    if (value === 'all') return 'Show all'
+    return `Next ${value} days`
+  }
+
   return (
     <DashboardCard
       title="Upcoming Jobs"
       icon={<GoogleDocs width={18} height={18} />}
-      footer={
+      headerAction={
         !isFreelancer ? (
-          <Flex
-            gap="2"
-            align="center"
-            justify="between"
-            style={{ width: '100%' }}
-          >
-            <Text size="1" color="gray">
-              Next 14 days
-            </Text>
+          <Flex gap="2" align="center">
+            <Select.Root
+              value={daysFilter}
+              onValueChange={(value) =>
+                onDaysFilterChange(value as '7' | '14' | '30' | 'all')
+              }
+            >
+              <Select.Trigger variant="soft" style={{ minWidth: '120px' }}>
+                {getDaysLabel(daysFilter)}
+              </Select.Trigger>
+              <Select.Content>
+                <Select.Item value="7">Next 7 days</Select.Item>
+                <Select.Item value="14">Next 14 days</Select.Item>
+                <Select.Item value="30">Next 30 days</Select.Item>
+                <Select.Item value="all">Show all</Select.Item>
+              </Select.Content>
+            </Select.Root>
             <Flex gap="2" align="center">
               <Text size="1" color="gray">
                 My jobs only
@@ -930,9 +971,22 @@ function UpcomingJobsSection({
             </Flex>
           </Flex>
         ) : (
-          <Text size="1" color="gray">
-            Next 14 days
-          </Text>
+          <Select.Root
+            value={daysFilter}
+            onValueChange={(value) =>
+              onDaysFilterChange(value as '7' | '14' | '30' | 'all')
+            }
+          >
+            <Select.Trigger variant="soft" style={{ minWidth: '120px' }}>
+              {getDaysLabel(daysFilter)}
+            </Select.Trigger>
+            <Select.Content>
+              <Select.Item value="7">Next 7 days</Select.Item>
+              <Select.Item value="14">Next 14 days</Select.Item>
+              <Select.Item value="30">Next 30 days</Select.Item>
+              <Select.Item value="all">Show all</Select.Item>
+            </Select.Content>
+          </Select.Root>
         )
       }
     >
@@ -944,8 +998,8 @@ function UpcomingJobsSection({
         <Box py="4">
           <Text size="2" color="gray" align="center">
             {isFreelancer
-              ? 'No jobs booked in the next 14 days'
-              : 'No upcoming jobs in the next 14 days'}
+              ? `No jobs booked ${daysFilter === 'all' ? '' : `in the next ${daysFilter} days`}`
+              : `No upcoming jobs ${daysFilter === 'all' ? '' : `in the next ${daysFilter} days`}`}
           </Text>
         </Box>
       ) : (
@@ -997,9 +1051,16 @@ function UpcomingJobsSection({
                       gap="1"
                       style={{ flex: 1, minWidth: 0 }}
                     >
-                      <Text size="2" weight="medium">
-                        {job.title}
-                      </Text>
+                      <Flex gap="2" align="center">
+                        <Text size="2" weight="medium">
+                          {job.title}
+                        </Text>
+                        {job.status === 'in_progress' && (
+                          <Badge size="1" color="green" variant="soft">
+                            In Progress
+                          </Badge>
+                        )}
+                      </Flex>
                       <Flex gap="2" align="center">
                         <Text size="2" color="gray" weight="medium">
                           {customerName}

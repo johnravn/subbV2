@@ -35,32 +35,34 @@ try {
 
   // Use pg_dump to get data - write to temp file first
   log('1️⃣  Dumping data from local database...', 'cyan')
-  
+
   const tempFile = 'supabase/seed.tmp.sql'
-  
+
   // Run pg_dump with larger buffer and write to temp file
   try {
     log('   (This may take a moment for large databases...)', 'yellow')
     const result = execSync(
       `docker exec supabase_db_grid pg_dump -U postgres -d postgres --data-only --column-inserts --no-owner --no-privileges --no-tablespaces`,
-      { 
+      {
         encoding: 'utf-8',
         maxBuffer: 1024 * 1024 * 100, // 100MB buffer
-      }
+      },
     )
     writeFileSync(tempFile, result, 'utf-8')
   } catch (error) {
     log(`❌ Failed to dump database: ${error.message}`, 'red')
     if (existsSync(tempFile)) {
-      try { unlinkSync(tempFile) } catch {}
+      try {
+        unlinkSync(tempFile)
+      } catch {}
     }
     process.exit(1)
   }
-  
+
   // Read the temp file
   log('   Dump completed, processing...', 'cyan')
   const dumpOutput = readFileSync(tempFile, 'utf-8')
-  
+
   // Clean up temp file
   try {
     unlinkSync(tempFile)
@@ -69,7 +71,7 @@ try {
   // Filter out system tables and clean up the dump
   // Only keep pure INSERT INTO ... VALUES statements
   log('2️⃣  Processing dump output...', 'cyan')
-  
+
   const lines = dumpOutput.split('\n')
   const filteredLines = []
   let currentInsert = []
@@ -86,6 +88,7 @@ try {
     'audit_log_entries', // auth.audit_log_entries
     'buckets', // storage.buckets (these are created by migrations)
     'objects', // storage.objects (files - too large and sensitive)
+    'profiles', // profiles are copied from remote via db:copy-auth, and depend on auth.users
   ])
 
   // Skip lines that indicate DDL statements (functions, triggers, etc.)
@@ -109,22 +112,26 @@ try {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim()
-    
+
     // Skip empty lines, comments (except our table comments), SET statements, and DDL
     if (!line) continue
-    
+
     // Skip DDL statements
-    if (skipPatterns.some(pattern => pattern.test(line))) {
+    if (skipPatterns.some((pattern) => pattern.test(line))) {
       inInsert = false
       currentInsert = []
       continue
     }
-    
+
     // Skip SET, SELECT, and other non-INSERT statements
-    if (line.startsWith('SET ') || line.startsWith('SELECT ') || line.startsWith('\\')) {
+    if (
+      line.startsWith('SET ') ||
+      line.startsWith('SELECT ') ||
+      line.startsWith('\\')
+    ) {
       continue
     }
-    
+
     // Skip comments except our table markers
     if (line.startsWith('--')) {
       // Only keep our table comments
@@ -142,29 +149,59 @@ try {
       // Finish previous INSERT if any
       if (currentInsert.length > 0) {
         const fullInsert = currentInsert.join(' ')
-        if (fullInsert.includes('VALUES') && fullInsert.includes(')') && !fullInsert.match(/VALUES\s*\(\s*\)/)) {
+        if (
+          fullInsert.includes('VALUES') &&
+          fullInsert.includes(')') &&
+          !fullInsert.match(/VALUES\s*\(\s*\)/)
+        ) {
+          // Add ON CONFLICT DO NOTHING if not already present
+          if (!fullInsert.toUpperCase().includes('ON CONFLICT')) {
+            // Remove trailing semicolon if present
+            const lastLine = currentInsert[currentInsert.length - 1]
+            if (lastLine.endsWith(');')) {
+              currentInsert[currentInsert.length - 1] = lastLine.slice(0, -2)
+              currentInsert.push(' ON CONFLICT DO NOTHING;')
+            } else if (lastLine.endsWith(';')) {
+              currentInsert[currentInsert.length - 1] = lastLine.slice(0, -1)
+              currentInsert.push(' ON CONFLICT DO NOTHING;')
+            } else {
+              currentInsert.push(' ON CONFLICT DO NOTHING;')
+            }
+          }
           filteredLines.push(...currentInsert)
         }
         currentInsert = []
       }
-      
+
       const match = line.match(/INSERT INTO (?:([a-z_]+)\.)?(\w+)/i)
       if (match) {
         const schemaName = match[1] || 'public'
         const tableName = match[2]
-        
+
         // Check if schema should be excluded (system schemas)
-        const shouldExcludeSchema = excludedSchemas.some(excluded => schemaName.startsWith(excluded))
-        
+        const shouldExcludeSchema = excludedSchemas.some((excluded) =>
+          schemaName.startsWith(excluded),
+        )
+
         // Check if table should be excluded
-        const shouldExcludeTable = Array.from(excludedTables).some(excluded => tableName.startsWith(excluded) || tableName === excluded)
-        
+        const shouldExcludeTable = Array.from(excludedTables).some(
+          (excluded) =>
+            tableName.startsWith(excluded) || tableName === excluded,
+        )
+
         if (!shouldExcludeSchema && !shouldExcludeTable) {
           inInsert = true
           // Add table comment
-          if (filteredLines.length === 0 || !filteredLines[filteredLines.length - 1]?.includes(`-- Seed data for ${tableName}`)) {
+          if (
+            filteredLines.length === 0 ||
+            !filteredLines[filteredLines.length - 1]?.includes(
+              `-- Seed data for ${tableName}`,
+            )
+          ) {
             filteredLines.push('')
-            filteredLines.push(`-- Seed data for ${schemaName !== 'public' ? `${schemaName}.` : ''}${tableName}`)
+            filteredLines.push(
+              `-- Seed data for ${schemaName !== 'public' ? `${schemaName}.` : ''}${tableName}`,
+            )
           }
           currentInsert.push(line)
         } else {
@@ -174,26 +211,36 @@ try {
     } else if (inInsert) {
       // Continue INSERT statement (continuation lines)
       // Skip if it looks like DDL or function code
-      if (skipPatterns.some(pattern => pattern.test(line)) || 
-          line.includes('RETURNING') || 
-          line.includes('INTO ') ||
-          line.match(/^\s*(CASE|WHEN|THEN|ELSE|END|IF|BEGIN)/i)) {
+      if (
+        skipPatterns.some((pattern) => pattern.test(line)) ||
+        line.includes('RETURNING') ||
+        line.includes('INTO ') ||
+        line.match(/^\s*(CASE|WHEN|THEN|ELSE|END|IF|BEGIN)/i)
+      ) {
         // Hit something that's not part of VALUES, stop current INSERT
         currentInsert = []
         inInsert = false
         continue
       }
-      
+
       currentInsert.push(line)
       // End of INSERT statement
       if (line.endsWith(');')) {
         const fullInsert = currentInsert.join(' ')
         // Validate: must have VALUES and complete parentheses, and not contain function keywords
-        if (fullInsert.includes('VALUES') && 
-            fullInsert.includes('(') && 
-            fullInsert.includes(')') &&
-            !fullInsert.match(/VALUES\s*\(\s*\)/) &&
-            !fullInsert.match(/(RETURNING|INTO\s+\w+|CASE\s+WHEN|BEGIN\s+IF)/i)) {
+        if (
+          fullInsert.includes('VALUES') &&
+          fullInsert.includes('(') &&
+          fullInsert.includes(')') &&
+          !fullInsert.match(/VALUES\s*\(\s*\)/) &&
+          !fullInsert.match(/(RETURNING|INTO\s+\w+|CASE\s+WHEN|BEGIN\s+IF)/i)
+        ) {
+          // Add ON CONFLICT DO NOTHING if not already present
+          if (!fullInsert.toUpperCase().includes('ON CONFLICT')) {
+            // Remove trailing semicolon from last line
+            currentInsert[currentInsert.length - 1] = line.slice(0, -2)
+            currentInsert.push(' ON CONFLICT DO NOTHING;')
+          }
           filteredLines.push(...currentInsert)
         }
         currentInsert = []
@@ -201,11 +248,28 @@ try {
       }
     }
   }
-  
+
   // Finish any remaining INSERT
   if (currentInsert.length > 0) {
     const fullInsert = currentInsert.join(' ')
-    if (fullInsert.includes('VALUES') && fullInsert.includes(')') && !fullInsert.match(/VALUES\s*\(\s*\)/)) {
+    if (
+      fullInsert.includes('VALUES') &&
+      fullInsert.includes(')') &&
+      !fullInsert.match(/VALUES\s*\(\s*\)/)
+    ) {
+      // Add ON CONFLICT DO NOTHING if not already present
+      if (!fullInsert.toUpperCase().includes('ON CONFLICT')) {
+        const lastLine = currentInsert[currentInsert.length - 1]
+        if (lastLine.endsWith(');')) {
+          currentInsert[currentInsert.length - 1] = lastLine.slice(0, -2)
+          currentInsert.push(' ON CONFLICT DO NOTHING;')
+        } else if (lastLine.endsWith(';')) {
+          currentInsert[currentInsert.length - 1] = lastLine.slice(0, -1)
+          currentInsert.push(' ON CONFLICT DO NOTHING;')
+        } else {
+          currentInsert.push(' ON CONFLICT DO NOTHING;')
+        }
+      }
       filteredLines.push(...currentInsert)
     }
   }
@@ -228,11 +292,21 @@ ${filteredLines.join('\n')}
   writeFileSync(seedPath, seedContent, 'utf-8')
 
   log(`\n✅ Seed file created: ${seedPath}`, 'green')
-  log(`   Contains data from ${new Set(filteredLines.filter(l => l.startsWith('-- Seed data for')).map(l => l.match(/Seed data for (\w+)/)?.[1]).filter(Boolean)).size} tables`, 'cyan')
-  
+  log(
+    `   Contains data from ${
+      new Set(
+        filteredLines
+          .filter((l) => l.startsWith('-- Seed data for'))
+          .map((l) => l.match(/Seed data for (\w+)/)?.[1])
+          .filter(Boolean),
+      ).size
+    } tables`,
+    'cyan',
+  )
+
   const fileSize = (seedContent.length / 1024).toFixed(1)
   log(`   File size: ${fileSize} KB`, 'cyan')
-  
+
   if (parseFloat(fileSize) > 100) {
     log('\n⚠️  Warning: Seed file is quite large (>100KB)', 'yellow')
     log('   Consider if you really want all this data in git', 'yellow')
@@ -243,9 +317,7 @@ ${filteredLines.join('\n')}
   log('   1. Review the seed file: cat supabase/seed.sql | head -50', 'cyan')
   log('   2. Test it: npm run db:reset (seed runs automatically)', 'cyan')
   log('   3. Commit if you want: git add supabase/seed.sql', 'cyan')
-  
 } catch (error) {
   log(`❌ Error: ${error.message}`, 'red')
   process.exit(1)
 }
-
