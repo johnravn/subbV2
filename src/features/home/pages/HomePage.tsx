@@ -10,6 +10,7 @@ import {
   Flex,
   Grid,
   Heading,
+  IconButton,
   Select,
   Separator,
   Spinner,
@@ -21,6 +22,7 @@ import {
   ArrowDown,
   Building,
   Eye,
+  EyeOff,
   GoogleDocs,
   Message,
   RssFeed,
@@ -562,6 +564,7 @@ function RevenueSection({
 }) {
   const navigate = useNavigate()
   const [logoError, setLogoError] = React.useState(false)
+  const [showKPIs, setShowKPIs] = React.useState(false)
 
   const showConfigureButton = isOwner && !hasAccountingSystem
 
@@ -626,6 +629,18 @@ function RevenueSection({
       headerAction={
         hasAccountingSystem ? (
           <Flex gap="2" align="center">
+            <IconButton
+              size="2"
+              variant={showKPIs ? 'soft' : 'ghost'}
+              onClick={() => setShowKPIs(!showKPIs)}
+              aria-label={showKPIs ? 'Hide revenue numbers' : 'Show revenue numbers'}
+            >
+              {showKPIs ? (
+                <EyeOff width={16} height={16} />
+              ) : (
+                <Eye width={16} height={16} />
+              )}
+            </IconButton>
             <Select.Root
               value={chartType}
               onValueChange={(value) =>
@@ -700,37 +715,39 @@ function RevenueSection({
                     onChartTypeChange={onChartTypeChange}
                   />
                 </Box>
-                {/* KPIs on the right */}
-                <Box style={{ width: '160px', minWidth: '160px' }}>
-                  <Flex direction="column" gap="3">
-                    <Flex
-                      direction="column"
-                      gap="3"
-                      style={{
-                        padding: '12px',
-                        background: 'var(--gray-2)',
-                        borderRadius: '8px',
-                        height: 'fit-content',
-                      }}
-                    >
-                      <KPI
-                        label={`${selectedYear} Revenue`}
-                        value={formatCurrency(incomeExpensesData?.sumIncome)}
-                      />
-                      <Separator />
-                      <KPI
-                        label={`${selectedYear} Expenses`}
-                        value={formatCurrency(incomeExpensesData?.sumExpenses)}
-                      />
-                      <Separator />
-                      <KPI
-                        label="Net Profit"
-                        value={formatCurrency(incomeExpensesData?.sumResult)}
-                        highlight
-                      />
+                {/* KPIs on the right - conditionally rendered */}
+                {showKPIs && (
+                  <Box style={{ width: '160px', minWidth: '160px' }}>
+                    <Flex direction="column" gap="3">
+                      <Flex
+                        direction="column"
+                        gap="3"
+                        style={{
+                          padding: '12px',
+                          background: 'var(--gray-2)',
+                          borderRadius: '8px',
+                          height: 'fit-content',
+                        }}
+                      >
+                        <KPI
+                          label={`${selectedYear} Revenue`}
+                          value={formatCurrency(incomeExpensesData?.sumIncome)}
+                        />
+                        <Separator />
+                        <KPI
+                          label={`${selectedYear} Expenses`}
+                          value={formatCurrency(incomeExpensesData?.sumExpenses)}
+                        />
+                        <Separator />
+                        <KPI
+                          label="Net Profit"
+                          value={formatCurrency(incomeExpensesData?.sumResult)}
+                          highlight
+                        />
+                      </Flex>
                     </Flex>
-                  </Flex>
-                </Box>
+                  </Box>
+                )}
               </Flex>
               {/* Accounting system redirect button - bottom right */}
               {accountingSystemUrl && (
