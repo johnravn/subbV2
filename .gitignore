@@ -7,6 +7,9 @@
 # Keep the example file
 !.env.example
 
+# Dependencies
+node_modules/
+
 # Lockfiles (use npm, ignore pnpm/yarn)
 pnpm-lock.yaml
 yarn.lock
