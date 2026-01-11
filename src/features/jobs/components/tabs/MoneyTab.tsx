@@ -53,13 +53,174 @@ export default function MoneyTab({ jobId }: { jobId: string }) {
     enabled: !!companyId,
   })
 
+  // Fetch company general rates
+  const { data: companyRates } = useQuery({
+    queryKey: ['company', companyId, 'general-rates'] as const,
+    enabled: !!companyId,
+    queryFn: async () => {
+      if (!companyId) return null
+      const { data, error } = await supabase
+        .from('companies')
+        .select('employee_daily_rate, employee_hourly_rate, owner_daily_rate, owner_hourly_rate')
+        .eq('id', companyId)
+        .single()
+      if (error) throw error
+      return data
+    },
+  })
+
+  // Fetch crew bookings with user info and rates
+  const { data: crewBookings } = useQuery({
+    queryKey: ['jobs', jobId, 'money', 'crew-expenses'],
+    enabled: !!companyId,
+    queryFn: async () => {
+      // Get all crew time periods for this job
+      const { data: timePeriods, error: tpError } = await supabase
+        .from('time_periods')
+        .select('id, start_at, end_at')
+        .eq('job_id', jobId)
+        .eq('category', 'crew')
+
+      if (tpError) throw tpError
+      if (!timePeriods || timePeriods.length === 0) return []
+
+      const timePeriodIds = timePeriods.map((tp) => tp.id)
+
+      // Get reserved_crew with user info
+      const { data: reservedCrew, error: crewError } = await supabase
+        .from('reserved_crew')
+        .select(
+          `
+          id,
+          user_id,
+          time_period_id,
+          user:user_id (
+            user_id,
+            display_name,
+            email
+          )
+        `,
+        )
+        .in('time_period_id', timePeriodIds)
+
+      if (crewError) throw crewError
+      if (!reservedCrew || reservedCrew.length === 0) return []
+
+      // Get user IDs to fetch company_user rates
+      const userIds = reservedCrew.map((rc: any) => rc.user_id)
+
+      // Fetch company_user rates for these users
+      const { data: companyUsers, error: cuError } = await supabase
+        .from('company_user_profiles')
+        .select('user_id, role, rate_type, rate')
+        .eq('company_id', companyId!)
+        .in('user_id', userIds)
+
+      if (cuError) throw cuError
+
+      // Create a map of user_id to company_user data
+      const userRatesMap = new Map(
+        (companyUsers || []).map((cu: any) => [cu.user_id, cu]),
+      )
+
+      // Map to include time period info and rates
+      return (reservedCrew || []).map((rc: any) => {
+        const timePeriod = timePeriods.find((tp) => tp.id === rc.time_period_id)
+        const user = Array.isArray(rc.user) ? rc.user[0] : rc.user
+        const companyUser = userRatesMap.get(rc.user_id)
+
+        return {
+          id: rc.id,
+          user_id: rc.user_id,
+          user_name: user?.display_name || user?.email || 'Unknown',
+          role: companyUser?.role || null,
+          rate_type: companyUser?.rate_type || null,
+          rate: companyUser?.rate ? Number(companyUser.rate) : null,
+          time_period_id: rc.time_period_id,
+          start_at: timePeriod?.start_at || null,
+          end_at: timePeriod?.end_at || null,
+        }
+      })
+    },
+  })
+
+  // Calculate crew expenses
+  const crewExpenses = React.useMemo(() => {
+    if (!crewBookings || !companyRates) return []
+
+    return crewBookings
+      .map((booking) => {
+        if (!booking.start_at || !booking.end_at) return null
+
+        const start = new Date(booking.start_at)
+        const end = new Date(booking.end_at)
+        const durationMs = end.getTime() - start.getTime()
+        const durationHours = durationMs / (1000 * 60 * 60)
+        const durationDays = durationHours / 24
+
+        let rate: number | null = null
+        let rateType: 'daily' | 'hourly' | null = null
+
+        // Determine rate based on role
+        if (booking.role === 'freelancer') {
+          // Use individual freelancer rate
+          rate = booking.rate
+          rateType = booking.rate_type
+        } else if (booking.role === 'employee') {
+          // Use general employee rates (prefer daily if both exist)
+          if (companyRates.employee_daily_rate) {
+            rate = Number(companyRates.employee_daily_rate)
+            rateType = 'daily'
+          } else if (companyRates.employee_hourly_rate) {
+            rate = Number(companyRates.employee_hourly_rate)
+            rateType = 'hourly'
+          }
+        } else if (booking.role === 'owner') {
+          // Use general owner rates (prefer daily if both exist)
+          if (companyRates.owner_daily_rate) {
+            rate = Number(companyRates.owner_daily_rate)
+            rateType = 'daily'
+          } else if (companyRates.owner_hourly_rate) {
+            rate = Number(companyRates.owner_hourly_rate)
+            rateType = 'hourly'
+          }
+        }
+
+        if (!rate || !rateType) return null
+
+        // Calculate expense amount
+        let amount = 0
+        if (rateType === 'daily') {
+          amount = rate * Math.ceil(durationDays) // Round up to full days
+        } else {
+          // hourly
+          amount = rate * durationHours
+        }
+
+        return {
+          id: `crew-${booking.id}`,
+          type: 'crew' as const,
+          description: `${booking.user_name} (${booking.role || 'unknown'})`,
+          amount,
+          date: booking.start_at,
+          booking,
+        }
+      })
+      .filter((exp): exp is NonNullable<typeof exp> => exp !== null)
+  }, [crewBookings, companyRates])
+
   // Placeholder for expenses from accounting API
   // TODO: Implement actual expense fetching from accounting software
-  const expenses = React.useMemo(() => {
+  const accountingExpenses = React.useMemo(() => {
     // For now, return empty array - expenses will be fetched from accounting API
     // when integration is complete
     return []
   }, [])
+
+  // Combine all expenses
+  const expenses = React.useMemo(() => {
+    return [...crewExpenses, ...accountingExpenses]
+  }, [crewExpenses, accountingExpenses])
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('nb-NO', {
@@ -185,9 +346,11 @@ export default function MoneyTab({ jobId }: { jobId: string }) {
               {formatCurrency(totalExpenses)}
             </Heading>
             <Text size="1" color="gray">
-              {accountingConfig?.accounting_organization_id
-                ? 'From accounting software'
-                : 'Not connected'}
+              {crewExpenses.length > 0
+                ? `${crewExpenses.length} crew expense${crewExpenses.length !== 1 ? 's' : ''}`
+                : accountingConfig?.accounting_organization_id
+                  ? 'From accounting software'
+                  : 'No expenses yet'}
             </Text>
           </Flex>
         </Card>
@@ -250,6 +413,52 @@ export default function MoneyTab({ jobId }: { jobId: string }) {
                 </Flex>
                 <Text size="4" weight="medium" color="green">
                   {formatCurrency(offer.total_with_vat)}
+                </Text>
+              </Flex>
+            ))}
+          </Flex>
+        </Card>
+      )}
+
+      {/* Crew Expenses Breakdown */}
+      {crewExpenses.length > 0 && (
+        <Card mb="4">
+          <Heading size="4" mb="3">
+            Crew Expenses
+          </Heading>
+          <Flex direction="column" gap="2">
+            {crewExpenses.map((expense) => (
+              <Flex
+                key={expense.id}
+                justify="between"
+                align="center"
+                p="2"
+                style={{
+                  background: 'var(--gray-a2)',
+                  borderRadius: 6,
+                }}
+              >
+                <Flex direction="column" gap="1">
+                  <Text weight="medium">{expense.description}</Text>
+                  <Text size="1" color="gray">
+                    {expense.booking.rate_type === 'daily'
+                      ? `${expense.booking.rate?.toFixed(2)} kr per day`
+                      : `${expense.booking.rate?.toFixed(2)} kr per hour`}
+                    {' · '}
+                    {expense.booking.start_at && expense.booking.end_at
+                      ? new Date(expense.booking.start_at).toLocaleDateString(
+                          'nb-NO',
+                          {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                          },
+                        )
+                      : '—'}
+                  </Text>
+                </Flex>
+                <Text size="4" weight="medium" color="red">
+                  {formatCurrency(expense.amount)}
                 </Text>
               </Flex>
             ))}

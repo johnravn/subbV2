@@ -20,7 +20,7 @@ import AddRoleDialog from '../dialogs/AddRoleDialog'
 import AddCrewToRoleDialog from '../dialogs/AddCrewToRoleDialog'
 import ConfirmStatusChangeDialog from '../dialogs/ConfirmStatusChangeDialog'
 import SendInviteDialog from '../dialogs/SendInviteDialog'
-import type { CrewReqStatus, ReservedCrewRow } from '../../types'
+import type { BookingStatus, ReservedCrewRow } from '../../types'
 
 export default function CrewTab({
   jobId,
@@ -43,8 +43,8 @@ export default function CrewTab({
   const [statusChangeConfirm, setStatusChangeConfirm] = React.useState<{
     crewId: string
     crewName: string
-    currentStatus: CrewReqStatus
-    newStatus: CrewReqStatus
+    currentStatus: BookingStatus
+    newStatus: BookingStatus
   } | null>(null)
   const [sendInviteDialog, setSendInviteDialog] = React.useState<{
     userId?: string // Optional - if not provided, it's "send to all"
@@ -151,7 +151,7 @@ export default function CrewTab({
       status,
     }: {
       id: string
-      status: CrewReqStatus
+      status: BookingStatus
     }) => {
       const { error } = await supabase
         .from('reserved_crew')
@@ -289,8 +289,8 @@ export default function CrewTab({
   const handleStatusChange = (
     crewId: string,
     crewName: string,
-    currentStatus: CrewReqStatus,
-    newStatus: CrewReqStatus,
+    currentStatus: BookingStatus,
+    newStatus: BookingStatus,
   ) => {
     if (currentStatus === newStatus) return
     setStatusChangeConfirm({
@@ -437,9 +437,9 @@ export default function CrewTab({
     counts: Record<string, number>,
     neededCount: number | null | undefined,
   ): { label: string; color: 'red' | 'yellow' | 'green' } => {
-    // Crew accepted (green) - when all needed crew are accepted
-    if ((counts['accepted'] ?? 0) >= (neededCount ?? 1)) {
-      return { label: 'crew accepted', color: 'green' }
+    // Crew confirmed (green) - when all needed crew are confirmed
+    if ((counts['confirmed'] ?? 0) >= (neededCount ?? 1)) {
+      return { label: 'crew confirmed', color: 'green' }
     }
 
     // No crew assigned (red)
@@ -447,16 +447,14 @@ export default function CrewTab({
       return { label: 'no crew assigned', color: 'red' }
     }
 
-    // Check if there are any requested crew members
-    const hasRequested = (counts['requested'] ?? 0) > 0
-
-    // Waiting for crew response (yellow) - when there are requested crew
-    if (hasRequested) {
-      return { label: 'waiting for crew response', color: 'yellow' }
+    // Some crew canceled (yellow) - when there are canceled crew
+    const hasCanceled = (counts['canceled'] ?? 0) > 0
+    if (hasCanceled) {
+      return { label: 'some crew canceled', color: 'yellow' }
     }
 
-    // No crew requested (yellow) - when there's crew but all are planned
-    return { label: 'no crew requested', color: 'yellow' }
+    // Crew planned (yellow) - when there's crew but all are planned
+    return { label: 'crew planned', color: 'yellow' }
   }
 
   // Helper function to format date and time
@@ -652,13 +650,10 @@ export default function CrewTab({
                               • Planned: {counts['planned'] ?? 0}
                             </Text>
                             <Text size="2" color="gray">
-                              • Requested: {counts['requested'] ?? 0}
+                              • Confirmed: {counts['confirmed'] ?? 0}
                             </Text>
                             <Text size="2" color="gray">
-                              • Accepted: {counts['accepted'] ?? 0}
-                            </Text>
-                            <Text size="2" color="gray">
-                              • Declined: {counts['declined'] ?? 0}
+                              • Canceled: {counts['canceled'] ?? 0}
                             </Text>
                           </Flex>
 
@@ -728,13 +723,11 @@ export default function CrewTab({
                                             radius="full"
                                             highContrast
                                             color={
-                                              crew.status === 'accepted'
+                                              crew.status === 'confirmed'
                                                 ? 'green'
-                                                : crew.status === 'declined'
+                                                : crew.status === 'canceled'
                                                   ? 'red'
-                                                  : crew.status === 'requested'
-                                                    ? 'blue'
-                                                    : 'gray'
+                                                  : 'gray'
                                             }
                                           >
                                             {crew.status}
@@ -748,30 +741,27 @@ export default function CrewTab({
                                                 crew.id,
                                                 crewName,
                                                 crew.status,
-                                                v as CrewReqStatus,
+                                                v as BookingStatus,
                                               )
                                             }
                                           >
                                             {(
                                               [
                                                 'planned',
-                                                'requested',
-                                                'declined',
-                                                'accepted',
-                                              ] as Array<CrewReqStatus>
+                                                'confirmed',
+                                                'canceled',
+                                              ] as Array<BookingStatus>
                                             ).map((s) => (
                                               <SegmentedControl.Item
                                                 key={s}
                                                 value={s}
                                                 style={{
                                                   color:
-                                                    s === 'accepted'
+                                                    s === 'confirmed'
                                                       ? 'var(--green-9)'
-                                                      : s === 'declined'
+                                                      : s === 'canceled'
                                                         ? 'var(--red-9)'
-                                                        : s === 'requested'
-                                                          ? 'var(--blue-9)'
-                                                          : undefined,
+                                                        : undefined,
                                                 }}
                                               >
                                                 {s}
@@ -1000,13 +990,11 @@ export default function CrewTab({
                     radius="full"
                     highContrast
                     color={
-                      r.status === 'accepted'
+                      r.status === 'confirmed'
                         ? 'green'
-                        : r.status === 'declined'
+                        : r.status === 'canceled'
                           ? 'red'
-                          : r.status === 'requested'
-                            ? 'blue'
-                            : 'gray'
+                          : 'gray'
                     }
                   >
                     {r.status}

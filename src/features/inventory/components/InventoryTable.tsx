@@ -18,6 +18,7 @@ import {
   TextField,
 } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
+import { useDebouncedValue } from '@tanstack/react-pacer'
 import { Plus, Search } from 'iconoir-react'
 import { categoryNamesQuery, inventoryIndexQuery } from '../api/queries'
 import AddItemDialog from './AddItemDialog'
@@ -53,6 +54,7 @@ export default function InventoryTable({
   const { companyId } = useCompany()
   const [page, setPage] = React.useState(1)
   const [search, setSearch] = React.useState('')
+  const [debouncedSearch] = useDebouncedValue(search, { wait: 300 })
   const [categoryFilter, setCategoryFilter] = React.useState<string | null>(
     null,
   )
@@ -120,7 +122,7 @@ export default function InventoryTable({
       companyId: companyId ?? '__none__',
       page,
       pageSize: effectivePageSize,
-      search,
+      search: debouncedSearch,
       showActive,
       showInactive,
       showInternal,

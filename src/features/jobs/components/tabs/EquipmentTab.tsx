@@ -7,6 +7,9 @@ import {
   Button,
   Flex,
   Heading,
+  IconButton,
+  Popover,
+  Select,
   SegmentedControl,
   Table,
   Text,
@@ -16,6 +19,7 @@ import { supabase } from '@shared/api/supabase'
 import {
   Check,
   Edit,
+  LinkSlash,
   NavArrowDown,
   NavArrowRight,
   Plus,
@@ -29,7 +33,12 @@ import { jobDetailQuery, upsertTimePeriod } from '@features/jobs/api/queries'
 import { partnerCustomersQuery } from '@features/inventory/api/partners'
 import BookItemsDialog from '../dialogs/BookItemsDialog'
 import SelectExternalOwnerDialog from '../dialogs/SelectExternalOwnerDialog'
-import type { ExternalReqStatus, ItemLite, ReservedItemRow } from '../../types'
+import type {
+  BookingStatus,
+  ExternalReqStatus,
+  ItemLite,
+  ReservedItemRow,
+} from '../../types'
 
 export default function EquipmentTab({ jobId }: { jobId: string }) {
   const [bookItemsOpen, setBookItemsOpen] = React.useState(false)
@@ -79,7 +88,7 @@ export default function EquipmentTab({ jobId }: { jobId: string }) {
         .select(
           `
           id, time_period_id, item_id, quantity, source_group_id, source_kind,
-          external_status, external_note, forced,
+          status, external_status, external_note, forced,
           item:item_id (
             id, name, category_id,
             category:category_id ( name ),
@@ -135,8 +144,6 @@ export default function EquipmentTab({ jobId }: { jobId: string }) {
           companyId={companyId}
           editMode={externalEditMode}
           setEditMode={setExternalEditMode}
-          view={view}
-          onViewChange={(v) => setView(v as 'internal' | 'external')}
         />
       )}
     </Box>
@@ -170,6 +177,7 @@ function InternalEquipmentTable({
   const qc = useQueryClient()
   const { success, error } = useToast()
   const { companyRole } = useAuthz()
+  const isReadOnly = companyRole === 'freelancer'
   const [expandedGroups, setExpandedGroups] = React.useState<Set<string>>(
     new Set(),
   )
@@ -177,6 +185,13 @@ function InternalEquipmentTable({
     id: string
     value: number
   } | null>(null)
+  const [statusPopoverOpen, setStatusPopoverOpen] = React.useState<
+    string | null
+  >(null)
+  const [hoveredRowId, setHoveredRowId] = React.useState<string | null>(null)
+  const [decoupledRows, setDecoupledRows] = React.useState<Set<string>>(
+    new Set(),
+  )
 
   const toggleGroup = (groupId: string) => {
     setExpandedGroups((prev) => {
@@ -251,6 +266,76 @@ function InternalEquipmentTable({
     }
   }
 
+  const handleUpdateStatus = async (
+    rowId: string,
+    newStatus: BookingStatus,
+  ) => {
+    try {
+      const { error: updateErr } = await supabase
+        .from('reserved_items')
+        .update({ status: newStatus })
+        .eq('id', rowId)
+      if (updateErr) throw updateErr
+
+      await qc.invalidateQueries({ queryKey: ['jobs.equipment', jobId] })
+      success('Updated', 'Booking status updated')
+    } catch (e: any) {
+      error('Failed to update', e?.message || 'Please try again.')
+    }
+  }
+
+  const handleUpdateGroupStatus = async (
+    groupId: string,
+    timePeriodId: string,
+    newStatus: BookingStatus,
+  ) => {
+    try {
+      const { error: updateErr } = await supabase
+        .from('reserved_items')
+        .update({ status: newStatus })
+        .eq('source_group_id', groupId)
+        .eq('time_period_id', timePeriodId)
+      if (updateErr) throw updateErr
+
+      await qc.invalidateQueries({ queryKey: ['jobs.equipment', jobId] })
+      success('Updated', 'Group booking status updated')
+    } catch (e: any) {
+      error('Failed to update', e?.message || 'Please try again.')
+    }
+  }
+
+  const handleBulkUpdateStatus = async (newStatus: BookingStatus) => {
+    try {
+      // Filter out decoupled rows from bulk update
+      const itemIds = rows
+        .filter((r) => !decoupledRows.has(r.id))
+        .map((r) => r.id)
+      if (itemIds.length === 0) return
+
+      const { error: updateErr } = await supabase
+        .from('reserved_items')
+        .update({ status: newStatus })
+        .in('id', itemIds)
+      if (updateErr) throw updateErr
+
+      await qc.invalidateQueries({ queryKey: ['jobs.equipment', jobId] })
+      success(
+        'Updated',
+        `Updated status for ${itemIds.length} booking${itemIds.length !== 1 ? 's' : ''}`,
+      )
+    } catch (e: any) {
+      error('Failed to update', e?.message || 'Please try again.')
+    }
+  }
+
+  const handleDecoupleRow = (rowId: string) => {
+    setDecoupledRows((prev) => {
+      const next = new Set(prev)
+      next.add(rowId)
+      return next
+    })
+  }
+
   return (
     <Box>
       <Box
@@ -264,6 +349,43 @@ function InternalEquipmentTable({
         <Heading size="3">Internal equipment</Heading>
         {companyRole !== 'freelancer' && (
           <Flex align="center" gap="3">
+            {rows.length > 0 && (
+              <>
+                <Select.Root
+                  onValueChange={(value) =>
+                    handleBulkUpdateStatus(value as BookingStatus)
+                  }
+                >
+                  <Select.Trigger
+                    size="2"
+                    variant="soft"
+                    placeholder="Set all status..."
+                  />
+                  <Select.Content>
+                    <Select.Item value="planned">Planned</Select.Item>
+                    <Select.Item value="confirmed">Confirmed</Select.Item>
+                    <Select.Item value="canceled">Canceled</Select.Item>
+                  </Select.Content>
+                </Select.Root>
+                <Button
+                  size="2"
+                  variant={editMode ? 'solid' : 'soft'}
+                  color={editMode ? 'green' : undefined}
+                  disabled={!canBook}
+                  onClick={() => setEditMode(!editMode)}
+                >
+                  <Edit width={16} height={16} />{' '}
+                  {editMode ? 'Done editing' : 'Edit bookings'}
+                </Button>
+              </>
+            )}
+            <Button
+              size="2"
+              disabled={!canBook}
+              onClick={() => setBookItemsOpen(true)}
+            >
+              <Plus width={16} height={16} /> Book items
+            </Button>
             <SegmentedControl.Root
               value={view}
               onValueChange={(v) => onViewChange(v as 'internal' | 'external')}
@@ -276,25 +398,6 @@ function InternalEquipmentTable({
                 External equipment
               </SegmentedControl.Item>
             </SegmentedControl.Root>
-            {rows.length > 0 && (
-              <Button
-                size="2"
-                variant={editMode ? 'solid' : 'soft'}
-                color={editMode ? 'green' : undefined}
-                disabled={!canBook}
-                onClick={() => setEditMode(!editMode)}
-              >
-                <Edit width={16} height={16} />{' '}
-                {editMode ? 'Done editing' : 'Edit bookings'}
-              </Button>
-            )}
-            <Button
-              size="2"
-              disabled={!canBook}
-              onClick={() => setBookItemsOpen(true)}
-            >
-              <Plus width={16} height={16} /> Book items
-            </Button>
           </Flex>
         )}
         {canBook && companyId && (
@@ -315,6 +418,7 @@ function InternalEquipmentTable({
             <Table.ColumnHeaderCell>Item</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Qty</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Category</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Time period</Table.ColumnHeaderCell>
             {editMode && <Table.ColumnHeaderCell />}
           </Table.Row>
@@ -368,6 +472,34 @@ function InternalEquipmentTable({
                   </Table.Cell>
                   <Table.Cell>{groupCategory ?? '—'}</Table.Cell>
                   <Table.Cell>
+                    {isReadOnly ? (
+                      <Badge
+                        radius="full"
+                        highContrast
+                        color={
+                          firstRow?.status === 'confirmed'
+                            ? 'green'
+                            : firstRow?.status === 'canceled'
+                              ? 'red'
+                              : 'gray'
+                        }
+                      >
+                        {firstRow?.status ?? 'planned'}
+                      </Badge>
+                    ) : (
+                      <BookingStatusControl
+                        value={(firstRow?.status as BookingStatus) ?? 'planned'}
+                        onChange={(v) =>
+                          handleUpdateGroupStatus(
+                            groupId,
+                            firstRow.time_period_id,
+                            v,
+                          )
+                        }
+                      />
+                    )}
+                  </Table.Cell>
+                  <Table.Cell>
                     {firstRow?.time_period?.title ??
                       `${fmtDate(firstRow?.time_period?.start_at)} – ${fmtDate(firstRow?.time_period?.end_at)}`}
                   </Table.Cell>
@@ -403,6 +535,7 @@ function InternalEquipmentTable({
                         </Table.Cell>
                         <Table.Cell>{r.quantity}</Table.Cell>
                         <Table.Cell>{item?.category?.name ?? '—'}</Table.Cell>
+                        <Table.Cell>—</Table.Cell>
                         <Table.Cell>—</Table.Cell>
                       </Table.Row>
                     )
@@ -454,6 +587,94 @@ function InternalEquipmentTable({
                   )}
                 </Table.Cell>
                 <Table.Cell>{item?.category?.name ?? '—'}</Table.Cell>
+                <Table.Cell
+                  onMouseEnter={() => !isReadOnly && setHoveredRowId(r.id)}
+                  onMouseLeave={() => setHoveredRowId(null)}
+                >
+                  <Flex align="center" gap="2">
+                    <Badge
+                      radius="full"
+                      highContrast
+                      color={
+                        r.status === 'confirmed'
+                          ? 'green'
+                          : r.status === 'canceled'
+                            ? 'red'
+                            : 'gray'
+                      }
+                    >
+                      {r.status ?? 'planned'}
+                    </Badge>
+                    {!isReadOnly && (
+                      <>
+                        {decoupledRows.has(r.id) ? (
+                          <Popover.Root
+                            open={statusPopoverOpen === r.id}
+                            onOpenChange={(open) =>
+                              setStatusPopoverOpen(open ? r.id : null)
+                            }
+                          >
+                            <Popover.Trigger>
+                              <IconButton
+                                size="1"
+                                variant="ghost"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Edit width={14} height={14} />
+                              </IconButton>
+                            </Popover.Trigger>
+                            <Popover.Content style={{ width: 180 }}>
+                              <Flex direction="column" gap="2">
+                                <Text size="2" weight="medium">
+                                  Change status
+                                </Text>
+                                <Select.Root
+                                  value={r.status ?? 'planned'}
+                                  onValueChange={(value) => {
+                                    handleUpdateStatus(
+                                      r.id,
+                                      value as BookingStatus,
+                                    )
+                                    setStatusPopoverOpen(null)
+                                  }}
+                                >
+                                  <Select.Trigger size="2" />
+                                  <Select.Content>
+                                    <Select.Item value="planned">
+                                      Planned
+                                    </Select.Item>
+                                    <Select.Item value="confirmed">
+                                      Confirmed
+                                    </Select.Item>
+                                    <Select.Item value="canceled">
+                                      Canceled
+                                    </Select.Item>
+                                  </Select.Content>
+                                </Select.Root>
+                              </Flex>
+                            </Popover.Content>
+                          </Popover.Root>
+                        ) : (
+                          <IconButton
+                            size="1"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDecoupleRow(r.id)
+                            }}
+                            style={{
+                              opacity: hoveredRowId === r.id ? 1 : 0,
+                              pointerEvents:
+                                hoveredRowId === r.id ? 'auto' : 'none',
+                            }}
+                          >
+                            <LinkSlash width={14} height={14} />
+                          </IconButton>
+                        )}
+                      </>
+                    )}
+                  </Flex>
+                </Table.Cell>
                 <Table.Cell>
                   {r.time_period?.title ??
                     `${fmtDate(r.time_period?.start_at)} – ${fmtDate(r.time_period?.end_at)}`}
@@ -519,8 +740,6 @@ function ExternalEquipmentTable({
   companyId,
   editMode,
   setEditMode,
-  view,
-  onViewChange,
 }: {
   rows: Array<any>
   externalTimePeriods: Array<{
@@ -534,8 +753,6 @@ function ExternalEquipmentTable({
   companyId: string | null
   editMode: boolean
   setEditMode: (v: boolean) => void
-  view: 'internal' | 'external'
-  onViewChange: (v: 'internal' | 'external') => void
 }) {
   const qc = useQueryClient()
   const { success, error } = useToast()
@@ -563,6 +780,13 @@ function ExternalEquipmentTable({
     timePeriodId: string
     itemCount: number
   } | null>(null)
+  const [decoupledRows, setDecoupledRows] = React.useState<Set<string>>(
+    new Set(),
+  )
+  const [statusPopoverOpen, setStatusPopoverOpen] = React.useState<
+    string | null
+  >(null)
+  const [hoveredRowId, setHoveredRowId] = React.useState<string | null>(null)
 
   // Fetch job to get duration times
   const { data: job } = useQuery({
@@ -658,7 +882,27 @@ function ExternalEquipmentTable({
   React.useEffect(() => {
     setOwnerNotes((prevNotes) => {
       const newNotes = new Map<string, string>()
-      for (const [ownerId, group] of ownerGroups.entries()) {
+      // Compute owner groups from rows directly to avoid dependency on memoized Map
+      const groups = new Map<
+        string,
+        {
+          ownerId: string
+          items: Array<any>
+        }
+      >()
+
+      for (const row of rows) {
+        const item = firstItem(row.item) as any
+        const ownerId = item?.external_owner_id
+        if (!ownerId) continue
+
+        if (!groups.has(ownerId)) {
+          groups.set(ownerId, { ownerId, items: [] })
+        }
+        groups.get(ownerId)!.items.push(row)
+      }
+
+      for (const [ownerId, group] of groups.entries()) {
         if (group.items.length > 0) {
           const currentNote = group.items[0]?.external_note ?? ''
           // Only keep notes that have been edited and differ from current
@@ -670,7 +914,7 @@ function ExternalEquipmentTable({
       }
       return newNotes
     })
-  }, [ownerGroups])
+  }, [rows])
 
   const toggleOwner = (ownerId: string) => {
     setExpandedOwners((prev) => {
@@ -820,6 +1064,56 @@ function ExternalEquipmentTable({
     }
   }
 
+  const handleUpdateItemStatus = async (
+    rowId: string,
+    newStatus: ExternalReqStatus,
+  ) => {
+    try {
+      const { error: updateErr } = await supabase
+        .from('reserved_items')
+        .update({ external_status: newStatus })
+        .eq('id', rowId)
+      if (updateErr) throw updateErr
+
+      await qc.invalidateQueries({ queryKey: ['jobs.equipment', jobId] })
+      success('Updated', 'Item status updated')
+    } catch (e: any) {
+      error('Failed to update', e?.message || 'Please try again.')
+    }
+  }
+
+  const handleBulkUpdateStatus = async (newStatus: ExternalReqStatus) => {
+    try {
+      // Filter out decoupled rows from bulk update
+      const itemIds = rows
+        .filter((r) => !decoupledRows.has(r.id))
+        .map((r) => r.id)
+      if (itemIds.length === 0) return
+
+      const { error: updateErr } = await supabase
+        .from('reserved_items')
+        .update({ external_status: newStatus })
+        .in('id', itemIds)
+      if (updateErr) throw updateErr
+
+      await qc.invalidateQueries({ queryKey: ['jobs.equipment', jobId] })
+      success(
+        'Updated',
+        `Updated status for ${itemIds.length} item${itemIds.length !== 1 ? 's' : ''}`,
+      )
+    } catch (e: any) {
+      error('Failed to update', e?.message || 'Please try again.')
+    }
+  }
+
+  const handleDecoupleRow = (rowId: string) => {
+    setDecoupledRows((prev) => {
+      const next = new Set(prev)
+      next.add(rowId)
+      return next
+    })
+  }
+
   return (
     <Box>
       <Box
@@ -831,18 +1125,22 @@ function ExternalEquipmentTable({
         }}
       >
         <Heading size="3">External equipment</Heading>
-        <SegmentedControl.Root
-          value={view}
-          onValueChange={(v) => onViewChange(v as 'internal' | 'external')}
-          size="2"
-        >
-          <SegmentedControl.Item value="internal">
-            Internal equipment
-          </SegmentedControl.Item>
-          <SegmentedControl.Item value="external">
-            External equipment
-          </SegmentedControl.Item>
-        </SegmentedControl.Root>
+        <Flex align="center" gap="3">
+          {companyRole !== 'freelancer' && rows.length > 0 && (
+            <Select.Root
+              onValueChange={(value) =>
+                handleBulkUpdateStatus(value as ExternalReqStatus)
+              }
+            >
+              <Select.Trigger variant="soft" placeholder="Set all status..." />
+              <Select.Content>
+                <Select.Item value="planned">Planned</Select.Item>
+                <Select.Item value="requested">Requested</Select.Item>
+                <Select.Item value="confirmed">Confirmed</Select.Item>
+              </Select.Content>
+            </Select.Root>
+          )}
+        </Flex>
       </Box>
 
       {/* Owner Sections */}
@@ -1053,6 +1351,9 @@ function ExternalEquipmentTable({
                                 <Table.ColumnHeaderCell>
                                   Qty
                                 </Table.ColumnHeaderCell>
+                                <Table.ColumnHeaderCell>
+                                  Status
+                                </Table.ColumnHeaderCell>
                                 {editMode && <Table.ColumnHeaderCell />}
                               </Table.Row>
                             </Table.Header>
@@ -1110,6 +1411,129 @@ function ExternalEquipmentTable({
                                       ) : (
                                         r.quantity
                                       )}
+                                    </Table.Cell>
+                                    <Table.Cell
+                                      onMouseEnter={() =>
+                                        !isReadOnly && setHoveredRowId(r.id)
+                                      }
+                                      onMouseLeave={() => setHoveredRowId(null)}
+                                    >
+                                      <Flex align="center" gap="2">
+                                        <Badge
+                                          radius="full"
+                                          highContrast
+                                          color={
+                                            r.external_status === 'confirmed'
+                                              ? 'green'
+                                              : r.external_status ===
+                                                  'requested'
+                                                ? 'amber'
+                                                : 'gray'
+                                          }
+                                        >
+                                          {r.external_status ?? 'planned'}
+                                        </Badge>
+                                        {!isReadOnly && (
+                                          <>
+                                            {decoupledRows.has(r.id) ? (
+                                              <Popover.Root
+                                                open={
+                                                  statusPopoverOpen === r.id
+                                                }
+                                                onOpenChange={(open) =>
+                                                  setStatusPopoverOpen(
+                                                    open ? r.id : null,
+                                                  )
+                                                }
+                                              >
+                                                <Popover.Trigger>
+                                                  <IconButton
+                                                    size="1"
+                                                    variant="ghost"
+                                                    onClick={(e) =>
+                                                      e.stopPropagation()
+                                                    }
+                                                  >
+                                                    <Edit
+                                                      width={14}
+                                                      height={14}
+                                                    />
+                                                  </IconButton>
+                                                </Popover.Trigger>
+                                                <Popover.Content
+                                                  style={{ width: 180 }}
+                                                >
+                                                  <Flex
+                                                    direction="column"
+                                                    gap="2"
+                                                  >
+                                                    <Text
+                                                      size="2"
+                                                      weight="medium"
+                                                    >
+                                                      Change status
+                                                    </Text>
+                                                    <Select.Root
+                                                      value={
+                                                        r.external_status ??
+                                                        'planned'
+                                                      }
+                                                      onValueChange={(
+                                                        value,
+                                                      ) => {
+                                                        handleUpdateItemStatus(
+                                                          r.id,
+                                                          value as ExternalReqStatus,
+                                                        )
+                                                        setStatusPopoverOpen(
+                                                          null,
+                                                        )
+                                                      }}
+                                                    >
+                                                      <Select.Trigger />
+                                                      <Select.Content>
+                                                        <Select.Item value="planned">
+                                                          Planned
+                                                        </Select.Item>
+                                                        <Select.Item value="requested">
+                                                          Requested
+                                                        </Select.Item>
+                                                        <Select.Item value="confirmed">
+                                                          Confirmed
+                                                        </Select.Item>
+                                                      </Select.Content>
+                                                    </Select.Root>
+                                                  </Flex>
+                                                </Popover.Content>
+                                              </Popover.Root>
+                                            ) : (
+                                              <IconButton
+                                                size="1"
+                                                variant="ghost"
+                                                onClick={(e) => {
+                                                  e.stopPropagation()
+                                                  handleDecoupleRow(r.id)
+                                                }}
+                                                style={{
+                                                  opacity:
+                                                    hoveredRowId === r.id
+                                                      ? 1
+                                                      : 0,
+                                                  pointerEvents:
+                                                    hoveredRowId === r.id
+                                                      ? 'auto'
+                                                      : 'none',
+                                                }}
+                                              >
+                                                <LinkSlash
+                                                  width={14}
+                                                  height={14}
+                                                />
+                                              </IconButton>
+                                            )}
+                                          </>
+                                        )}
+                                      </Flex>
                                     </Table.Cell>
                                     {editMode && (
                                       <Table.Cell align="right">
@@ -1269,4 +1693,41 @@ function extOwnerId(it: ReservedItemRow['item']) {
 }
 function fmtDate(v?: string) {
   return v ? new Date(v).toLocaleDateString() : ''
+}
+
+function BookingStatusControl({
+  value,
+  onChange,
+  size = '1',
+}: {
+  value: BookingStatus
+  onChange: (v: BookingStatus) => void
+  size?: '1' | '2'
+}) {
+  const all: Array<BookingStatus> = ['planned', 'confirmed', 'canceled']
+
+  return (
+    <SegmentedControl.Root
+      value={value}
+      onValueChange={(v) => onChange(v as BookingStatus)}
+      size={size}
+    >
+      {all.map((s) => (
+        <SegmentedControl.Item
+          key={s}
+          value={s}
+          style={{
+            color:
+              s === 'confirmed'
+                ? 'var(--green-9)'
+                : s === 'canceled'
+                  ? 'var(--red-9)'
+                  : undefined,
+          }}
+        >
+          {s}
+        </SegmentedControl.Item>
+      ))}
+    </SegmentedControl.Root>
+  )
 }

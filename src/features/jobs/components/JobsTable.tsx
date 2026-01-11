@@ -15,6 +15,7 @@ import {
 } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { useAuthz } from '@shared/auth/useAuthz'
+import { useDebouncedValue } from '@tanstack/react-pacer'
 import DateTimePicker from '@shared/ui/components/DateTimePicker'
 import {
   Archive,
@@ -28,6 +29,7 @@ import { getInitials, makeWordPresentable } from '@shared/lib/generalFunctions'
 import { supabase } from '@shared/api/supabase'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { jobsIndexQuery } from '../api/queries'
+import { getJobStatusColor } from '../utils/statusColors'
 import JobDialog from './dialogs/JobDialog'
 import type { JobListRow, JobStatus } from '../types'
 
@@ -64,6 +66,7 @@ export default function JobsTable({
   const qc = useQueryClient()
   const { success, error: showError } = useToast()
   const [search, setSearch] = React.useState('')
+  const [debouncedSearch] = useDebouncedValue(search, { wait: 300 })
   const [selectedDate, setSelectedDate] = React.useState<string>('')
   const [includeArchived, setIncludeArchived] = React.useState(false)
   const [sortBy, setSortBy] = React.useState<SortBy>('start_at')
@@ -77,6 +80,8 @@ export default function JobsTable({
   const controlsRef = React.useRef<HTMLDivElement>(null)
   const theadRef = React.useRef<HTMLTableSectionElement>(null)
   const pagerRef = React.useRef<HTMLDivElement>(null)
+  // Track if we've calculated initial width to prevent recalculating on every search/filter
+  const hasCalculatedInitialWidth = React.useRef(false)
 
   const {
     data: allData = [],
@@ -85,7 +90,7 @@ export default function JobsTable({
   } = useQuery({
     ...jobsIndexQuery({
       companyId: companyId ?? '__none__',
-      search,
+      search: debouncedSearch,
       selectedDate,
       sortBy,
       sortDir,
@@ -239,26 +244,27 @@ export default function JobsTable({
     onWidthChange(constrainedWidth)
   }, [onWidthChange])
 
-  // Calculate optimal width when data changes or window resizes
+  // Calculate optimal width only once on initial load (when table first renders with data)
+  // The table width is based on column structure, not data content, so we don't need to
+  // recalculate on every search/filter change
   React.useEffect(() => {
-    if (!onWidthChange || allData.length === 0) return
+    if (
+      !onWidthChange ||
+      allData.length === 0 ||
+      hasCalculatedInitialWidth.current
+    )
+      return
 
     // Use a small delay to ensure table has rendered
     const timeoutId = setTimeout(() => {
       requestAnimationFrame(() => {
         calculateOptimalWidth()
+        hasCalculatedInitialWidth.current = true
       })
     }, 100)
 
     return () => clearTimeout(timeoutId)
-  }, [
-    allData.length,
-    search,
-    sortBy,
-    sortDir,
-    calculateOptimalWidth,
-    onWidthChange,
-  ])
+  }, [allData.length, calculateOptimalWidth, onWidthChange])
 
   // Also recalculate on window resize
   React.useEffect(() => {
@@ -302,7 +308,7 @@ export default function JobsTable({
       <div ref={controlsRef}>
         <Flex gap="2" align="center" mb="3" wrap="wrap">
           <TextField.Root
-            placeholder="Search title, customer, status, project lead, or date…"
+            placeholder="Search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             size="3"
@@ -360,8 +366,10 @@ export default function JobsTable({
               size="2"
               variant="classic"
               onClick={() => setCreateOpen(true)}
+              style={{ gap: '4px' }}
             >
-              <Plus width={16} height={16} /> New job
+              <Plus width={16} height={16} />
+              New job
             </Button>
           )}
         </Flex>
@@ -554,15 +562,7 @@ export default function JobsTable({
                         )
                         return (
                           <Badge
-                            color={
-                              displayStatus === 'canceled'
-                                ? 'red'
-                                : displayStatus === 'paid'
-                                  ? 'green'
-                                  : displayStatus === 'in_progress'
-                                    ? 'amber'
-                                    : 'blue'
-                            }
+                            color={getJobStatusColor(displayStatus)}
                             radius="full"
                             highContrast
                           >

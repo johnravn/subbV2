@@ -222,6 +222,8 @@ export type Database = {
           address: string | null
           contact_person_id: string | null
           created_at: string
+          employee_daily_rate: number | null
+          employee_hourly_rate: number | null
           general_email: string | null
           id: string
           job_number_counter: number | null
@@ -229,6 +231,8 @@ export type Database = {
           logo_light_path: string | null
           logo_path: string | null
           name: string
+          owner_daily_rate: number | null
+          owner_hourly_rate: number | null
           terms_and_conditions_pdf_path: string | null
           terms_and_conditions_text: string | null
           terms_and_conditions_type: string | null
@@ -243,6 +247,8 @@ export type Database = {
           address?: string | null
           contact_person_id?: string | null
           created_at?: string
+          employee_daily_rate?: number | null
+          employee_hourly_rate?: number | null
           general_email?: string | null
           id?: string
           job_number_counter?: number | null
@@ -250,6 +256,8 @@ export type Database = {
           logo_light_path?: string | null
           logo_path?: string | null
           name: string
+          owner_daily_rate?: number | null
+          owner_hourly_rate?: number | null
           terms_and_conditions_pdf_path?: string | null
           terms_and_conditions_text?: string | null
           terms_and_conditions_type?: string | null
@@ -264,6 +272,8 @@ export type Database = {
           address?: string | null
           contact_person_id?: string | null
           created_at?: string
+          employee_daily_rate?: number | null
+          employee_hourly_rate?: number | null
           general_email?: string | null
           id?: string
           job_number_counter?: number | null
@@ -271,6 +281,8 @@ export type Database = {
           logo_light_path?: string | null
           logo_path?: string | null
           name?: string
+          owner_daily_rate?: number | null
+          owner_hourly_rate?: number | null
           terms_and_conditions_pdf_path?: string | null
           terms_and_conditions_text?: string | null
           terms_and_conditions_type?: string | null
@@ -367,16 +379,25 @@ export type Database = {
       company_users: {
         Row: {
           company_id: string
+          rate: number | null
+          rate_type: string | null
+          rate_updated_at: string | null
           role: Database["public"]["Enums"]["company_role"]
           user_id: string
         }
         Insert: {
           company_id: string
+          rate?: number | null
+          rate_type?: string | null
+          rate_updated_at?: string | null
           role: Database["public"]["Enums"]["company_role"]
           user_id: string
         }
         Update: {
           company_id?: string
+          rate?: number | null
+          rate_type?: string | null
+          rate_updated_at?: string | null
           role?: Database["public"]["Enums"]["company_role"]
           user_id?: string
         }
@@ -2620,6 +2641,9 @@ export type Database = {
           first_name: string | null
           last_name: string | null
           phone: string | null
+          rate: number | null
+          rate_type: string | null
+          rate_updated_at: string | null
           role: Database["public"]["Enums"]["company_role"] | null
           user_id: string | null
         }

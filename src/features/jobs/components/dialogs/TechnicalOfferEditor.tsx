@@ -2054,11 +2054,13 @@ function CrewSection({
 
   const addItem = () => {
     // Default to job duration if available, otherwise use current time + 1 day
+    // This ensures times default to the job length (start_at to end_at)
     const startDate = jobStartAt ? new Date(jobStartAt) : new Date()
     const endDate = jobEndAt
       ? new Date(jobEndAt)
       : new Date(startDate.getTime() + 24 * 60 * 60 * 1000) // +1 day if no job end
 
+    // Ensure we preserve the full date-time from the job
     const startIso = startDate.toISOString()
     const endIso = endDate.toISOString()
     const hasProvidedWindow = Boolean(jobStartAt && jobEndAt)
@@ -2754,12 +2756,14 @@ function TransportSection({
 }) {
   const addItem = () => {
     // Default to job duration if available, otherwise use current time + 1 day
+    // This ensures times default to the job length (start_at to end_at)
     const startDate = jobStartAt ? new Date(jobStartAt) : new Date()
     const endDate = jobEndAt
       ? new Date(jobEndAt)
       : new Date(startDate.getTime() + 24 * 60 * 60 * 1000) // +1 day if no job end
     const increment = Math.max(1, vehicleDistanceIncrement ?? 150)
 
+    // Ensure we preserve the full date-time from the job
     const newItem: LocalTransportItem = {
       id: `temp-${Date.now()}`,
       vehicle_name: '',

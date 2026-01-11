@@ -153,6 +153,7 @@ export type ReservedItemRow = {
   quantity: number
   source_group_id: UUID | null
   source_kind: 'direct' | 'group'
+  status: BookingStatus
   external_status: ExternalReqStatus | null
   external_note: string | null
   forced: boolean
@@ -197,14 +198,17 @@ export type TimePeriodLite = {
 
 /* ---------- Crew tab ---------- */
 
-export type CrewReqStatus = 'planned' | 'requested' | 'declined' | 'accepted'
+export type BookingStatus = 'planned' | 'confirmed' | 'canceled'
+
+// Legacy type for backward compatibility
+export type CrewReqStatus = BookingStatus
 
 export type ReservedCrewRow = {
   id: UUID
   time_period_id: UUID
   user_id: UUID
   notes: string | null
-  status: CrewReqStatus
+  status: BookingStatus
   start_at: string | null
   end_at: string | null
   user?: {
@@ -220,6 +224,7 @@ export type ReservedVehicleRow = {
   id: UUID
   time_period_id: UUID
   vehicle_id: UUID
+  status: BookingStatus
   external_status: ExternalReqStatus | null
   external_note: string | null
   vehicle?: {

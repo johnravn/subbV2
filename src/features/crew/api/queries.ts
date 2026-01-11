@@ -104,6 +104,9 @@ export type CrewDetail = {
   superuser: boolean
   primary_address_id: string | null
   selected_company_id: string | null
+  rate_type: 'daily' | 'hourly' | null
+  rate: number | null
+  rate_updated_at: string | null
   primary_address: {
     id: string
     name: string | null
@@ -128,7 +131,7 @@ export function crewDetailQuery({
       const { data: base, error } = await supabase
         .from('company_user_profiles')
         .select(
-          'user_id, role, email, display_name, first_name, last_name, phone, avatar_url, created_at',
+          'user_id, role, email, display_name, first_name, last_name, phone, avatar_url, created_at, rate_type, rate, rate_updated_at',
         )
         .eq('company_id', companyId)
         .eq('user_id', userId)
@@ -175,6 +178,9 @@ export function crewDetailQuery({
           | 'primary_address_id'
           | 'selected_company_id'
           | 'primary_address'
+          | 'rate_type'
+          | 'rate'
+          | 'rate_updated_at'
         >),
         bio: prof?.bio ?? null,
         preferences: prof?.preferences ?? null,
@@ -183,6 +189,9 @@ export function crewDetailQuery({
         superuser: prof?.superuser ?? false,
         primary_address_id: prof?.primary_address_id ?? null,
         selected_company_id: prof?.selected_company_id ?? null,
+        rate_type: (base as any)?.rate_type ?? null,
+        rate: (base as any)?.rate ? Number((base as any).rate) : null,
+        rate_updated_at: (base as any)?.rate_updated_at ?? null,
         primary_address: (prof as any)?.primary_address ?? null,
       }
     },
@@ -302,5 +311,29 @@ export async function deleteInvite({ inviteId }: { inviteId: string }) {
     .from('pending_invites')
     .delete()
     .eq('id', inviteId)
+  if (error) throw error
+}
+
+export async function updateCrewMemberRate({
+  companyId,
+  userId,
+  rateType,
+  rate,
+}: {
+  companyId: string
+  userId: string
+  rateType: 'daily' | 'hourly' | null
+  rate: number | null
+}) {
+  const { error } = await supabase
+    .from('company_users')
+    .update({
+      rate_type: rateType,
+      rate: rate,
+      rate_updated_at: new Date().toISOString(),
+    })
+    .eq('company_id', companyId)
+    .eq('user_id', userId)
+
   if (error) throw error
 }

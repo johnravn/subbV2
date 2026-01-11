@@ -20,7 +20,11 @@ import { useAuthz } from '@shared/auth/useAuthz'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { FixedTimePeriodEditor } from '@features/calendar/components/reservations/TimePeriodPicker'
 import BookVehicleDialog from '../dialogs/BookVehicleDialog'
-import type { ExternalReqStatus, ReservedVehicleRow } from '../../types'
+import type {
+  BookingStatus,
+  ExternalReqStatus,
+  ReservedVehicleRow,
+} from '../../types'
 
 type TransportQueryResult = {
   bookings: Array<ReservedVehicleRow>
@@ -77,7 +81,7 @@ export default function TransportTab({ jobId }: { jobId: string }) {
         .from('reserved_vehicles')
         .select(
           `
-          id, time_period_id, vehicle_id, external_status, external_note,
+          id, time_period_id, vehicle_id, status, external_status, external_note,
           vehicle:vehicle_id (
             id, name, image_path, external_owner_id, deleted,
             external_owner:external_owner_id ( id, name )
@@ -126,6 +130,7 @@ export default function TransportTab({ jobId }: { jobId: string }) {
   const handleUpdateBooking = async (
     bookingId: string,
     updates: {
+      status?: BookingStatus
       external_status?: ExternalReqStatus
       external_note?: string
     },
@@ -304,7 +309,7 @@ export default function TransportTab({ jobId }: { jobId: string }) {
                 }}
                 onStatusChange={(status) => {
                   handleUpdateBooking(row.id, {
-                    external_status: status,
+                    status: status,
                   })
                 }}
                 onDelete={() => setDeletingBooking(row.id)}
@@ -405,11 +410,11 @@ function VehicleBookingCard({
   onToggleExpand: () => void
   onNoteChange: (note: string) => void
   onSaveNote: () => void
-  onStatusChange: (status: ExternalReqStatus) => void
+  onStatusChange: (status: BookingStatus) => void
   onDelete: () => void
 }) {
   const vehicleName = vehicle?.name ?? '—'
-  const currentStatus = row.external_status
+  const currentStatus = row.status ?? 'planned'
 
   const imageUrl = React.useMemo(() => {
     if (!vehicle?.image_path) return null
@@ -510,20 +515,28 @@ function VehicleBookingCard({
               </Badge>
             )}
 
-            {!isInternal && currentStatus && (
-              <Box onClick={(e) => e.stopPropagation()}>
-                {isReadOnly ? (
-                  <Badge radius="full" highContrast>
-                    {currentStatus}
-                  </Badge>
-                ) : (
-                  <StatusBadge
-                    value={currentStatus}
-                    onChange={onStatusChange}
-                  />
-                )}
-              </Box>
-            )}
+            <Box onClick={(e) => e.stopPropagation()}>
+              {isReadOnly ? (
+                <Badge
+                  radius="full"
+                  highContrast
+                  color={
+                    currentStatus === 'confirmed'
+                      ? 'green'
+                      : currentStatus === 'canceled'
+                        ? 'red'
+                        : 'gray'
+                  }
+                >
+                  {currentStatus}
+                </Badge>
+              ) : (
+                <BookingStatusControl
+                  value={currentStatus as BookingStatus}
+                  onChange={onStatusChange}
+                />
+              )}
+            </Box>
           </Flex>
         </Flex>
       </Flex>
@@ -597,36 +610,36 @@ function VehicleBookingCard({
   )
 }
 
-function StatusBadge({
+function BookingStatusControl({
   value,
   onChange,
 }: {
-  value: ExternalReqStatus
-  onChange: (v: ExternalReqStatus) => void
+  value: BookingStatus
+  onChange: (v: BookingStatus) => void
 }) {
+  const all: Array<BookingStatus> = ['planned', 'confirmed', 'canceled']
   return (
     <SegmentedControl.Root
-      size="2"
       value={value}
-      onValueChange={(v) => onChange(v as ExternalReqStatus)}
+      onValueChange={(v) => onChange(v as BookingStatus)}
+      size="1"
     >
-      <SegmentedControl.Item value="planned">Planned</SegmentedControl.Item>
-      <SegmentedControl.Item
-        value="requested"
-        style={{
-          color: 'var(--blue-9)',
-        }}
-      >
-        Requested
-      </SegmentedControl.Item>
-      <SegmentedControl.Item
-        value="confirmed"
-        style={{
-          color: 'var(--green-9)',
-        }}
-      >
-        Confirmed
-      </SegmentedControl.Item>
+      {all.map((s) => (
+        <SegmentedControl.Item
+          key={s}
+          value={s}
+          style={{
+            color:
+              s === 'confirmed'
+                ? 'var(--green-9)'
+                : s === 'canceled'
+                  ? 'var(--red-9)'
+                  : undefined,
+          }}
+        >
+          {s}
+        </SegmentedControl.Item>
+      ))}
     </SegmentedControl.Root>
   )
 }
