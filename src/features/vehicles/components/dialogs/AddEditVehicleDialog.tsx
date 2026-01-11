@@ -15,7 +15,7 @@ import {
 import { supabase } from '@shared/api/supabase'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { useToast } from '@shared/ui/toast/ToastProvider'
-import { Camera } from 'iconoir-react'
+import { Camera, Sparks } from 'iconoir-react'
 import { partnerCustomersQuery, upsertVehicle } from '../../api/queries'
 import type { FuelType, VehicleCategory } from '../../api/queries'
 
@@ -185,12 +185,96 @@ export default function AddEditVehicleDialog({
 
   const canSave = form.name.trim().length > 0
 
+  // ===== TESTING ONLY: Auto-populate function =====
+  // TODO: Remove this function and button when testing is complete
+  const autoPopulateFields = () => {
+    const vehicleNames = [
+      'Mercedes Sprinter',
+      'Ford Transit',
+      'Volkswagen Crafter',
+      'Iveco Daily',
+      'Renault Master',
+      'Peugeot Boxer',
+      'Fiat Ducato',
+      'Toyota Hiace',
+      'Nissan NV400',
+      'Opel Movano',
+    ]
+    const regNumbers = [
+      'AB12345',
+      'CD67890',
+      'EF11111',
+      'GH22222',
+      'IJ33333',
+      'KL44444',
+      'MN55555',
+      'OP66666',
+      'QR77777',
+      'ST88888',
+    ]
+    const fuels: Array<FuelType> = ['diesel', 'petrol', 'electric']
+    const categories: Array<VehicleCategory> = [
+      'passenger_car_small',
+      'passenger_car_medium',
+      'van_small',
+      'van_medium',
+      'van_big',
+    ]
+    const notes = [
+      'Test vehicle for inventory management',
+      'Standard company vehicle',
+      'Backup vehicle in fleet',
+      'Primary transport vehicle',
+      'Reserve vehicle',
+    ]
+
+    const randomName = vehicleNames[Math.floor(Math.random() * vehicleNames.length)]
+    const randomReg = regNumbers[Math.floor(Math.random() * regNumbers.length)]
+    const randomFuel = fuels[Math.floor(Math.random() * fuels.length)]
+    const randomCategory =
+      categories[Math.floor(Math.random() * categories.length)]
+    const randomNotes = notes[Math.floor(Math.random() * notes.length)]
+    const isInternal = Math.random() > 0.3 // 70% chance of being internal
+    const randomPartner =
+      partners.length > 0
+        ? partners[Math.floor(Math.random() * partners.length)]
+        : null
+
+    setForm({
+      name: randomName,
+      registration_no: randomReg,
+      fuel: randomFuel,
+      vehicle_category: randomCategory,
+      internally_owned: isInternal,
+      external_owner_id: isInternal ? null : randomPartner?.id ?? null,
+      image_path: null,
+      notes: randomNotes,
+    })
+  }
+  // ===== END TESTING ONLY =====
+
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Content maxWidth="680px">
-        <Dialog.Title>
-          {mode === 'edit' ? 'Edit vehicle' : 'Add vehicle'}
-        </Dialog.Title>
+        <Flex align="center" justify="between">
+          <Dialog.Title>
+            {mode === 'edit' ? 'Edit vehicle' : 'Add vehicle'}
+          </Dialog.Title>
+          {/* ===== TESTING ONLY: Auto-fill button ===== */}
+          {mode === 'create' && (
+            <Button
+              size="2"
+              variant="soft"
+              onClick={autoPopulateFields}
+              type="button"
+              style={{ marginLeft: 'auto' }}
+            >
+              <Sparks width={16} height={16} />
+              Auto-fill
+            </Button>
+          )}
+          {/* ===== END TESTING ONLY ===== */}
+        </Flex>
 
         <Flex direction="column" gap="3" mt="3">
           <Flex gap="3" wrap="wrap">

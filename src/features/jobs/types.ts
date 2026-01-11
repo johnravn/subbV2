@@ -24,6 +24,7 @@ export type JobListRow = {
   start_at: string | null
   end_at: string | null
   customer_contact_id: UUID | null
+  archived: boolean
   customer?: {
     id: UUID
     name: string | null
@@ -64,6 +65,7 @@ export type JobDetail = {
   end_at: string | null
   load_in_at: string | null
   load_out_at: string | null
+  archived: boolean
 
   project_lead_user_id: UUID | null
   customer_id: UUID | null

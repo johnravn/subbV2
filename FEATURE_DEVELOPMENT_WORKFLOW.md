@@ -366,3 +366,7 @@ npm run db:switch:status      # Which DB is active
 3. ✅ Always test with `npm run db:reset` before pushing
 4. ✅ Keep migrations small and focused (one feature per migration)
 
+
+
+
+

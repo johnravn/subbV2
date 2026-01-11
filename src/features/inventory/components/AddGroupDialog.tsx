@@ -3,9 +3,12 @@ import * as React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertDialog,
+  Badge,
+  Box,
   Button,
   Dialog,
   Flex,
+  Grid,
   IconButton,
   Select,
   Separator,
@@ -15,7 +18,7 @@ import {
   TextArea,
   TextField,
 } from '@radix-ui/themes'
-import { NewTab, Search, Trash } from 'iconoir-react'
+import { NewTab, Plus, Search, Sparks, Trash } from 'iconoir-react'
 import { useNavigate } from '@tanstack/react-router'
 import { useAuthz } from '@shared/auth/useAuthz'
 import { supabase } from '@shared/api/supabase'
@@ -27,12 +30,16 @@ type PickerItem = {
   id: string
   name: string
   current_price: number | null
+  on_hand: number | null
+  type: 'item' | 'group'
 }
 type Part = {
-  item_id: string
+  item_id: string | null
+  child_group_id: string | null
   item_name: string
   quantity: number
   unit_price: number | null
+  part_type: 'item' | 'group'
 }
 type FormState = {
   name: string
@@ -41,7 +48,6 @@ type FormState = {
   active: boolean
   price: number | null
   parts: Array<Part>
-  unique: boolean
   internally_owned: boolean
   external_owner_id: string | null
 }
@@ -52,13 +58,14 @@ type EditInitialData = {
   categoryName: string | null
   description: string | null
   active: boolean
-  unique: boolean
   price: number | null
   parts: Array<{
-    item_id: string
+    item_id: string | null
+    child_group_id: string | null
     item_name: string
     quantity: number
     item_current_price: number | null
+    part_type: 'item' | 'group'
   }>
   internally_owned: boolean
   external_owner_id: string | null
@@ -71,6 +78,7 @@ export default function AddGroupDialog({
   mode = 'create',
   initialData,
   onSaved,
+  showTrigger = true,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
@@ -78,12 +86,23 @@ export default function AddGroupDialog({
   mode?: 'create' | 'edit'
   initialData?: EditInitialData
   onSaved?: () => void
+  showTrigger?: boolean
 }) {
   const qc = useQueryClient()
   const { success, error: toastError } = useToast()
   const navigate = useNavigate()
   const { companyRole } = useAuthz()
   const isOwner = companyRole === 'owner'
+
+  const fmtCurrency = React.useMemo(
+    () =>
+      new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: 'NOK',
+        minimumFractionDigits: 2,
+      }),
+    [],
+  )
 
   const [form, setForm] = React.useState<FormState>({
     name: '',
@@ -92,7 +111,6 @@ export default function AddGroupDialog({
     active: true,
     price: null,
     parts: [],
-    unique: false,
     internally_owned: true,
     external_owner_id: null,
   })
@@ -103,6 +121,22 @@ export default function AddGroupDialog({
 
   // keep original price to detect changes in edit mode
   const originalPriceRef = React.useRef<number | null>(null)
+
+  // Reset form to initial state
+  const resetForm = React.useCallback(() => {
+    setForm({
+      name: '',
+      categoryId: null,
+      description: '',
+      active: true,
+      price: null,
+      parts: [],
+      internally_owned: true,
+      external_owner_id: null,
+    })
+    setSearch('')
+    originalPriceRef.current = null
+  }, [])
 
   /* -------- Categories -------- */
   const {
@@ -124,7 +158,7 @@ export default function AddGroupDialog({
     staleTime: 60_000,
   })
 
-  /* -------- Item search (picker) -------- */
+  /* -------- Item and Group search (picker) -------- */
   const [search, setSearch] = React.useState('')
   const {
     data: pickerItems = [],
@@ -132,41 +166,93 @@ export default function AddGroupDialog({
     isFetching: itemsFetching,
     error: itemsErr,
   } = useQuery({
-    queryKey: ['company', companyId, 'picker-items', search],
+    queryKey: ['company', companyId, 'picker-items-groups', search],
     enabled: !!companyId && open,
     queryFn: async (): Promise<Array<PickerItem>> => {
-      let q = supabase
-        .from('items')
-        .select('id, name')
+      // Fetch items with on_hand from inventory_index view
+      let itemsQ = supabase
+        .from('inventory_index')
+        .select('id, name, on_hand')
         .eq('company_id', companyId)
-        .eq('active', true) // only active
-        .or('deleted.is.null,deleted.eq.false') // exclude deleted
+        .eq('is_group', false)
+        .eq('active', true)
+        .or('deleted.is.null,deleted.eq.false')
         .limit(20)
 
-      if (search) q = q.ilike('name', `%${search}%`)
+      if (search) itemsQ = itemsQ.ilike('name', `%${search}%`)
 
-      const { data, error } = await q
-      if (error) throw error
+      const { data: itemsData, error: itemsError } = await itemsQ
+      if (itemsError) throw itemsError
 
-      const ids = data.map((r) => r.id)
+      // Fetch groups (exclude the current group being edited to prevent self-reference)
+      let groupsQ = supabase
+        .from('item_groups')
+        .select('id, name')
+        .eq('company_id', companyId)
+        .eq('active', true)
+        .or('deleted.is.null,deleted.eq.false')
+        .limit(20)
+
+      if (search) groupsQ = groupsQ.ilike('name', `%${search}%`)
+      if (mode === 'edit' && initialData?.id) {
+        groupsQ = groupsQ.neq('id', initialData.id) // Prevent self-reference
+      }
+
+      const { data: groupsData, error: groupsError } = await groupsQ
+      if (groupsError) throw groupsError
+
+      // Get prices for items
+      const itemIds = itemsData.map((r) => r.id)
       let prices: Record<string, number | null> = {}
-      if (ids.length) {
+      if (itemIds.length) {
         const { data: cp, error: cpErr } = await supabase
           .from('item_current_price')
           .select('item_id, current_price')
-          .in('item_id', ids)
+          .in('item_id', itemIds)
         if (cpErr) throw cpErr
         prices = cp.reduce((acc: Record<string, number | null>, r) => {
-          acc[r.item_id] = r.current_price
+          if (r.item_id) {
+            acc[r.item_id] = r.current_price
+          }
           return acc
         }, {})
       }
 
-      return data.map((r) => ({
+      // Get prices for groups
+      const groupIds = groupsData.map((r) => r.id)
+      let groupPrices: Record<string, number | null> = {}
+      if (groupIds.length) {
+        const { data: gcp, error: gcpErr } = await supabase
+          .from('group_current_price')
+          .select('group_id, current_price')
+          .in('group_id', groupIds)
+        if (gcpErr) throw gcpErr
+        groupPrices = gcp.reduce((acc: Record<string, number | null>, r) => {
+          if (r.group_id) {
+            acc[r.group_id] = r.current_price
+          }
+          return acc
+        }, {})
+      }
+
+      // Combine items and groups
+      const items = itemsData.map((r) => ({
         id: r.id,
         name: r.name,
-        current_price: prices[r.id] ?? null,
+        current_price: r.id ? (prices[r.id] ?? null) : null,
+        on_hand: r.on_hand ?? null,
+        type: 'item' as const,
       }))
+
+      const groups = groupsData.map((r) => ({
+        id: r.id,
+        name: r.name,
+        current_price: r.id ? (groupPrices[r.id] ?? null) : null,
+        on_hand: null, // Groups don't have on_hand in the same way
+        type: 'group' as const,
+      }))
+
+      return [...items, ...groups]
     },
     staleTime: 15_000,
   })
@@ -181,6 +267,13 @@ export default function AddGroupDialog({
     enabled: !!companyId && open,
   })
 
+  /* -------- Reset form in CREATE mode when dialog opens -------- */
+  React.useEffect(() => {
+    if (open && mode === 'create') {
+      resetForm()
+    }
+  }, [open, mode, resetForm])
+
   /* -------- Prefill in EDIT mode (prevent infinite loop) -------- */
   React.useEffect(() => {
     if (!open || mode !== 'edit' || !initialData) return
@@ -190,33 +283,25 @@ export default function AddGroupDialog({
     originalPriceRef.current = initialData.price ?? null
 
     const newParts = initialData.parts.map((p) => ({
-      item_id: p.item_id,
+      item_id: p.item_id ?? null,
+      child_group_id: p.child_group_id ?? null,
       item_name: p.item_name,
       quantity: p.quantity,
       unit_price: p.item_current_price,
+      part_type: (p.part_type ? p.part_type : p.item_id ? 'item' : 'group') as
+        | 'item'
+        | 'group',
     }))
 
     setForm((prev) => {
-      if (
-        prev.name === initialData.name &&
-        prev.categoryId === catId &&
-        prev.description === (initialData.description ?? '') &&
-        prev.active === initialData.active &&
-        prev.unique === initialData.unique &&
-        prev.price === (initialData.price ?? null) &&
-        JSON.stringify(prev.parts) === JSON.stringify(newParts) &&
-        prev.internally_owned === initialData.internally_owned &&
-        prev.external_owner_id === (initialData.external_owner_id ?? null)
-      ) {
-        return prev
-      }
+      if (prev.name === initialData.name) return prev // Prevent infinite loop
       return {
+        ...prev,
         name: initialData.name,
         categoryId: catId,
-        description: initialData.description ?? '',
+        description: initialData.description || '',
         active: initialData.active,
-        unique: initialData.unique,
-        price: initialData.price ?? null,
+        price: initialData.price,
         parts: newParts,
         internally_owned: initialData.internally_owned,
         external_owner_id: initialData.external_owner_id,
@@ -224,79 +309,31 @@ export default function AddGroupDialog({
     })
   }, [open, mode, initialData, categories])
 
-  /* -------- Parts handlers -------- */
-  const addPart = (it: PickerItem) => {
-    set('parts', [
-      ...form.parts.filter((p) => p.item_id !== it.id),
-      {
-        item_id: it.id,
-        item_name: it.name,
-        quantity: 1, // allow any qty even when unique
-        unit_price: it.current_price ?? null,
-      },
-    ])
-  }
-  const updatePartQty = (item_id: string, qty: number) => {
-    set(
-      'parts',
-      form.parts.map((p) =>
-        p.item_id === item_id ? { ...p, quantity: Math.max(1, qty) } : p,
-      ),
-    )
-  }
-  const removePart = (item_id: string) => {
-    set(
-      'parts',
-      form.parts.filter((p) => p.item_id !== item_id),
-    )
-  }
-
-  const totalPartsValue = React.useMemo(
-    () =>
-      form.parts.reduce((sum, p) => {
-        const up = Number(p.unit_price ?? 0)
-        return sum + up * p.quantity
-      }, 0),
-    [form.parts],
-  )
-
   /* -------- Create mutation -------- */
   const createMutation = useMutation({
     mutationFn: async (f: FormState) => {
       if (!companyId) throw new Error('No company selected')
-      if (!f.name.trim()) throw new Error('Name is required')
 
       let groupId: string | undefined
 
-      const { error: rpcErr } = await supabase.rpc(
-        'create_group_with_price_and_parts',
-        {
-          p_company_id: companyId,
-          p_name: f.name.trim(),
-          p_category_id: f.categoryId,
-          p_description: f.description || null,
-          p_active: f.active,
-          p_price: f.price,
-          p_parts: f.parts.map((p) => ({
-            item_id: p.item_id,
-            quantity: p.quantity,
-          })),
-          p_unique: f.unique,
-          p_internally_owned: f.internally_owned,
-          p_external_owner_id: f.internally_owned ? null : f.external_owner_id,
-        },
-      )
-      if (!rpcErr) {
-        // Get the created group ID
-        const { data: groupData } = await supabase
+      // 1) Create or update group row
+      if (f.price != null && !Number.isNaN(Number(f.price))) {
+        // If price is set, use upsert with price
+        const { data: g, error: gErr } = await supabase
           .from('item_groups')
+          .insert({
+            company_id: companyId,
+            name: f.name.trim(),
+            category_id: f.categoryId,
+            description: f.description || null,
+            active: f.active,
+            internally_owned: f.internally_owned,
+            external_owner_id: f.internally_owned ? null : f.external_owner_id,
+          })
           .select('id')
-          .eq('company_id', companyId)
-          .eq('name', f.name.trim())
-          .order('created_at', { ascending: false })
-          .limit(1)
           .single()
-        groupId = groupData?.id
+        if (gErr) throw gErr
+        groupId = g.id
       } else {
         // Fallback (rare)
         const { data: g, error: gErr } = await supabase
@@ -307,23 +344,23 @@ export default function AddGroupDialog({
             category_id: f.categoryId,
             description: f.description || null,
             active: f.active,
-            unique: f.unique,
             internally_owned: f.internally_owned,
             external_owner_id: f.internally_owned ? null : f.external_owner_id,
           })
           .select('id')
           .single()
         if (gErr) throw gErr
-        groupId = g.id as string
+        groupId = g.id
       }
 
-      if (f.parts.length) {
+      if (f.parts.length && groupId) {
         const { error: giErr } = await supabase.from('group_items').insert(
           f.parts.map((p) => ({
             group_id: groupId,
-            item_id: p.item_id,
+            item_id: p.item_id ?? undefined,
+            child_group_id: p.child_group_id ?? undefined,
             quantity: p.quantity,
-          })),
+          })) as any, // Type assertion needed until DB types are regenerated
         )
         if (giErr) {
           await supabase.from('item_groups').delete().eq('id', groupId)
@@ -331,7 +368,7 @@ export default function AddGroupDialog({
         }
       }
 
-      if (f.price != null && !Number.isNaN(Number(f.price))) {
+      if (f.price != null && !Number.isNaN(Number(f.price)) && groupId) {
         const { error: gpErr } = await supabase
           .from('group_price_history')
           .insert({
@@ -385,6 +422,7 @@ export default function AddGroupDialog({
           exact: false,
         }),
       ])
+      resetForm()
       onOpenChange(false)
       success('Group created', 'Your group was added successfully.')
       onSaved?.()
@@ -408,7 +446,6 @@ export default function AddGroupDialog({
           category_id: f.categoryId,
           description: f.description || null,
           active: f.active,
-          unique: f.unique,
           internally_owned: f.internally_owned,
           external_owner_id: f.internally_owned ? null : f.external_owner_id,
         })
@@ -427,9 +464,10 @@ export default function AddGroupDialog({
         const { error: insErr } = await supabase.from('group_items').insert(
           f.parts.map((p) => ({
             group_id: initialData.id,
-            item_id: p.item_id,
+            item_id: p.item_id ?? undefined,
+            child_group_id: p.child_group_id ?? undefined,
             quantity: p.quantity,
-          })),
+          })) as any, // Type assertion needed until DB types are regenerated
         )
         if (insErr) throw insErr
       }
@@ -460,12 +498,12 @@ export default function AddGroupDialog({
           exact: false,
         }),
         qc.invalidateQueries({
-          queryKey: ['company', companyId, 'groups'],
+          queryKey: ['company', companyId, 'latest-feed'],
           exact: false,
         }),
       ])
       onOpenChange(false)
-      success('Saved', 'Group was updated.')
+      success('Group updated', 'Your group was updated successfully.')
       onSaved?.()
     },
     onError: (e: any) => {
@@ -473,485 +511,466 @@ export default function AddGroupDialog({
     },
   })
 
-  const loading = catLoading
-  const fmt = React.useMemo(
-    () =>
-      new Intl.NumberFormat(undefined, {
-        style: 'currency',
-        currency: 'NOK',
-        minimumFractionDigits: 2,
-      }),
-    [],
-  )
-
-  // Confirmation for edit mode
-  const [confirmOpen, setConfirmOpen] = React.useState(false)
-  const saving =
-    mode === 'create' ? createMutation.isPending : editMutation.isPending
-
-  const title = mode === 'edit' ? 'Edit group' : 'Add group to inventory'
-  const actionLabel =
-    mode === 'edit'
-      ? saving
-        ? 'Saving…'
-        : 'Save'
-      : saving
-        ? 'Saving…'
-        : 'Create'
-
-  const handleSave = () => {
-    if (mode === 'edit') {
-      setConfirmOpen(true)
+  /* -------- Add part handler -------- */
+  const handleAddPart = (selected: PickerItem) => {
+    const existing = form.parts.find(
+      (p) =>
+        (selected.type === 'item' && p.item_id === selected.id) ||
+        (selected.type === 'group' && p.child_group_id === selected.id),
+    )
+    if (existing) {
+      set(
+        'parts',
+        form.parts.map((p) =>
+          p === existing ? { ...p, quantity: p.quantity + 1 } : p,
+        ),
+      )
     } else {
-      createMutation.mutate(form)
+      set('parts', [
+        ...form.parts,
+        {
+          item_id: selected.type === 'item' ? selected.id : null,
+          child_group_id: selected.type === 'group' ? selected.id : null,
+          item_name: selected.name,
+          quantity: 1,
+          unit_price: selected.current_price,
+          part_type: selected.type,
+        },
+      ])
     }
-  }
-  const confirmAndSave = () => {
-    setConfirmOpen(false)
-    editMutation.mutate(form)
+    setSearch('')
   }
 
-  const canSaveOwner =
-    form.internally_owned ||
-    (!!form.external_owner_id && form.external_owner_id !== '')
+  /* -------- Remove part handler -------- */
+  const handleRemovePart = (index: number) => {
+    set(
+      'parts',
+      form.parts.filter((_, i) => i !== index),
+    )
+  }
 
-  const disabled = saving || !form.name.trim() || !canSaveOwner
+  /* -------- Update part quantity -------- */
+  const handleUpdateQuantity = (index: number, quantity: number) => {
+    if (quantity < 1) return
+    set(
+      'parts',
+      form.parts.map((p, i) => (i === index ? { ...p, quantity } : p)),
+    )
+  }
 
+  // ===== TESTING ONLY: Auto-populate function =====
+  // TODO: Remove this function and button when testing is complete
+  const autoPopulateFields = () => {
+    const groupNames = [
+      'Stage Box 8ch',
+      'PA System Basic',
+      'Lighting Rig Standard',
+      'Video Production Kit',
+      'Sound Recording Setup',
+      'Streaming Equipment',
+      'Conference AV Package',
+      'Stage Monitor System',
+      'Wireless Mic Package',
+      'DJ Equipment Bundle',
+    ]
+    const descriptions = [
+      'Complete stage box setup with 8 channels',
+      'Basic PA system for small venues',
+      'Standard lighting rig for events',
+      'Full video production equipment package',
+      'Professional sound recording setup',
+      'Complete streaming equipment bundle',
+      'Conference AV equipment package',
+      'Stage monitor system setup',
+      'Wireless microphone package',
+      'DJ equipment bundle',
+    ]
+
+    const randomName = groupNames[Math.floor(Math.random() * groupNames.length)]
+    const randomDescription =
+      descriptions[Math.floor(Math.random() * descriptions.length)]
+    const randomPrice = Math.floor(Math.random() * 10000) + 1000
+    const isInternal = Math.random() > 0.3 // 70% chance of being internal
+    const randomPartner =
+      partners.length > 0
+        ? partners[Math.floor(Math.random() * partners.length)]
+        : null
+
+    // Set random category if available
+    const randomCategory =
+      categories.length > 0
+        ? categories[Math.floor(Math.random() * categories.length)]
+        : null
+
+    setForm({
+      name: randomName,
+      categoryId: randomCategory?.id ?? null,
+      description: randomDescription,
+      active: Math.random() > 0.2, // 80% chance of being active
+      price: randomPrice,
+      parts: [], // Don't auto-populate parts as it requires item/group selection
+      internally_owned: isInternal,
+      external_owner_id: isInternal ? null : (randomPartner?.id ?? null),
+    })
+  }
+  // ===== END TESTING ONLY =====
+
+  /* -------- Render -------- */
   return (
     <>
       <Dialog.Root open={open} onOpenChange={onOpenChange}>
-        {/* Only show trigger in CREATE mode */}
-        {mode === 'create' && (
+        {/* Only render trigger in CREATE mode when showTrigger is true; in EDIT the parent opens it */}
+        {mode === 'create' && showTrigger && (
           <Dialog.Trigger>
-            <Button size="2" variant="classic">
-              <NewTab /> Add group
+            <Button size="2" variant="solid">
+              <Plus /> Add group
             </Button>
           </Dialog.Trigger>
         )}
 
-        {/* Fixed height dialog + two columns */}
-        <Dialog.Content
-          maxWidth="990px"
-          style={{ height: '80vh', display: 'flex', flexDirection: 'column' }}
-        >
-          <Dialog.Title>{title}</Dialog.Title>
+        <Dialog.Content style={{ maxWidth: 1000 }}>
+          <Flex align="center" justify="between">
+            <Dialog.Title>
+              {mode === 'create' ? 'Create Group' : 'Edit Group'}
+            </Dialog.Title>
+            {/* ===== TESTING ONLY: Auto-fill button ===== */}
+            {mode === 'create' && (
+              <Button
+                size="2"
+                variant="soft"
+                onClick={autoPopulateFields}
+                type="button"
+                style={{ marginLeft: 'auto' }}
+              >
+                <Sparks width={16} height={16} />
+                Auto-fill
+              </Button>
+            )}
+            {/* ===== END TESTING ONLY ===== */}
+          </Flex>
 
-          {/* Grid container fills the dialog and scrolls per column */}
-          <div
-            style={{
-              marginTop: 8,
-              display: 'grid',
-              gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-              gap: 16,
-              flex: 1,
-              minHeight: 0,
-            }}
-          >
-            {/* LEFT COLUMN: all fields + picker */}
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 12,
-                overflowY: 'auto',
-                minHeight: 0,
-                paddingRight: 4,
-              }}
-            >
-              <Field label="Name">
-                <TextField.Root
-                  placeholder="e.g. Stage box 8ch"
-                  value={form.name}
-                  onChange={(e) => set('name', e.target.value)}
-                />
-              </Field>
+          <Grid columns="2" gap="4" mt="4">
+            {/* LEFT COLUMN: Input Fields and Data */}
+            <Flex direction="column" gap="3">
+              {/* Name */}
+              <TextField.Root
+                placeholder="Group name"
+                value={form.name}
+                onChange={(e) => set('name', e.target.value)}
+              />
 
-              <Flex gap="3" wrap="wrap">
-                <Field label="Category">
-                  <Select.Root
-                    value={form.categoryId ?? undefined}
-                    onValueChange={(v) => {
-                      if (v === '__new_category__') {
-                        navigate({ to: '/company', search: { tab: 'setup' } })
-                        onOpenChange(false)
-                      } else {
-                        set('categoryId', v)
-                      }
-                    }}
-                    size="3"
-                    disabled={loading}
-                  >
-                    <Select.Trigger
-                      placeholder={loading ? 'Loading…' : 'Select category'}
-                      style={{ minHeight: 'var(--space-7)' }}
-                    />
-                    <Select.Content style={{ zIndex: 10000 }}>
-                      <Select.Group>
-                        {categories.map((c) => (
-                          <Select.Item key={c.id} value={c.id}>
-                            {c.name}
-                          </Select.Item>
-                        ))}
-                        {isOwner && (
-                          <>
-                            <Select.Separator />
-                            <Select.Item value="__new_category__">
-                              + New category
-                            </Select.Item>
-                          </>
-                        )}
-                      </Select.Group>
-                    </Select.Content>
-                  </Select.Root>
-                </Field>
-
-                <Field label="Active">
-                  <Select.Root
-                    value={form.active ? 'true' : 'false'}
-                    onValueChange={(v) => set('active', v === 'true')}
-                    size="3"
-                  >
-                    <Select.Trigger style={{ minHeight: 'var(--space-7)' }} />
-                    <Select.Content style={{ zIndex: 10000 }}>
-                      <Select.Item value="true">Active</Select.Item>
-                      <Select.Item value="false">Inactive</Select.Item>
-                    </Select.Content>
-                  </Select.Root>
-                </Field>
-
-                <Field label="Type">
-                  <Select.Root
-                    value={form.unique ? 'true' : 'false'}
-                    size="3"
-                    onValueChange={(v) => set('unique', v === 'true')}
-                  >
-                    <Select.Trigger style={{ minHeight: 'var(--space-7)' }} />
-                    <Select.Content style={{ zIndex: 10000 }}>
-                      <Select.Item value="false">Bundle (generic)</Select.Item>
-                      <Select.Item value="true">Unique (fixed set)</Select.Item>
-                    </Select.Content>
-                  </Select.Root>
-                </Field>
-
-                <Field
-                  label={
-                    mode === 'edit'
-                      ? 'Price (creates history if changed)'
-                      : 'Price (optional)'
-                  }
-                >
-                  <TextField.Root
-                    type="number"
-                    inputMode="decimal"
-                    step="0.01"
-                    min="0"
-                    placeholder="e.g. 999.00"
-                    value={form.price == null ? '' : String(form.price)}
-                    onChange={(e) =>
-                      set(
-                        'price',
-                        e.target.value === '' ? null : Number(e.target.value),
-                      )
-                    }
-                  />
-                </Field>
-              </Flex>
-              {/* …existing Flex with Category / Active / Type / Price … */}
-
-              <Field label="Description">
-                <TextArea
-                  rows={3}
-                  value={form.description}
-                  onChange={(e) => set('description', e.target.value)}
-                  placeholder="Short description…"
-                />
-              </Field>
-
-              {/* NEW: wrap owner selectors in a Flex row */}
-              <Flex gap="3" wrap="wrap">
-                <Field label="Owner">
-                  <Select.Root
-                    value={form.internally_owned ? 'internal' : 'external'}
-                    onValueChange={(v: string) => {
-                      const internal = v === 'internal'
-                      set('internally_owned', internal)
-                      if (internal) set('external_owner_id', null)
-                    }}
-                    size="3"
-                  >
-                    <Select.Trigger style={{ minHeight: 'var(--space-7)' }} />
-                    <Select.Content style={{ zIndex: 10000 }}>
-                      <Select.Item value="internal">Internal</Select.Item>
-                      <Select.Item value="external">External</Select.Item>
-                    </Select.Content>
-                  </Select.Root>
-                </Field>
-
-                {!form.internally_owned && (
-                  <Field label="External owner">
-                    <Select.Root
-                      value={form.external_owner_id ?? ''}
-                      onValueChange={(v: string) =>
-                        set('external_owner_id', v || null)
-                      }
-                      size="3"
-                    >
-                      <Select.Trigger
-                        placeholder="Select partner…"
-                        style={{ minHeight: 'var(--space-7)' }}
-                      />
-                      <Select.Content style={{ zIndex: 10000 }}>
-                        <Select.Group>
-                          {partners.map((p) => (
-                            <Select.Item key={p.id} value={p.id}>
-                              {p.name}
-                            </Select.Item>
-                          ))}
-                        </Select.Group>
-                      </Select.Content>
-                    </Select.Root>
-                  </Field>
-                )}
-              </Flex>
-
-              <Separator my="2" />
-
-              <Text size="2" color="gray">
-                Add items
-              </Text>
-              <Flex gap="2" align="center" wrap="wrap">
-                <TextField.Root
-                  placeholder="Search items…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  size="3"
-                  style={{ flex: '1 1 260px' }}
-                />
-                <TextField.Slot side="left">
-                  <Search />
-                </TextField.Slot>
-                <TextField.Slot side="right">
-                  {itemsFetching && <Spinner />}
-                </TextField.Slot>
-              </Flex>
-
-              <BoxedList
-                loading={itemsLoading}
-                emptyText={
-                  search ? 'No items found.' : 'Start typing to search items.'
+              {/* Category */}
+              <Select.Root
+                value={form.categoryId ?? '__none__'}
+                onValueChange={(value) =>
+                  set('categoryId', value === '__none__' ? null : value)
                 }
               >
-                {pickerItems.map((it) => (
-                  <Flex key={it.id} align="center" justify="between" py="1">
-                    <Text size="1">{it.name}</Text>
-                    <Flex align="center" gap="1">
-                      <Text size="1" color="gray">
-                        {it.current_price != null
-                          ? fmt.format(Number(it.current_price))
-                          : '—'}
-                      </Text>
-                      <Button
-                        variant="classic"
-                        size="1"
-                        onClick={() => addPart(it)}
-                      >
-                        Add
-                      </Button>
-                    </Flex>
-                  </Flex>
-                ))}
-              </BoxedList>
-            </div>
+                <Select.Trigger>
+                  {form.categoryId
+                    ? categories.find((c) => c.id === form.categoryId)?.name ||
+                      'Category (optional)'
+                    : 'Category (optional)'}
+                </Select.Trigger>
+                <Select.Content style={{ zIndex: 10000 }}>
+                  <Select.Item value="__none__">None</Select.Item>
+                  {categories.map((cat) => (
+                    <Select.Item key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </Select.Item>
+                  ))}
+                </Select.Content>
+              </Select.Root>
 
-            {/* RIGHT COLUMN: selected parts with its own scroll */}
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                overflow: 'hidden',
-                minHeight: 0,
-              }}
-            >
-              <Text size="2" color="gray" style={{ marginBottom: 6 }}>
-                Selected items
+              {/* Description */}
+              <TextArea
+                placeholder="Description (optional)"
+                value={form.description}
+                onChange={(e) => set('description', e.target.value)}
+                rows={3}
+              />
+
+              {/* Active */}
+              <label
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <input
+                  type="checkbox"
+                  checked={form.active}
+                  onChange={(e) => set('active', e.target.checked)}
+                />
+                Active
+              </label>
+
+              {/* Price */}
+              <TextField.Root
+                type="number"
+                placeholder="Price (optional)"
+                value={form.price ?? ''}
+                onChange={(e) =>
+                  set('price', e.target.value ? Number(e.target.value) : null)
+                }
+              />
+
+              {/* Owner */}
+              <Separator />
+              <Text size="2" weight="bold">
+                Ownership
+              </Text>
+              <label
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <input
+                  type="checkbox"
+                  checked={form.internally_owned}
+                  onChange={(e) => set('internally_owned', e.target.checked)}
+                />
+                Internally owned
+              </label>
+              {!form.internally_owned && (
+                <Select.Root
+                  value={form.external_owner_id ?? '__none__'}
+                  onValueChange={(value) =>
+                    set(
+                      'external_owner_id',
+                      value === '__none__' ? null : value,
+                    )
+                  }
+                >
+                  <Select.Trigger>
+                    {form.external_owner_id
+                      ? partners.find((p) => p.id === form.external_owner_id)
+                          ?.name || 'Select partner'
+                      : 'Select partner'}
+                  </Select.Trigger>
+                  <Select.Content style={{ zIndex: 10000 }}>
+                    <Select.Item value="__none__">None</Select.Item>
+                    {partners.map((partner) => (
+                      <Select.Item key={partner.id} value={partner.id}>
+                        {partner.name}
+                      </Select.Item>
+                    ))}
+                  </Select.Content>
+                </Select.Root>
+              )}
+
+              {/* Actions */}
+              <Flex gap="2" justify="end" mt="auto">
+                <Button variant="soft" onClick={() => onOpenChange(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (mode === 'create') {
+                      createMutation.mutate(form)
+                    } else {
+                      editMutation.mutate(form)
+                    }
+                  }}
+                  disabled={
+                    !form.name.trim() ||
+                    createMutation.isPending ||
+                    editMutation.isPending
+                  }
+                >
+                  {mode === 'create' ? 'Create' : 'Update'}
+                </Button>
+              </Flex>
+            </Flex>
+
+            {/* RIGHT COLUMN: Parts Search and List */}
+            <Flex direction="column" gap="3">
+              <Text size="2" weight="bold">
+                Parts
               </Text>
 
-              <div
-                style={{
-                  flex: 1,
-                  minHeight: 0,
-                  overflowY: 'auto',
-                  border: '1px solid var(--gray-a6)',
-                  borderRadius: 8,
-                  padding: 8,
-                }}
-              >
-                {form.parts.length === 0 ? (
-                  <Text size="2" color="gray">
-                    No items selected.
-                  </Text>
-                ) : (
-                  <Table.Root variant="surface">
-                    <Table.Header>
-                      <Table.Row>
-                        <Table.ColumnHeaderCell>Item</Table.ColumnHeaderCell>
-                        <Table.ColumnHeaderCell>Qty</Table.ColumnHeaderCell>
-                        <Table.ColumnHeaderCell>Unit</Table.ColumnHeaderCell>
-                        <Table.ColumnHeaderCell>Total</Table.ColumnHeaderCell>
-                        <Table.ColumnHeaderCell />
-                      </Table.Row>
-                    </Table.Header>
-                    <Table.Body>
-                      {form.parts.map((p) => (
-                        <Table.Row key={p.item_id}>
-                          <Table.Cell>{p.item_name}</Table.Cell>
-                          <Table.Cell style={{ width: 100 }}>
-                            <TextField.Root
-                              type="number"
-                              inputMode="numeric"
-                              min="1"
-                              value={String(p.quantity)}
-                              onChange={(e) =>
-                                updatePartQty(
-                                  p.item_id,
-                                  Math.max(1, Number(e.target.value || 1)),
-                                )
-                              }
-                            />
-                          </Table.Cell>
-                          <Table.Cell>
-                            {p.unit_price != null
-                              ? fmt.format(Number(p.unit_price))
-                              : '—'}
-                          </Table.Cell>
-                          <Table.Cell>
-                            {p.unit_price != null
-                              ? fmt.format(Number(p.unit_price) * p.quantity)
-                              : '—'}
-                          </Table.Cell>
-                          <Table.Cell align="right">
-                            <IconButton
-                              size="2"
-                              color="red"
-                              variant="soft"
-                              onClick={() => removePart(p.item_id)}
-                              title="Remove"
-                            >
-                              <Trash />
-                            </IconButton>
-                          </Table.Cell>
-                        </Table.Row>
-                      ))}
-                      <Table.Row>
-                        <Table.Cell />
-                        <Table.Cell />
-                        <Table.Cell style={{ fontWeight: 600 }}>
-                          Parts total
-                        </Table.Cell>
-                        <Table.Cell style={{ fontWeight: 600 }}>
-                          {fmt.format(totalPartsValue)}
-                        </Table.Cell>
-                        <Table.Cell />
-                      </Table.Row>
-                    </Table.Body>
-                  </Table.Root>
-                )}
-              </div>
-            </div>
-          </div>
+              {/* Parts Search */}
+              <Flex direction="column" gap="2">
+                <Text size="2" color="gray">
+                  Search & Add
+                </Text>
+                <Box style={{ position: 'relative' }}>
+                  <Flex gap="2">
+                    <TextField.Root
+                      placeholder="Search items or groups..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      style={{ flex: 1 }}
+                    />
+                    {itemsLoading && <Spinner />}
+                  </Flex>
 
-          {/* Actions row sticks to bottom of dialog */}
-          <Flex gap="2" mt="4" justify="end">
-            <Dialog.Close>
-              <Button variant="soft">Cancel</Button>
-            </Dialog.Close>
-            <Button onClick={handleSave} disabled={disabled} variant="classic">
-              {actionLabel}
-            </Button>
-          </Flex>
+                  {search && (
+                    <Box
+                      style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        marginTop: '4px',
+                        border: '1px solid var(--gray-a6)',
+                        borderRadius: '4px',
+                        maxHeight: '200px',
+                        overflowY: 'auto',
+                        backgroundColor: 'var(--gray-1)',
+                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                        zIndex: 1000,
+                      }}
+                    >
+                    {pickerItems
+                      .filter((item) =>
+                        item.name.toLowerCase().includes(search.toLowerCase()),
+                      )
+                      .map((item) => (
+                        <Box
+                          key={item.id}
+                          onClick={() => handleAddPart(item)}
+                          style={{
+                            padding: '8px 12px',
+                            cursor: 'pointer',
+                            borderBottom: '1px solid var(--gray-a6)',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor =
+                              'var(--gray-a3)'
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor =
+                              'transparent'
+                          }}
+                        >
+                          <Flex direction="column" gap="1">
+                            <Flex justify="between" align="center">
+                              <Flex align="center" gap="2">
+                                <Text size="2" weight="medium">
+                                  {item.name}
+                                </Text>
+                                {item.type === 'group' && (
+                                  <Badge color="blue" size="1">
+                                    Group
+                                  </Badge>
+                                )}
+                              </Flex>
+                              {item.current_price != null && (
+                                <Text size="1" color="gray">
+                                  {fmtCurrency.format(item.current_price)}
+                                </Text>
+                              )}
+                            </Flex>
+                            {item.type === 'item' && item.on_hand != null && (
+                              <Text size="1" color="gray">
+                                On hand: {item.on_hand}
+                              </Text>
+                            )}
+                          </Flex>
+                        </Box>
+                      ))}
+                    </Box>
+                  )}
+                </Box>
+              </Flex>
+
+              {/* Parts List */}
+              <Flex
+                direction="column"
+                gap="2"
+                style={{ flex: 1, minHeight: 0 }}
+              >
+                <Text size="2" color="gray">
+                  Added Parts ({form.parts.length})
+                </Text>
+                {form.parts.length > 0 ? (
+                  <Box
+                    style={{
+                      border: '1px solid var(--gray-a6)',
+                      borderRadius: '4px',
+                      flex: 1,
+                      minHeight: 0,
+                      overflowY: 'auto',
+                    }}
+                  >
+                    <Table.Root size="1">
+                      <Table.Header>
+                        <Table.Row>
+                          <Table.ColumnHeaderCell>Name</Table.ColumnHeaderCell>
+                          <Table.ColumnHeaderCell>Qty</Table.ColumnHeaderCell>
+                          <Table.ColumnHeaderCell></Table.ColumnHeaderCell>
+                        </Table.Row>
+                      </Table.Header>
+                      <Table.Body>
+                        {form.parts.map((part, index) => (
+                          <Table.Row key={index}>
+                            <Table.Cell>
+                              <Flex direction="column" gap="1">
+                                <Flex align="center" gap="2">
+                                  <Text size="2">{part.item_name}</Text>
+                                  {part.part_type === 'group' && (
+                                    <Badge color="blue" size="1">
+                                      Group
+                                    </Badge>
+                                  )}
+                                </Flex>
+                                {part.unit_price != null && (
+                                  <Text size="1" color="gray">
+                                    {fmtCurrency.format(part.unit_price)} each
+                                  </Text>
+                                )}
+                              </Flex>
+                            </Table.Cell>
+                            <Table.Cell>
+                              <TextField.Root
+                                type="number"
+                                value={part.quantity}
+                                onChange={(e) =>
+                                  handleUpdateQuantity(
+                                    index,
+                                    Number(e.target.value),
+                                  )
+                                }
+                                style={{ width: '60px' }}
+                                size="1"
+                              />
+                            </Table.Cell>
+                            <Table.Cell>
+                              <IconButton
+                                size="1"
+                                color="red"
+                                variant="soft"
+                                onClick={() => handleRemovePart(index)}
+                              >
+                                <Trash width={14} height={14} />
+                              </IconButton>
+                            </Table.Cell>
+                          </Table.Row>
+                        ))}
+                      </Table.Body>
+                    </Table.Root>
+                  </Box>
+                ) : (
+                  <Box
+                    style={{
+                      border: '1px solid var(--gray-a6)',
+                      borderRadius: '4px',
+                      padding: '24px',
+                      textAlign: 'center',
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Text size="2" color="gray">
+                      No parts added yet.
+                      <br />
+                      Search and click items to add them.
+                    </Text>
+                  </Box>
+                )}
+              </Flex>
+            </Flex>
+          </Grid>
         </Dialog.Content>
       </Dialog.Root>
-
-      {/* Confirm on edit */}
-      <AlertDialog.Root open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialog.Content maxWidth="480px">
-          <AlertDialog.Title>Save changes?</AlertDialog.Title>
-          <AlertDialog.Description size="2">
-            You’re about to update this group. If you changed the price, a new
-            price history entry will be added. Continue?
-          </AlertDialog.Description>
-          <Flex gap="3" justify="end" mt="4">
-            <AlertDialog.Cancel>
-              <Button variant="soft">Cancel</Button>
-            </AlertDialog.Cancel>
-            <AlertDialog.Action>
-              <Button variant="classic" onClick={confirmAndSave}>
-                Yes, save
-              </Button>
-            </AlertDialog.Action>
-          </Flex>
-        </AlertDialog.Content>
-      </AlertDialog.Root>
     </>
-  )
-}
-
-/* ---------- helpers ---------- */
-
-function Field({
-  label,
-  children,
-}: {
-  label: string
-  children: React.ReactNode
-}) {
-  return (
-    <div style={{ flex: '1 1', minWidth: 160 }}>
-      <Text
-        as="label"
-        size="2"
-        color="gray"
-        style={{ display: 'block', marginBottom: 6 }}
-      >
-        {label}
-      </Text>
-      {children}
-    </div>
-  )
-}
-
-function BoxedList({
-  loading,
-  emptyText,
-  children,
-}: {
-  loading: boolean
-  emptyText: string
-  height?: number
-  children: React.ReactNode
-}) {
-  return (
-    <div
-      style={{
-        overflowY: 'auto',
-        border: '1px solid var(--gray-a6)',
-        borderRadius: 8,
-        padding: 8,
-        minHeight: '190px',
-      }}
-    >
-      {loading ? (
-        <Flex align="center" justify="center" p="4">
-          <Flex align="center" gap="1">
-            <Text>Thinking</Text>
-            <Spinner size="2" />
-          </Flex>
-        </Flex>
-      ) : React.Children.count(children) === 0 ? (
-        <Text color="gray">{emptyText}</Text>
-      ) : (
-        children
-      )}
-    </div>
   )
 }

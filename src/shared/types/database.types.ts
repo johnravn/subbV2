@@ -7,10 +7,30 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "13.0.5"
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -515,21 +535,41 @@ export type Database = {
       }
       group_items: {
         Row: {
+          child_group_id: string | null
           group_id: string
-          item_id: string
+          id: string
+          item_id: string | null
           quantity: number
         }
         Insert: {
+          child_group_id?: string | null
           group_id: string
-          item_id: string
+          id?: string
+          item_id?: string | null
           quantity: number
         }
         Update: {
+          child_group_id?: string | null
           group_id?: string
-          item_id?: string
+          id?: string
+          item_id?: string | null
           quantity?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "group_items_child_group_id_fkey"
+            columns: ["child_group_id"]
+            isOneToOne: false
+            referencedRelation: "groups_with_rollups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_items_child_group_id_fkey"
+            columns: ["child_group_id"]
+            isOneToOne: false
+            referencedRelation: "item_groups"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "group_items_group_id_fkey"
             columns: ["group_id"]
@@ -685,6 +725,7 @@ export type Database = {
           deleted: boolean
           description: string | null
           external_owner_id: string | null
+          group_type: Database["public"]["Enums"]["group_type"]
           id: string
           internally_owned: boolean
           name: string
@@ -697,6 +738,7 @@ export type Database = {
           deleted?: boolean
           description?: string | null
           external_owner_id?: string | null
+          group_type?: Database["public"]["Enums"]["group_type"]
           id?: string
           internally_owned?: boolean
           name: string
@@ -709,6 +751,7 @@ export type Database = {
           deleted?: boolean
           description?: string | null
           external_owner_id?: string | null
+          group_type?: Database["public"]["Enums"]["group_type"]
           id?: string
           internally_owned?: boolean
           name?: string
@@ -1350,6 +1393,7 @@ export type Database = {
       }
       jobs: {
         Row: {
+          archived: boolean
           company_id: string
           created_at: string
           customer_contact_id: string | null
@@ -1367,6 +1411,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          archived?: boolean
           company_id: string
           created_at?: string
           customer_contact_id?: string | null
@@ -1384,6 +1429,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          archived?: boolean
           company_id?: string
           created_at?: string
           customer_contact_id?: string | null
@@ -2615,32 +2661,33 @@ export type Database = {
           group_id: string | null
           on_hand: number | null
         }
+        Relationships: []
+      }
+      group_parts: {
+        Row: {
+          child_group_id: string | null
+          group_id: string | null
+          item_current_price: number | null
+          item_id: string | null
+          item_name: string | null
+          part_type: string | null
+          quantity: number | null
+        }
         Relationships: [
           {
-            foreignKeyName: "group_items_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: "group_items_child_group_id_fkey"
+            columns: ["child_group_id"]
             isOneToOne: false
             referencedRelation: "groups_with_rollups"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "group_items_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: "group_items_child_group_id_fkey"
+            columns: ["child_group_id"]
             isOneToOne: false
             referencedRelation: "item_groups"
             referencedColumns: ["id"]
           },
-        ]
-      }
-      group_parts: {
-        Row: {
-          group_id: string | null
-          item_current_price: number | null
-          item_id: string | null
-          item_name: string | null
-          quantity: number | null
-        }
-        Relationships: [
           {
             foreignKeyName: "group_items_group_id_fkey"
             columns: ["group_id"]
@@ -2747,6 +2794,7 @@ export type Database = {
           id: string | null
           internally_owned: boolean | null
           is_group: boolean | null
+          model: string | null
           name: string | null
           on_hand: number | null
           unique: boolean | null
@@ -3045,6 +3093,11 @@ export type Database = {
         }
         Returns: Json
       }
+      auto_update_jobs_to_in_progress: { Args: never; Returns: undefined }
+      check_circular_group_reference: {
+        Args: { p_child_group_id: string; p_parent_group_id: string }
+        Returns: boolean
+      }
       check_item_availability_for_job: {
         Args: { p_item_id: string; p_job_id: string }
         Returns: Json
@@ -3190,6 +3243,18 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      user_has_company_role: {
+        Args: {
+          p_company_id: string
+          p_roles: Database["public"]["Enums"]["company_role"][]
+          p_user_id: string
+        }
+        Returns: boolean
+      }
+      user_is_company_member: {
+        Args: { p_company_id: string; p_user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       activity_type:
@@ -3211,6 +3276,7 @@ export type Database = {
       crew_request_status: "planned" | "requested" | "declined" | "accepted"
       external_request_status: "planned" | "requested" | "confirmed"
       fuel: "electric" | "diesel" | "petrol"
+      group_type: "group" | "bundle"
       item_kind: "bulk" | "unique"
       job_status:
         | "draft"
@@ -3390,6 +3456,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       activity_type: [
@@ -3412,6 +3481,7 @@ export const Constants = {
       crew_request_status: ["planned", "requested", "declined", "accepted"],
       external_request_status: ["planned", "requested", "confirmed"],
       fuel: ["electric", "diesel", "petrol"],
+      group_type: ["group", "bundle"],
       item_kind: ["bulk", "unique"],
       job_status: [
         "draft",
@@ -3475,3 +3545,4 @@ export const Constants = {
     },
   },
 } as const
+

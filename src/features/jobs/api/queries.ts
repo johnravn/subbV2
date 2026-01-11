@@ -16,22 +16,20 @@ export function jobsIndexQuery({
   companyId,
   search,
   selectedDate,
-  customerId,
-  status,
   sortBy = 'start_at',
   sortDir = 'desc',
   userId,
   companyRole,
+  includeArchived = false,
 }: {
   companyId: string
   search: string
   selectedDate?: string
-  customerId?: string | null
-  status?: string | null
   sortBy?: 'title' | 'start_at' | 'status' | 'customer_name'
   sortDir?: 'asc' | 'desc'
   userId?: string | null
   companyRole?: 'owner' | 'employee' | 'freelancer' | 'super_user' | null
+  includeArchived?: boolean
 }) {
   return {
     queryKey: [
@@ -40,19 +38,18 @@ export function jobsIndexQuery({
       'jobs-index',
       search,
       selectedDate,
-      customerId,
-      status,
       sortBy,
       sortDir,
       userId,
       companyRole,
+      includeArchived,
     ],
     queryFn: async (): Promise<Array<JobListRow>> => {
       let q = supabase
         .from('jobs')
         .select(
           `
-          id, company_id, title, jobnr, status, start_at, end_at, customer_contact_id,
+          id, company_id, title, jobnr, status, start_at, end_at, customer_contact_id, archived,
           customer:customer_id ( id, name ),
           customer_user:customer_user_id ( user_id, display_name, email ),
           project_lead:project_lead_user_id ( user_id, display_name, email, avatar_url )
@@ -60,24 +57,9 @@ export function jobsIndexQuery({
         )
         .eq('company_id', companyId)
 
-      // Server-side filters
-      if (customerId) {
-        q = q.eq('customer_id', customerId)
-      }
-      if (status) {
-        q = q.eq(
-          'status',
-          status as
-            | 'draft'
-            | 'planned'
-            | 'requested'
-            | 'confirmed'
-            | 'in_progress'
-            | 'completed'
-            | 'canceled'
-            | 'invoiced'
-            | 'paid',
-        )
+      // Filter out archived jobs by default
+      if (!includeArchived) {
+        q = q.eq('archived', false)
       }
 
       // Note: We don't filter server-side when searching because we need to search
@@ -130,10 +112,10 @@ export function jobsIndexQuery({
         })
       }
 
-      // Client-side fuzzy filtering across title, customer name, customer user name, project lead name, and date
+      // Client-side fuzzy filtering across title, customer name, customer user name, project lead name, status, and date
       // (PostgREST doesn't support filtering on joined columns like customer.name)
       if (search.trim()) {
-        const { fuzzySearch } = await import('@shared/lib/generalFunctions')
+        const { fuzzySearch, makeWordPresentable } = await import('@shared/lib/generalFunctions')
         results = fuzzySearch(
           results,
           search,
@@ -145,6 +127,9 @@ export function jobsIndexQuery({
             (job) => job.project_lead?.display_name ?? null,
             (job) => job.project_lead?.email ?? null,
             (job) => job.start_at ?? null,
+            // Search status by both raw value and presentable format (e.g., "in progress" matches "in_progress")
+            (job) => job.status ?? null,
+            (job) => makeWordPresentable(job.status ?? ''),
           ],
           0.25, // Lower threshold for fuzzy matching
         )
@@ -305,7 +290,7 @@ export function jobDetailQuery({ jobId }: { jobId: string }) {
         .from('jobs')
         .select(
           `
-          id, company_id, title, jobnr, description, status, start_at, end_at,
+          id, company_id, title, jobnr, description, status, start_at, end_at, archived,
           project_lead_user_id, customer_id, customer_user_id, customer_contact_id, job_address_id,
           customer:customer_id ( id, name, email, phone ),
           customer_user:customer_user_id ( user_id, display_name, email, phone ),

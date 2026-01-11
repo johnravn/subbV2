@@ -20,6 +20,7 @@ import {
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import DateTimePicker from '@shared/ui/components/DateTimePicker'
 import { logActivity } from '@features/latest/api/queries'
+import { Sparks } from 'iconoir-react'
 import type { JobDetail, JobStatus, UUID } from '../../types'
 
 type Props = {
@@ -364,13 +365,104 @@ export default function JobDialog({
     !title.trim() ||
     (mode === 'create' && (!startAt || !endAt))
 
+  // ===== TESTING ONLY: Auto-populate function =====
+  // TODO: Remove this function and button when testing is complete
+  const autoPopulateFields = () => {
+    const jobTitles = [
+      'Corporate Event Setup',
+      'Concert Production',
+      'Conference AV',
+      'Wedding Sound & Lighting',
+      'Festival Stage Management',
+      'Corporate Presentation',
+      'Live Streaming Setup',
+      'Theater Production',
+      'Trade Show Installation',
+      'Product Launch Event',
+    ]
+    const descriptions = [
+      'Full production setup for corporate event',
+      'Complete concert production package',
+      'AV equipment for conference',
+      'Sound and lighting for wedding',
+      'Stage management for festival',
+      'Presentation equipment setup',
+      'Live streaming equipment package',
+      'Theater production equipment',
+      'Trade show installation and setup',
+      'Product launch event production',
+    ]
+    const statuses: Array<JobStatus> = [
+      'planned',
+      'requested',
+      'confirmed',
+      'in_progress',
+    ]
+
+    const randomTitle = jobTitles[Math.floor(Math.random() * jobTitles.length)]
+    const randomDescription =
+      descriptions[Math.floor(Math.random() * descriptions.length)]
+    const randomStatus = statuses[Math.floor(Math.random() * statuses.length)]
+
+    // Set dates: start in 1-30 days, end 3-8 hours after start
+    const daysFromNow = Math.floor(Math.random() * 30) + 1
+    const startDate = new Date()
+    startDate.setDate(startDate.getDate() + daysFromNow)
+    startDate.setHours(9 + Math.floor(Math.random() * 8), 0, 0, 0) // 9 AM - 5 PM
+
+    const endDate = new Date(startDate)
+    const hoursToAdd = 3 + Math.floor(Math.random() * 5) // 3-8 hours
+    endDate.setHours(endDate.getHours() + hoursToAdd)
+
+    const startAtStr = startDate.toISOString()
+    const endAtStr = endDate.toISOString()
+
+    // Set random project lead if available
+    const randomLead =
+      leads.length > 0 ? leads[Math.floor(Math.random() * leads.length)] : null
+
+    // Set random customer if available
+    const randomCustomer =
+      customers.length > 0
+        ? customers[Math.floor(Math.random() * customers.length)]
+        : null
+
+    setTitle(randomTitle)
+    setDescription(randomDescription)
+    setStatus(randomStatus)
+    setStartAt(startAtStr)
+    setEndAt(endAtStr)
+    setAutoSetEndTime(false)
+    setProjectLead(randomLead?.user_id ?? '')
+    setCustomerId(randomCustomer?.id ?? '')
+    setCustomerUserId('')
+    setContactId('')
+  }
+  // ===== END TESTING ONLY =====
+
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Content
         maxWidth="820px"
         style={{ display: 'flex', flexDirection: 'column' }}
       >
-        <Dialog.Title>{mode === 'edit' ? 'Edit job' : 'New job'}</Dialog.Title>
+        <Flex align="center" justify="between">
+          <Dialog.Title>{mode === 'edit' ? 'Edit job' : 'New job'}</Dialog.Title>
+          {/* ===== TESTING ONLY: Auto-fill button ===== */}
+          {mode === 'create' && (
+            <Button
+              size="2"
+              variant="soft"
+              onClick={autoPopulateFields}
+              type="button"
+              style={{ marginLeft: 'auto' }}
+            >
+              <Sparks width={16} height={16} />
+              Auto-fill
+            </Button>
+          )}
+          {/* ===== END TESTING ONLY ===== */}
+        </Flex>
         <Separator my="2" />
 
         <div

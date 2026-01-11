@@ -144,6 +144,7 @@ export default function JobsPage() {
   const [isMinimized, setIsMinimized] = React.useState(false)
   const [savedWidth, setSavedWidth] = React.useState<number>(45) // Save width when minimizing
   const [isResizing, setIsResizing] = React.useState(false)
+  const [hasUserResized, setHasUserResized] = React.useState(false) // Track if user manually resized
   const containerRef = React.useRef<HTMLDivElement>(null)
 
   // Toggle minimize state
@@ -166,6 +167,15 @@ export default function JobsPage() {
       setIsMinimized(false)
     }
   }, [isMinimized, savedWidth])
+
+  // Handle optimal width change from table
+  const handleTableWidthChange = React.useCallback((width: number) => {
+    // Only auto-update width if user hasn't manually resized
+    if (!hasUserResized && !isMinimized) {
+      setLeftPanelWidth(width)
+      setSavedWidth(width)
+    }
+  }, [hasUserResized, isMinimized])
 
   // Handle mouse move for resizing
   React.useEffect(() => {
@@ -191,6 +201,8 @@ export default function JobsPage() {
       setLeftPanelWidth(newWidthPercent)
       // Update saved width if user manually resizes
       setSavedWidth(newWidthPercent)
+      // Mark that user has manually resized
+      setHasUserResized(true)
       // Clear minimized state if user manually expands beyond threshold
       if (isMinimized && newWidthPercent > 35) {
         setIsMinimized(false)
@@ -261,7 +273,11 @@ export default function JobsPage() {
                 overflowY: isLarge ? 'auto' : 'visible',
               }}
             >
-              <JobsTable selectedId={selectedId} onSelect={setSelectedId} />
+              <JobsTable
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+                onWidthChange={isLarge ? handleTableWidthChange : undefined}
+              />
             </Box>
           </Card>
 
@@ -419,7 +435,11 @@ export default function JobsPage() {
                   overflowY: isLarge ? 'auto' : 'visible',
                 }}
               >
-                <JobsTable selectedId={selectedId} onSelect={setSelectedId} />
+                <JobsTable
+                  selectedId={selectedId}
+                  onSelect={setSelectedId}
+                  onWidthChange={isLarge ? handleTableWidthChange : undefined}
+                />
               </Box>
             </>
           )}

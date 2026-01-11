@@ -18,7 +18,7 @@ import {
   TextField,
 } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
-import { Search } from 'iconoir-react'
+import { Plus, Search } from 'iconoir-react'
 import { categoryNamesQuery, inventoryIndexQuery } from '../api/queries'
 import AddItemDialog from './AddItemDialog'
 import AddGroupDialog from './AddGroupDialog'
@@ -104,8 +104,11 @@ export default function InventoryTable({
     const visibleRow = containerRef.current?.querySelector<HTMLTableRowElement>(
       'tbody tr:not([data-row-probe])',
     )
-    const rowEl = visibleRow || 
-      containerRef.current?.querySelector<HTMLTableRowElement>('tbody tr[data-row-probe]')
+    const rowEl =
+      visibleRow ||
+      containerRef.current?.querySelector<HTMLTableRowElement>(
+        'tbody tr[data-row-probe]',
+      )
     const rowH = rowEl?.getBoundingClientRect().height || 44
 
     const rows = Math.max(5, Math.floor(available / rowH)) // never go below 5
@@ -199,11 +202,6 @@ export default function InventoryTable({
               {r.is_group && (
                 <Badge size="1" variant="soft" color="pink">
                   Group
-                </Badge>
-              )}
-              {r.is_group && r.unique === true && (
-                <Badge size="1" variant="soft">
-                  Unique
                 </Badge>
               )}
               {r.active === false && (
@@ -325,6 +323,17 @@ export default function InventoryTable({
             ))}
           </Select.Content>
         </Select.Root>
+
+        <Button size="2" variant="solid" onClick={() => setAddItemOpen(true)}>
+          <Plus width={16} height={16} /> Add item
+        </Button>
+        <Button
+          size="2"
+          variant="solid"
+          onClick={() => setAddGroupDialog(true)}
+        >
+          <Plus width={16} height={16} /> Add group
+        </Button>
       </Flex>
 
       {/* Table */}
@@ -439,36 +448,47 @@ export default function InventoryTable({
 
       <div ref={pagerRef}>
         <Flex align="center" justify="between" mb="3" mt="3">
+          {data && data.count > 0 && (
+            <Text size="2" color="gray">
+              Showing {(page - 1) * effectivePageSize + 1}-
+              {(page - 1) * effectivePageSize + data.rows.length} of{' '}
+              {data.count} items
+            </Text>
+          )}
           <Flex gap="2">
             <Button
               disabled={page === 1}
               onClick={() => setPage((p) => p - 1)}
-              variant="classic"
+              variant="solid"
+              size="2"
             >
               Prev
             </Button>
             <Button
-              disabled={!data || data.rows.length < pageSize}
+              disabled={!data || data.rows.length < effectivePageSize}
               onClick={() => setPage((p) => p + 1)}
-              variant="classic"
+              variant="solid"
+              size="2"
             >
               Next
             </Button>
           </Flex>
-          <Flex align="center" gap={'1'}>
-            <AddItemDialog
-              open={addItemOpen}
-              onOpenChange={setAddItemOpen}
-              companyId={companyId ?? ''}
-            />
-            <AddGroupDialog
-              open={addGroupDialog}
-              onOpenChange={setAddGroupDialog}
-              companyId={companyId ?? ''}
-            />
-          </Flex>
         </Flex>
       </div>
+
+      {/* Dialogs */}
+      <AddItemDialog
+        open={addItemOpen}
+        onOpenChange={setAddItemOpen}
+        companyId={companyId ?? ''}
+        showTrigger={false}
+      />
+      <AddGroupDialog
+        open={addGroupDialog}
+        onOpenChange={setAddGroupDialog}
+        companyId={companyId ?? ''}
+        showTrigger={false}
+      />
     </div>
   )
 }

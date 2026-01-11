@@ -13,7 +13,7 @@ import {
   Tabs,
   Text,
 } from '@radix-ui/themes'
-import { Plus } from 'iconoir-react'
+import { Plus, Sparks } from 'iconoir-react'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { supabase } from '@shared/api/supabase'
 import CompaniesTable from '../components/CompaniesTable'
@@ -24,6 +24,7 @@ import UserDialog from '../components/UserDialog'
 import UserInspector from '../components/UserInspector'
 import type { CompanyIndexRow } from '@features/company/api/queries'
 import type { UserIndexRow } from '../api/queries'
+import { createDummyCompany } from '../api/queries'
 
 export default function SuperPage() {
   const { success, error: toastError } = useToast()
@@ -175,6 +176,150 @@ export default function SuperPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (companyId: string) => {
+      // Delete related records first to avoid foreign key constraint violations
+      // Order matters: delete child records before parent records
+
+      // 1. Delete reserved_items, reserved_crew, reserved_vehicles (depend on time_periods)
+      // First, get all time_periods for this company's jobs
+      const { data: timePeriods } = await supabase
+        .from('time_periods')
+        .select('id')
+        .eq('company_id', companyId)
+
+      const timePeriodIds = timePeriods?.map((tp) => tp.id) ?? []
+
+      if (timePeriodIds.length > 0) {
+        const { error: riError } = await supabase
+          .from('reserved_items')
+          .delete()
+          .in('time_period_id', timePeriodIds)
+        if (riError) throw riError
+
+        const { error: rcError } = await supabase
+          .from('reserved_crew')
+          .delete()
+          .in('time_period_id', timePeriodIds)
+        if (rcError) throw rcError
+
+        const { error: rvError } = await supabase
+          .from('reserved_vehicles')
+          .delete()
+          .in('time_period_id', timePeriodIds)
+        if (rvError) throw rvError
+      }
+
+      // 2. Get all jobs for this company first (needed for time_periods and job-related data)
+      const { data: jobs } = await supabase
+        .from('jobs')
+        .select('id')
+        .eq('company_id', companyId)
+
+      const jobIds = jobs?.map((j) => j.id) ?? []
+
+      // 3. Delete time_periods (depend on jobs and company_id)
+      // Must delete before jobs to avoid broken foreign key references
+      const { error: tpError } = await supabase
+        .from('time_periods')
+        .delete()
+        .eq('company_id', companyId)
+      if (tpError) throw tpError
+
+      // 4. Delete job-related data (depend on jobs)
+      if (jobIds.length > 0) {
+        const { error: jnError } = await supabase
+          .from('job_notes')
+          .delete()
+          .in('job_id', jobIds)
+        if (jnError) throw jnError
+
+        const { error: jfError } = await supabase
+          .from('job_files')
+          .delete()
+          .in('job_id', jobIds)
+        if (jfError) throw jfError
+
+        const { error: jcError } = await supabase
+          .from('job_contacts')
+          .delete()
+          .in('job_id', jobIds)
+        if (jcError) throw jcError
+
+        const { error: jshError } = await supabase
+          .from('job_status_history')
+          .delete()
+          .in('job_id', jobIds)
+        if (jshError) throw jshError
+
+        const { error: jiError } = await supabase
+          .from('job_invoices')
+          .delete()
+          .in('job_id', jobIds)
+        if (jiError) throw jiError
+      }
+
+      // 5. Delete jobs (depend on company_id, customers, contacts, addresses)
+      const { error: jobsError } = await supabase
+        .from('jobs')
+        .delete()
+        .eq('company_id', companyId)
+      if (jobsError) throw jobsError
+
+      // 6. Delete contacts (depend on company_id and customers)
+      const { error: contactsError } = await supabase
+        .from('contacts')
+        .delete()
+        .eq('company_id', companyId)
+      if (contactsError) throw contactsError
+
+      // 7. Delete customers (depend on company_id)
+      const { error: customersError } = await supabase
+        .from('customers')
+        .delete()
+        .eq('company_id', companyId)
+      if (customersError) throw customersError
+
+      // 8. Delete addresses (depend on company_id)
+      const { error: addressesError } = await supabase
+        .from('addresses')
+        .delete()
+        .eq('company_id', companyId)
+      if (addressesError) throw addressesError
+
+      // 9. Delete vehicles (depend on company_id)
+      const { error: vehiclesError } = await supabase
+        .from('vehicles')
+        .delete()
+        .eq('company_id', companyId)
+      if (vehiclesError) throw vehiclesError
+
+      // 10. Delete group_price_history (depends on company_id and item_groups)
+      // Note: item_groups will be cascade deleted, but we need to delete price history first
+      const { error: gphError } = await supabase
+        .from('group_price_history')
+        .delete()
+        .eq('company_id', companyId)
+      if (gphError) throw gphError
+
+      // 11. Set nullable foreign keys to null
+      // profiles.selected_company_id
+      const { error: profilesError } = await supabase
+        .from('profiles')
+        .update({ selected_company_id: null })
+        .eq('selected_company_id', companyId)
+      if (profilesError) throw profilesError
+
+      // 12. Finally, delete the company
+      // This will cascade delete:
+      // - activity_log (ON DELETE CASCADE)
+      // - company_expansions (ON DELETE CASCADE)
+      // - company_users (ON DELETE CASCADE)
+      // - item_brands (ON DELETE CASCADE)
+      // - item_categories (ON DELETE CASCADE)
+      // - item_groups (ON DELETE CASCADE)
+      // - items (ON DELETE CASCADE)
+      // - job_offers (ON DELETE CASCADE)
+      // - matters (ON DELETE CASCADE)
+      // - pending_invites (ON DELETE CASCADE)
       const { error } = await supabase
         .from('companies')
         .delete()
@@ -182,17 +327,40 @@ export default function SuperPage() {
 
       if (error) throw error
     },
+    onMutate: async (companyId: string) => {
+      // Clear the selected ID immediately to prevent the inspector from trying to load the deleted company
+      if (selectedId === companyId) {
+        setSelectedId(null)
+      }
+      // Remove the company from query cache to prevent loading attempts
+      await qc.removeQueries({ queryKey: ['company', companyId] })
+    },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['companies'] })
       await qc.invalidateQueries({ queryKey: ['company'] })
       setDeletingCompany(null)
-      if (selectedId === deletingCompany?.id) {
-        setSelectedId(null)
-      }
       success('Success!', 'Company was deleted')
     },
     onError: (e: any) => {
       toastError('Failed to delete company', e?.message ?? 'Please try again.')
+    },
+  })
+
+  const createDummyCompanyMutation = useMutation({
+    mutationFn: createDummyCompany,
+    onSuccess: async (result) => {
+      await qc.invalidateQueries({ queryKey: ['companies'] })
+      await qc.invalidateQueries({ queryKey: ['company'] })
+      success(
+        'Dummy company created!',
+        `Created "${result.companyName}" with ${result.itemsCreated} items, ${result.groupsCreated} groups, ${result.vehiclesCreated} vehicles, ${result.customersCreated} customers, and ${result.jobsCreated} jobs.`,
+      )
+    },
+    onError: (e: any) => {
+      toastError(
+        'Failed to create dummy company',
+        e?.message ?? 'Please try again.',
+      )
     },
   })
 
@@ -376,10 +544,23 @@ export default function SuperPage() {
                 >
                   <Flex align="center" justify="between" mb="3">
                     <Heading size="5">Companies</Heading>
-                    <Button onClick={handleCreate}>
-                      <Plus width={16} height={16} />
-                      Create
-                    </Button>
+                    <Flex gap="2">
+                      <Button
+                        onClick={() => createDummyCompanyMutation.mutate()}
+                        disabled={createDummyCompanyMutation.isPending}
+                        variant="soft"
+                        color="purple"
+                      >
+                        <Sparks width={16} height={16} />
+                        {createDummyCompanyMutation.isPending
+                          ? 'Creating...'
+                          : 'Create Dummy'}
+                      </Button>
+                      <Button onClick={handleCreate}>
+                        <Plus width={16} height={16} />
+                        Create
+                      </Button>
+                    </Flex>
                   </Flex>
                   <Separator size="4" mb="3" />
                   <Box
@@ -486,10 +667,23 @@ export default function SuperPage() {
                 >
                   <Flex align="center" justify="between" mb="3">
                     <Heading size="5">Companies</Heading>
-                    <Button onClick={handleCreate}>
-                      <Plus width={16} height={16} />
-                      Create
-                    </Button>
+                    <Flex gap="2">
+                      <Button
+                        onClick={() => createDummyCompanyMutation.mutate()}
+                        disabled={createDummyCompanyMutation.isPending}
+                        variant="soft"
+                        color="purple"
+                      >
+                        <Sparks width={16} height={16} />
+                        {createDummyCompanyMutation.isPending
+                          ? 'Creating...'
+                          : 'Create Dummy'}
+                      </Button>
+                      <Button onClick={handleCreate}>
+                        <Plus width={16} height={16} />
+                        Create
+                      </Button>
+                    </Flex>
                   </Flex>
                   <Separator size="4" mb="3" />
                   <Box
