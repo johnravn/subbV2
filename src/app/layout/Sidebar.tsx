@@ -35,11 +35,12 @@ import logoWhite from '@shared/assets/gridLogo/grid_logo_white.svg'
 import { useAuthz } from '@shared/auth/useAuthz'
 import { canVisit } from '@shared/auth/permissions'
 import { useCompany } from '@shared/companies/CompanyProvider'
+import { supabase } from '@shared/api/supabase'
+import { getInitials } from '@shared/lib/generalFunctions'
 import { unreadMattersCountQueryAll } from '@features/matters/api/queries'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useTheme } from '../hooks/useTheme'
 import { APP_VERSION } from '../config/version'
-import { getInitials } from '@shared/lib/generalFunctions'
 
 const SIDEBAR_EXPANDED = 200
 const SIDEBAR_COLLAPSED = 64
@@ -197,8 +198,18 @@ function SidebarContent({
   onLogout?: () => void
 }) {
   const { companies, companyId, setCompanyId, loading } = useCompany()
-  const { caps, loading: authzLoading } = useAuthz()
+  const { caps, loading: authzLoading, isGlobalSuperuser } = useAuthz()
   const { isDark } = useTheme()
+
+  // Get userId to check if user is logged in (for optimistic super tab display)
+  const { data: user } = useQuery({
+    queryKey: ['auth', 'user'],
+    queryFn: async () => {
+      const { data } = await supabase.auth.getUser()
+      return data.user ?? null
+    },
+  })
+  const hasUser = !!user
   const companiesSorted = React.useMemo(
     () => [...companies].sort((a, b) => a.name.localeCompare(b.name)),
     [companies],
@@ -223,6 +234,21 @@ function SidebarContent({
       Super: 'visit:super',
     }
     const cap = labelToCap[label]
+
+    // Super tab: always accessible for superusers, even during loading or without company
+    if (label === 'Super') {
+      // If we have a user and authz is loaded, check capability
+      if (!authzLoading) {
+        return caps.has('visit:super')
+      }
+      // During loading, if user is already determined to be superuser, show it
+      if (isGlobalSuperuser) {
+        return true
+      }
+      // During loading and we don't know yet: show optimistically if user is logged in
+      // (will be hidden if they turn out not to be a superuser once loading completes)
+      return hasUser
+    }
 
     // 👇 Key change: while authz is loading, be conservative.
     // Only show public-safe labels to avoid the "everything flashes" issue.
@@ -262,7 +288,9 @@ function SidebarContent({
                       size="3"
                       radius="full"
                       src={userAvatarUrl ?? undefined}
-                      fallback={getInitials(userDisplayName || userEmail || '?')}
+                      fallback={getInitials(
+                        userDisplayName || userEmail || '?',
+                      )}
                       style={{ border: '1px solid var(--gray-5)' }}
                     />
                     <Flex direction="column" style={{ lineHeight: 1.1 }}>

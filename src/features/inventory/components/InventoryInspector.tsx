@@ -192,7 +192,6 @@ export default function InventoryInspector({ id }: { id: string | null }) {
           categoryName: entry.category_name ?? null,
           description: entry.description ?? '',
           active: entry.active,
-          unique: entry.unique,
           price: entry.current_price,
           parts: entry.parts.map((p) => ({
             item_id: p.item_id,
@@ -438,14 +437,6 @@ export default function InventoryInspector({ id }: { id: string | null }) {
               value={
                 <Badge color={entry.active ? 'green' : 'red'} variant="soft">
                   {entry.active ? 'Active' : 'Inactive'}
-                </Badge>
-              }
-            />
-            <Field
-              label="Type"
-              value={
-                <Badge variant="soft">
-                  {entry.unique ? 'Unique (fixed set)' : 'Bundle (generic)'}
                 </Badge>
               }
             />

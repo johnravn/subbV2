@@ -16,7 +16,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { useAuthz } from '@shared/auth/useAuthz'
 import { supabase } from '@shared/api/supabase'
-import { Plus } from 'iconoir-react'
+import { Plus, Sparks } from 'iconoir-react'
 import { partnerCustomersQuery } from '../api/partners'
 import BrandAutocomplete from './BrandAutocomplete'
 
@@ -58,6 +58,7 @@ export default function AddItemDialog({
   mode = 'create',
   initialData,
   onSaved,
+  showTrigger = true,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
@@ -65,6 +66,7 @@ export default function AddItemDialog({
   mode?: 'create' | 'edit'
   initialData?: EditInitialData
   onSaved?: () => void
+  showTrigger?: boolean
 }) {
   const { success, error: toastError } = useToast()
   const qc = useQueryClient()
@@ -92,6 +94,25 @@ export default function AddItemDialog({
     key: TKey,
     value: FormState[TKey],
   ) => setForm((s) => ({ ...s, [key]: value }))
+
+  // Reset form to initial state
+  const resetForm = React.useCallback(() => {
+    setForm({
+      name: '',
+      categoryId: null,
+      brandId: null,
+      model: '',
+      allow_individual_booking: true,
+      total_quantity: 0,
+      active: true,
+      notes: '',
+      price: undefined,
+      internally_owned: true,
+      external_owner_id: null,
+    })
+    setBrandName(null)
+    originalPriceRef.current = null
+  }, [])
 
   // ---- Load categories / brands for this company ----
   const {
@@ -121,30 +142,37 @@ export default function AddItemDialog({
     enabled: !!companyId && open,
   })
 
+  /* -------- Reset form in CREATE mode when dialog opens -------- */
+  React.useEffect(() => {
+    if (open && mode === 'create') {
+      resetForm()
+    }
+  }, [open, mode, resetForm])
+
   // Prefill on EDIT (only once per dialog open)
   React.useEffect(() => {
     if (!open || mode !== 'edit' || !initialData) return
-      // try to map category name to ID once options are loaded
-      const catId =
-        categories.find((c) => c.name === initialData.categoryName)?.id ?? null
-      
-      // Set brand name directly (autocomplete will handle ID lookup)
-      setBrandName(initialData.brandName)
-      
-      // Try to find brand ID if brand name exists
-      if (initialData.brandName) {
-        supabase
-          .from('item_brands')
-          .select('id, name')
-          .eq('company_id', companyId)
-          .ilike('name', initialData.brandName)
-          .single()
-          .then(({ data }) => {
-            if (data) {
-              set('brandId', data.id)
-            }
-          })
-      }
+    // try to map category name to ID once options are loaded
+    const catId =
+      categories.find((c) => c.name === initialData.categoryName)?.id ?? null
+
+    // Set brand name directly (autocomplete will handle ID lookup)
+    setBrandName(initialData.brandName)
+
+    // Try to find brand ID if brand name exists
+    if (initialData.brandName) {
+      supabase
+        .from('item_brands')
+        .select('id, name')
+        .eq('company_id', companyId)
+        .ilike('name', initialData.brandName)
+        .single()
+        .then(({ data }) => {
+          if (data) {
+            set('brandId', data.id)
+          }
+        })
+    }
 
     originalPriceRef.current = initialData.price ?? null
 
@@ -184,7 +212,7 @@ export default function AddItemDialog({
   const createMutation = useMutation({
     mutationFn: async (f: FormState) => {
       if (!companyId) throw new Error('No company selected')
-      
+
       // If brand name exists but no brand ID, create or find the brand
       let brandId = f.brandId
       if (brandName && brandName.trim() && !brandId) {
@@ -196,7 +224,7 @@ export default function AddItemDialog({
           .eq('company_id', companyId)
           .ilike('name', brandNameTrimmed)
           .single()
-        
+
         if (existing) {
           brandId = existing.id
         } else {
@@ -209,12 +237,12 @@ export default function AddItemDialog({
             })
             .select('id')
             .single()
-          
+
           if (brandError) throw brandError
           brandId = newBrand.id
         }
       }
-      
+
       const { data: itemId, error } = await supabase.rpc(
         'create_item_with_price',
         {
@@ -266,7 +294,6 @@ export default function AddItemDialog({
       }
     },
     onSuccess: async () => {
-      setBrandName(null)
       await Promise.all([
         qc.invalidateQueries({
           queryKey: ['company', companyId, 'inventory-index'],
@@ -285,6 +312,7 @@ export default function AddItemDialog({
           exact: false,
         }),
       ])
+      resetForm()
       onOpenChange(false)
       success('Success!', 'Item was added to inventory')
       onSaved?.()
@@ -311,7 +339,7 @@ export default function AddItemDialog({
           .eq('company_id', companyId)
           .ilike('name', brandNameTrimmed)
           .single()
-        
+
         if (existing) {
           brandId = existing.id
         } else {
@@ -324,7 +352,7 @@ export default function AddItemDialog({
             })
             .select('id')
             .single()
-          
+
           if (brandError) throw brandError
           brandId = newBrand.id
         }
@@ -413,6 +441,96 @@ export default function AddItemDialog({
     editMutation.mutate(form)
   }
 
+  // Auto-populate function for testing
+  const autoPopulateFields = () => {
+    const itemNames = [
+      'XLR Cable 3m',
+      'HDMI Cable 5m',
+      'DMX Cable 10m',
+      'Power Cable 2m',
+      'USB-C Cable 1m',
+      'Ethernet Cable 15m',
+      'Audio Interface',
+      'Microphone Stand',
+      'Speaker Stand',
+      'Light Stand',
+      'Gobo Holder',
+      'Color Gel',
+      'Fog Machine',
+      'Wireless Mic',
+      'DI Box',
+    ]
+    const brands = [
+      'Neutrik',
+      'Mogami',
+      'Canare',
+      'Shure',
+      'Sennheiser',
+      'Yamaha',
+      'Behringer',
+      'Audio-Technica',
+      'Rode',
+      'Manfrotto',
+    ]
+    const models = [
+      'Pro',
+      'Standard',
+      'Premium',
+      'Elite',
+      'X1',
+      'X2',
+      '2024',
+      'Classic',
+      'Plus',
+      'Ultra',
+    ]
+    const notes = [
+      'Test item for inventory management',
+      'Used for production testing',
+      'Standard equipment item',
+      'Backup item in stock',
+      'Primary equipment',
+      'Reserve stock item',
+    ]
+
+    const randomName = itemNames[Math.floor(Math.random() * itemNames.length)]
+    const randomBrand = brands[Math.floor(Math.random() * brands.length)]
+    const randomModel = models[Math.floor(Math.random() * models.length)]
+    const randomNotes = notes[Math.floor(Math.random() * notes.length)]
+    const randomQuantity = Math.floor(Math.random() * 50) + 1
+    const randomPrice = Math.floor(Math.random() * 5000) + 100
+
+    // Set random category if available
+    const randomCategory =
+      categories.length > 0
+        ? categories[Math.floor(Math.random() * categories.length)]
+        : null
+
+    // Set random external owner if available and not internally owned
+    const randomPartner =
+      partners.length > 0
+        ? partners[Math.floor(Math.random() * partners.length)]
+        : null
+    const isInternal = Math.random() > 0.3 // 70% chance of being internal
+
+    setForm({
+      name: randomName,
+      categoryId: randomCategory?.id ?? null,
+      brandId: null, // Will be set via brandName
+      model: randomModel,
+      allow_individual_booking: Math.random() > 0.5,
+      total_quantity: randomQuantity,
+      active: Math.random() > 0.2, // 80% chance of being active
+      notes: randomNotes,
+      price: randomPrice,
+      internally_owned: isInternal,
+      external_owner_id: isInternal ? null : (randomPartner?.id ?? null),
+    })
+
+    // Set brand name for autocomplete
+    setBrandName(randomBrand)
+  }
+
   const title = mode === 'edit' ? 'Edit item' : 'Add item to inventory'
   const actionLabel =
     mode === 'edit'
@@ -426,17 +544,31 @@ export default function AddItemDialog({
   return (
     <>
       <Dialog.Root open={open} onOpenChange={onOpenChange}>
-        {/* Only render trigger in CREATE mode; in EDIT the parent opens it */}
-        {mode === 'create' && (
+        {/* Only render trigger in CREATE mode when showTrigger is true; in EDIT the parent opens it */}
+        {mode === 'create' && showTrigger && (
           <Dialog.Trigger>
-            <Button size="2" variant="classic">
+            <Button size="2" variant="solid">
               <Plus /> Add item
             </Button>
           </Dialog.Trigger>
         )}
 
         <Dialog.Content maxWidth="640px">
-          <Dialog.Title>{title}</Dialog.Title>
+          <Flex align="center" justify="between">
+            <Dialog.Title>{title}</Dialog.Title>
+            {mode === 'create' && (
+              <Button
+                size="2"
+                variant="soft"
+                onClick={autoPopulateFields}
+                type="button"
+                style={{ marginLeft: 'auto' }}
+              >
+                <Sparks width={16} height={16} />
+                Auto-fill
+              </Button>
+            )}
+          </Flex>
 
           <Flex direction="column" gap="3" mt="1">
             {/* Name */}
@@ -616,9 +748,7 @@ export default function AddItemDialog({
               />
             </Field>
 
-            {(catErr ||
-              createMutation.isError ||
-              editMutation.isError) && (
+            {(catErr || createMutation.isError || editMutation.isError) && (
               <Text color="red">
                 {catErr?.message ||
                   createMutation.error?.message ||
@@ -635,7 +765,7 @@ export default function AddItemDialog({
             <Button
               onClick={handleSave}
               disabled={!form.name || saving}
-              variant="classic"
+              variant="solid"
             >
               {actionLabel}
             </Button>
@@ -657,7 +787,7 @@ export default function AddItemDialog({
               <Button variant="soft">Cancel</Button>
             </AlertDialog.Cancel>
             <AlertDialog.Action>
-              <Button variant="classic" onClick={confirmAndSave}>
+              <Button variant="solid" onClick={confirmAndSave}>
                 Yes, save
               </Button>
             </AlertDialog.Action>

@@ -95,10 +95,12 @@ export type ItemDetail = {
 }
 
 export type GroupPartRow = {
-  item_id: string
+  item_id: string | null
+  child_group_id: string | null
   item_name: string
   quantity: number
   item_current_price: number | null
+  part_type: 'item' | 'group'
 }
 
 export type GroupDetail = {
@@ -110,7 +112,6 @@ export type GroupDetail = {
   category_name: string | null
   description: string | null
   active: boolean
-  unique: boolean
   parts: Array<GroupPartRow>
   price_history: Array<ItemPriceHistoryRow>
   internally_owned: boolean
@@ -334,7 +335,7 @@ export const inventoryIndexQuery = ({
         })
         .order('id', { ascending: true }) // 👈 stable secondary sort
 
-      const { data, error } = await q.range(from, to)
+      const { data, count, error } = await q.range(from, to)
       if (error) throw error
 
       let filteredRows = data as Array<InventoryIndexRow>
@@ -366,7 +367,7 @@ export const inventoryIndexQuery = ({
 
       return {
         rows: filteredRows,
-        count: filteredRows.length, // Use filtered count instead of raw count
+        count: count ?? 0, // Total count from server (before client-side filtering)
       }
     },
     staleTime: 10_000,
@@ -512,17 +513,16 @@ export const inventoryDetailQuery = ({
           return result
         } else {
           // ----- GROUP -----
-          // Optional enrich: description/unique/active from base table (may be RLS'd)
+          // Optional enrich: description/active from base table (may be RLS'd)
           console.time(t('GROUP enrich'))
           const { data: gmeta, error: gErr } = await supabase
             .from('item_groups')
-            .select('id, description, unique, active')
+            .select('id, description, active')
             .eq('id', id)
             .eq('company_id', companyId)
             .maybeSingle<{
               id: string
               description: string | null
-              unique: boolean | null
               active: boolean | null
             }>()
           logSb('GROUP enrich', { data: gmeta, error: gErr })
@@ -546,11 +546,11 @@ export const inventoryDetailQuery = ({
             throw rErr
           }
 
-          // Parts (view; usually RLS-safe)
+          // Parts (view; usually RLS-safe) - now includes nested groups
           console.time(t('GROUP parts'))
           const { data: parts, error: pErr } = await supabase
             .from('group_parts')
-            .select('item_id, item_name, quantity, item_current_price')
+            .select('item_id, child_group_id, item_name, quantity, item_current_price, part_type')
             .eq('group_id', id)
           logSb('GROUP parts', { data: parts, error: pErr })
           console.timeEnd(t('GROUP parts'))
@@ -585,7 +585,6 @@ export const inventoryDetailQuery = ({
             category_name: base.category_name ?? null,
             description: gmeta?.description ?? null,
             active: Boolean(gmeta?.active ?? base.active),
-            unique: Boolean(gmeta?.unique ?? base.unique ?? false),
             parts: parts as Array<GroupPartRow>,
             price_history: ghist as Array<ItemPriceHistoryRow>,
             internally_owned: base.internally_owned,

@@ -10,8 +10,9 @@ import {
   Separator,
   Tabs,
   Text,
+  Tooltip,
 } from '@radix-ui/themes'
-import { Edit, Trash } from 'iconoir-react'
+import { Archive, Edit, Trash } from 'iconoir-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthz } from '@shared/auth/useAuthz'
 import { makeWordPresentable } from '@shared/lib/generalFunctions'
@@ -69,7 +70,7 @@ export default function JobInspector({
   initialTab?: string
 }) {
   // ✅ hooks first
-  const { companyRole } = useAuthz()
+  const { userId, companyRole } = useAuthz()
   const [editOpen, setEditOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [statusTimelineOpen, setStatusTimelineOpen] = React.useState(false)
@@ -132,6 +133,27 @@ export default function JobInspector({
     },
   })
 
+  // Archive/unarchive mutation
+  const archiveJob = useMutation({
+    mutationFn: async ({ jobId, archived }: { jobId: string; archived: boolean }) => {
+      const { error } = await supabase
+        .from('jobs')
+        .update({ archived })
+        .eq('id', jobId)
+      if (error) throw error
+      return archived
+    },
+    onSuccess: async (archived) => {
+      await qc.invalidateQueries({ queryKey: ['company'] })
+      await qc.invalidateQueries({ queryKey: ['jobs-index'] })
+      await qc.invalidateQueries({ queryKey: ['jobs-detail'] })
+      success('Job updated', archived ? 'Job has been archived.' : 'Job has been unarchived.')
+    },
+    onError: (err: any) => {
+      error('Failed to update job', err?.message || 'Please try again.')
+    },
+  })
+
   // now you can early return safely since hooks above already ran
   if (!id) return <Text color="gray">Select a job to see details.</Text>
   if (isLoading || !data) return <Text>Loading…</Text>
@@ -179,6 +201,20 @@ export default function JobInspector({
           })()}
           {companyRole !== 'freelancer' && (
             <>
+              {/* Archive button - only for paid jobs and only for project lead */}
+              {job.status === 'paid' && userId && job.project_lead_user_id === userId && (
+                <Tooltip content={job.archived ? 'Unarchive job' : 'Archive job'}>
+                  <Button
+                    size="2"
+                    variant="soft"
+                    color={job.archived ? 'blue' : 'gray'}
+                    onClick={() => archiveJob.mutate({ jobId: job.id, archived: !job.archived })}
+                    disabled={archiveJob.isPending}
+                  >
+                    <Archive width={16} height={16} />
+                  </Button>
+                </Tooltip>
+              )}
               <Button size="2" variant="soft" onClick={() => setEditOpen(true)}>
                 <Edit width={16} height={16} />
               </Button>

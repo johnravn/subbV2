@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Avatar,
   Badge,
@@ -7,7 +7,6 @@ import {
   Button,
   Flex,
   IconButton,
-  Select,
   Spinner,
   Table,
   Text,
@@ -18,16 +17,17 @@ import { useCompany } from '@shared/companies/CompanyProvider'
 import { useAuthz } from '@shared/auth/useAuthz'
 import DateTimePicker from '@shared/ui/components/DateTimePicker'
 import {
+  Archive,
   ArrowDown,
   ArrowUp,
   CalendarXmark,
   Plus,
   Search,
-  Xmark,
 } from 'iconoir-react'
-import { makeWordPresentable, getInitials } from '@shared/lib/generalFunctions'
+import { getInitials, makeWordPresentable } from '@shared/lib/generalFunctions'
 import { supabase } from '@shared/api/supabase'
-import { customersForFilterQuery, jobsIndexQuery } from '../api/queries'
+import { useToast } from '@shared/ui/toast/ToastProvider'
+import { jobsIndexQuery } from '../api/queries'
 import JobDialog from './dialogs/JobDialog'
 import type { JobListRow, JobStatus } from '../types'
 
@@ -59,16 +59,11 @@ export default function JobsTable({
 }) {
   const { companyId } = useCompany()
   const { userId, companyRole } = useAuthz()
+  const qc = useQueryClient()
+  const { success, error: showError } = useToast()
   const [search, setSearch] = React.useState('')
   const [selectedDate, setSelectedDate] = React.useState<string>('')
-  const [customerIdFilter, setCustomerIdFilter] = React.useState<string | null>(
-    null,
-  )
-  const [customerSearchQuery, setCustomerSearchQuery] = React.useState('')
-  const [showCustomerDropdown, setShowCustomerDropdown] = React.useState(false)
-  const [customerInputFocused, setCustomerInputFocused] = React.useState(false)
-  const customerSearchRef = React.useRef<HTMLDivElement>(null)
-  const [statusFilter, setStatusFilter] = React.useState<string | null>(null)
+  const [includeArchived, setIncludeArchived] = React.useState(false)
   const [sortBy, setSortBy] = React.useState<SortBy>('start_at')
   const [sortDir, setSortDir] = React.useState<SortDir>('asc')
   const [page, setPage] = React.useState(1)
@@ -81,24 +76,48 @@ export default function JobsTable({
   const theadRef = React.useRef<HTMLTableSectionElement>(null)
   const pagerRef = React.useRef<HTMLDivElement>(null)
 
-  const { data: customers } = useQuery({
-    ...customersForFilterQuery(companyId ?? '__none__'),
-    enabled: !!companyId,
-  })
-
-  const { data: allData = [], isFetching, refetch } = useQuery({
+  const {
+    data: allData = [],
+    isFetching,
+    refetch,
+  } = useQuery({
     ...jobsIndexQuery({
       companyId: companyId ?? '__none__',
       search,
       selectedDate,
-      customerId: customerIdFilter,
-      status: statusFilter,
       sortBy,
       sortDir,
       userId,
       companyRole,
+      includeArchived,
     }),
     enabled: !!companyId,
+  })
+
+  // Archive/unarchive mutation
+  const archiveJob = useMutation({
+    mutationFn: async ({
+      jobId,
+      archived,
+    }: {
+      jobId: string
+      archived: boolean
+    }) => {
+      const { error } = await supabase
+        .from('jobs')
+        .update({ archived })
+        .eq('id', jobId)
+      if (error) throw error
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['company'] })
+      await qc.invalidateQueries({ queryKey: ['jobs-index'] })
+      await qc.invalidateQueries({ queryKey: ['jobs-detail'] })
+      success('Job updated', 'Job archive status has been updated.')
+    },
+    onError: (err: any) => {
+      showError('Failed to update job', err?.message || 'Please try again.')
+    },
   })
 
   // Recompute page size based on available space
@@ -126,7 +145,7 @@ export default function JobsTable({
       return
     }
 
-    const visibleRow = containerRef.current?.querySelector<HTMLTableRowElement>(
+    const visibleRow = containerRef.current.querySelector<HTMLTableRowElement>(
       'tbody tr:not([data-row-probe])',
     )
     const rowH = visibleRow?.getBoundingClientRect().height || 60
@@ -175,7 +194,7 @@ export default function JobsTable({
   // Reset to page 1 when filters change
   React.useEffect(() => {
     setPage(1)
-  }, [search, selectedDate, customerIdFilter, statusFilter, sortBy, sortDir])
+  }, [search, selectedDate, sortBy, sortDir, includeArchived])
 
   // Paginate the data
   const totalPages = Math.ceil(allData.length / pageSize)
@@ -192,49 +211,19 @@ export default function JobsTable({
     }
   }
 
-  // Filter customers based on search query
-  const filteredCustomers = React.useMemo(() => {
-    if (!customers) return []
-    if (!customerSearchQuery.trim()) return customers
-    const query = customerSearchQuery.toLowerCase().trim()
-    return customers.filter((c) => c.name.toLowerCase().includes(query))
-  }, [customers, customerSearchQuery])
-
-  // Get selected customer name
-  const selectedCustomerName = React.useMemo(() => {
-    if (!customerIdFilter || !customers) return ''
-    const customer = customers.find((c) => c.id === customerIdFilter)
-    return customer?.name || ''
-  }, [customerIdFilter, customers])
-
-  // Close dropdown when clicking outside
-  React.useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        customerSearchRef.current &&
-        !customerSearchRef.current.contains(event.target as Node)
-      ) {
-        setShowCustomerDropdown(false)
-        setCustomerInputFocused(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [])
-
   return (
-    <Box ref={containerRef} style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Box
+      ref={containerRef}
+      style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+    >
       <div ref={controlsRef}>
-        <Flex direction="column" gap="2" mb="3">
-        <Flex gap="2" align="center">
+        <Flex gap="2" align="center" mb="3" wrap="wrap">
           <TextField.Root
-            placeholder="Search title, customer, project lead, or date…"
+            placeholder="Search title, customer, status, project lead, or date…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             size="3"
-            style={{ flex: 1 }}
+            style={{ flex: 1, minWidth: 200 }}
           >
             <TextField.Slot side="left">
               <Search />
@@ -244,26 +233,28 @@ export default function JobsTable({
             </TextField.Slot>
           </TextField.Root>
 
-          {companyRole !== 'freelancer' && (
-            <Button
-              size="2"
-              variant="classic"
-              onClick={() => setCreateOpen(true)}
-            >
-              <Plus width={16} height={16} /> New job
-            </Button>
-          )}
-        </Flex>
+          <Button
+            size="2"
+            variant={includeArchived ? 'classic' : 'soft'}
+            onClick={() => setIncludeArchived(!includeArchived)}
+          >
+            <Archive width={16} height={16} />
+            {includeArchived ? 'Hide archived' : 'Show archived'}
+          </Button>
 
-        <Flex gap="2" align="center" wrap="wrap">
           {selectedDate ? (
-            <IconButton
-              size="3"
-              variant="soft"
-              onClick={() => setSelectedDate('')}
+            <Tooltip
+              content={`Selected: ${new Date(selectedDate).toLocaleDateString()}`}
             >
-              <CalendarXmark width={18} height={18} />
-            </IconButton>
+              <IconButton
+                size="2"
+                variant="soft"
+                color="blue"
+                onClick={() => setSelectedDate('')}
+              >
+                <CalendarXmark width={16} height={16} />
+              </IconButton>
+            </Tooltip>
           ) : (
             <DateTimePicker
               value=""
@@ -277,209 +268,20 @@ export default function JobsTable({
               }}
               dateOnly
               iconButton
-              iconButtonSize="3"
+              iconButtonSize="2"
             />
           )}
-          {selectedDate && (
-            <Text size="2" color="gray">
-              {new Date(selectedDate).toLocaleDateString()}
-            </Text>
-          )}
 
-          <div
-            ref={customerSearchRef}
-            style={{ position: 'relative', flex: 1 }}
-          >
-            <TextField.Root
-              value={
-                customerIdFilter &&
-                selectedCustomerName &&
-                !customerInputFocused
-                  ? selectedCustomerName
-                  : customerSearchQuery
-              }
-              onChange={(e) => {
-                const value = e.target.value
-                setCustomerSearchQuery(value)
-                setShowCustomerDropdown(true)
-                if (customerIdFilter && value !== selectedCustomerName) {
-                  setCustomerIdFilter(null)
-                }
-              }}
-              onFocus={() => {
-                setCustomerInputFocused(true)
-                setShowCustomerDropdown(true)
-                if (customerIdFilter && selectedCustomerName) {
-                  setCustomerSearchQuery(selectedCustomerName)
-                }
-              }}
-              onBlur={() => {
-                // Delay to allow click on dropdown items
-                setTimeout(() => {
-                  setCustomerInputFocused(false)
-                }, 200)
-              }}
-              placeholder="Filter customer…"
-              size="3"
-              style={{ minHeight: 'var(--space-7)', flex: 1 }}
+          {companyRole !== 'freelancer' && (
+            <Button
+              size="2"
+              variant="classic"
+              onClick={() => setCreateOpen(true)}
             >
-              <TextField.Slot side="left">
-                <Search />
-              </TextField.Slot>
-              {customerIdFilter && (
-                <TextField.Slot side="right">
-                  <IconButton
-                    size="1"
-                    variant="ghost"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setCustomerIdFilter(null)
-                      setCustomerSearchQuery('')
-                      setShowCustomerDropdown(false)
-                      setCustomerInputFocused(false)
-                    }}
-                  >
-                    <Xmark width={12} height={12} />
-                  </IconButton>
-                </TextField.Slot>
-              )}
-            </TextField.Root>
-            {showCustomerDropdown && (
-              <Box
-                style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: 0,
-                  right: 0,
-                  zIndex: 1000,
-                  marginTop: 4,
-                  border: '1px solid var(--gray-a6)',
-                  borderRadius: 8,
-                  backgroundColor: 'var(--color-panel-solid)',
-                  maxHeight: 200,
-                  overflowY: 'auto',
-                  boxShadow: 'var(--shadow-4)',
-                }}
-              >
-                {!customerSearchQuery.trim() && (
-                  <Box
-                    p="3"
-                    style={{
-                      cursor: 'pointer',
-                      backgroundColor:
-                        customerIdFilter === null
-                          ? 'var(--accent-a3)'
-                          : 'transparent',
-                    }}
-                    onClick={() => {
-                      setCustomerIdFilter(null)
-                      setCustomerSearchQuery('')
-                      setShowCustomerDropdown(false)
-                      setCustomerInputFocused(false)
-                    }}
-                    onMouseEnter={(e) => {
-                      if (customerIdFilter !== null) {
-                        e.currentTarget.style.backgroundColor = 'var(--gray-a3)'
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (customerIdFilter !== null) {
-                        e.currentTarget.style.backgroundColor = 'transparent'
-                      }
-                    }}
-                  >
-                    <Text
-                      size="2"
-                      weight={customerIdFilter === null ? 'medium' : 'regular'}
-                    >
-                      All customers
-                    </Text>
-                  </Box>
-                )}
-                {filteredCustomers.map((customer) => (
-                  <Box
-                    key={customer.id}
-                    p="3"
-                    style={{
-                      cursor: 'pointer',
-                      backgroundColor:
-                        customerIdFilter === customer.id
-                          ? 'var(--accent-a3)'
-                          : 'transparent',
-                    }}
-                    onClick={() => {
-                      setCustomerIdFilter(customer.id)
-                      setCustomerSearchQuery('')
-                      setShowCustomerDropdown(false)
-                      setCustomerInputFocused(false)
-                    }}
-                    onMouseEnter={(e) => {
-                      if (customerIdFilter !== customer.id) {
-                        e.currentTarget.style.backgroundColor = 'var(--gray-a3)'
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (customerIdFilter !== customer.id) {
-                        e.currentTarget.style.backgroundColor = 'transparent'
-                      }
-                    }}
-                  >
-                    <Text
-                      size="2"
-                      weight={
-                        customerIdFilter === customer.id ? 'medium' : 'regular'
-                      }
-                    >
-                      {customer.name}
-                    </Text>
-                  </Box>
-                ))}
-                {customerSearchQuery.trim() &&
-                  filteredCustomers.length === 0 && (
-                    <Box p="3">
-                      <Text size="2" color="gray">
-                        No customers found
-                      </Text>
-                    </Box>
-                  )}
-              </Box>
-            )}
-          </div>
-
-          <Select.Root
-            value={statusFilter ?? 'all'}
-            size="3"
-            onValueChange={(val) => {
-              setStatusFilter(val === 'all' ? null : val)
-            }}
-          >
-            <Select.Trigger
-              placeholder="Filter status…"
-              style={{ minHeight: 'var(--space-7)', flex: 1 }}
-            />
-            <Select.Content>
-              <Select.Item value="all">All statuses</Select.Item>
-              {(
-                [
-                  'draft',
-                  'planned',
-                  'requested',
-                  'confirmed',
-                  'in_progress',
-                  'completed',
-                  'canceled',
-                  'invoiced',
-                  'paid',
-                ] as Array<JobStatus>
-              ).map((status) => (
-                <Select.Item key={status} value={status}>
-                  {makeWordPresentable(status)}
-                </Select.Item>
-              ))}
-            </Select.Content>
-          </Select.Root>
+              <Plus width={16} height={16} /> New job
+            </Button>
+          )}
         </Flex>
-      </Flex>
       </div>
       <JobDialog
         open={createOpen}
@@ -497,195 +299,251 @@ export default function JobsTable({
       <Box style={{ flex: 1, minHeight: 0 }}>
         <Table.Root variant="surface">
           <Table.Header ref={theadRef}>
-          <Table.Row>
-            <Table.ColumnHeaderCell style={{ width: 50 }} />
-            <Table.ColumnHeaderCell>
-              <Flex
-                align="center"
-                gap="2"
-                style={{ cursor: 'pointer', userSelect: 'none' }}
-                onClick={() => handleSort('title')}
-              >
-                Title
-                {sortBy === 'title' &&
-                  (sortDir === 'asc' ? (
-                    <ArrowUp width={14} height={14} />
-                  ) : (
-                    <ArrowDown width={14} height={14} />
-                  ))}
-              </Flex>
-            </Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>
-              <Flex
-                align="center"
-                gap="2"
-                style={{ cursor: 'pointer', userSelect: 'none' }}
-                onClick={() => handleSort('customer_name')}
-              >
-                Customer
-                {sortBy === 'customer_name' &&
-                  (sortDir === 'asc' ? (
-                    <ArrowUp width={14} height={14} />
-                  ) : (
-                    <ArrowDown width={14} height={14} />
-                  ))}
-              </Flex>
-            </Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>
-              <Flex
-                align="center"
-                gap="2"
-                style={{ cursor: 'pointer', userSelect: 'none' }}
-                onClick={() => handleSort('start_at')}
-              >
-                Start
-                {sortBy === 'start_at' &&
-                  (sortDir === 'asc' ? (
-                    <ArrowUp width={14} height={14} />
-                  ) : (
-                    <ArrowDown width={14} height={14} />
-                  ))}
-              </Flex>
-            </Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>
-              <Flex
-                align="center"
-                gap="2"
-                style={{ cursor: 'pointer', userSelect: 'none' }}
-                onClick={() => handleSort('status')}
-              >
-                Status
-                {sortBy === 'status' &&
-                  (sortDir === 'asc' ? (
-                    <ArrowUp width={14} height={14} />
-                  ) : (
-                    <ArrowDown width={14} height={14} />
-                  ))}
-              </Flex>
-            </Table.ColumnHeaderCell>
-          </Table.Row>
-        </Table.Header>
-        <Table.Body>
-          {data.length === 0 ? (
             <Table.Row>
-              <Table.Cell colSpan={5}>No jobs found</Table.Cell>
+              <Table.ColumnHeaderCell style={{ width: 50 }} />
+              <Table.ColumnHeaderCell>
+                <Flex
+                  align="center"
+                  gap="2"
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('title')}
+                >
+                  Title
+                  {sortBy === 'title' &&
+                    (sortDir === 'asc' ? (
+                      <ArrowUp width={14} height={14} />
+                    ) : (
+                      <ArrowDown width={14} height={14} />
+                    ))}
+                </Flex>
+              </Table.ColumnHeaderCell>
+              <Table.ColumnHeaderCell>
+                <Flex
+                  align="center"
+                  gap="2"
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('customer_name')}
+                >
+                  Customer
+                  {sortBy === 'customer_name' &&
+                    (sortDir === 'asc' ? (
+                      <ArrowUp width={14} height={14} />
+                    ) : (
+                      <ArrowDown width={14} height={14} />
+                    ))}
+                </Flex>
+              </Table.ColumnHeaderCell>
+              <Table.ColumnHeaderCell>
+                <Flex
+                  align="center"
+                  gap="2"
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('start_at')}
+                >
+                  Start
+                  {sortBy === 'start_at' &&
+                    (sortDir === 'asc' ? (
+                      <ArrowUp width={14} height={14} />
+                    ) : (
+                      <ArrowDown width={14} height={14} />
+                    ))}
+                </Flex>
+              </Table.ColumnHeaderCell>
+              <Table.ColumnHeaderCell>
+                <Flex
+                  align="center"
+                  gap="2"
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('status')}
+                >
+                  Status
+                  {sortBy === 'status' &&
+                    (sortDir === 'asc' ? (
+                      <ArrowUp width={14} height={14} />
+                    ) : (
+                      <ArrowDown width={14} height={14} />
+                    ))}
+                </Flex>
+              </Table.ColumnHeaderCell>
+              <Table.ColumnHeaderCell style={{ width: 60, textAlign: 'right' }}>
+                Actions
+              </Table.ColumnHeaderCell>
             </Table.Row>
-          ) : (
-            data.map((j: JobListRow) => {
-            const active = j.id === selectedId
-            const projectLead = j.project_lead
-            const avatarUrl = projectLead?.avatar_url
-              ? supabase.storage
-                  .from('avatars')
-                  .getPublicUrl(projectLead.avatar_url).data.publicUrl
-              : null
-            const initials = projectLead
-              ? getInitials(projectLead.display_name || projectLead.email)
-              : ''
-            const leadName =
-              projectLead?.display_name || projectLead?.email || null
-
-            return (
-              <Table.Row
-                key={j.id}
-                onClick={() => onSelect(j.id)}
-                style={{
-                  cursor: 'pointer',
-                  background: active ? 'var(--accent-a3)' : undefined,
-                }}
-                data-state={active ? 'active' : undefined}
-              >
-                <Table.Cell style={{ width: 50 }}>
-                  {leadName ? (
-                    <Tooltip content={leadName}>
-                      <Avatar
-                        size="2"
-                        radius="full"
-                        fallback={initials}
-                        src={avatarUrl || undefined}
-                        style={{ border: '1px solid var(--gray-5)' }}
-                      />
-                    </Tooltip>
-                  ) : (
-                    <Avatar
-                      size="2"
-                      radius="full"
-                      fallback="—"
-                      style={{
-                        border: '1px solid var(--gray-5)',
-                        opacity: 0.5,
-                      }}
-                    />
-                  )}
-                </Table.Cell>
-                <Table.Cell>{j.title}</Table.Cell>
-                <Table.Cell>
-                  {j.customer?.name ?? j.customer_user?.display_name ?? j.customer_user?.email ?? '—'}
-                </Table.Cell>
-                <Table.Cell>
-                  {j.start_at
-                    ? (() => {
-                        const d = new Date(j.start_at)
-                        const hours = String(d.getHours()).padStart(2, '0')
-                        const minutes = String(d.getMinutes()).padStart(2, '0')
-                        return (
-                          d.toLocaleString(undefined, {
-                            year: 'numeric',
-                            month: '2-digit',
-                            day: '2-digit',
-                          }) + ` ${hours}:${minutes}`
-                        )
-                      })()
-                    : '—'}
-                </Table.Cell>
-                <Table.Cell>
-                  {(() => {
-                    const displayStatus = getDisplayStatus(
-                      j.status,
-                      companyRole,
-                    )
-                    return (
-                      <Badge
-                        color={
-                          displayStatus === 'canceled'
-                            ? 'red'
-                            : displayStatus === 'paid'
-                              ? 'green'
-                              : displayStatus === 'in_progress'
-                                ? 'amber'
-                                : 'blue'
-                        }
-                        radius="full"
-                        highContrast
-                      >
-                        {makeWordPresentable(displayStatus)}
-                      </Badge>
-                    )
-                  })()}
-                </Table.Cell>
+          </Table.Header>
+          <Table.Body>
+            {data.length === 0 ? (
+              <Table.Row>
+                <Table.Cell colSpan={6}>No jobs found</Table.Cell>
               </Table.Row>
-            )
-            })
-          )}
-          {/* Probe row for height measurement */}
-          <Table.Row
-            data-row-probe
-            style={{
-              display: 'none',
-            }}
-          >
-            <Table.Cell colSpan={5}>probe</Table.Cell>
-          </Table.Row>
-        </Table.Body>
-      </Table.Root>
+            ) : (
+              data.map((j: JobListRow) => {
+                const active = j.id === selectedId
+                const projectLead = j.project_lead
+                const avatarUrl = projectLead?.avatar_url
+                  ? supabase.storage
+                      .from('avatars')
+                      .getPublicUrl(projectLead.avatar_url).data.publicUrl
+                  : null
+                const initials = projectLead
+                  ? getInitials(projectLead.display_name || projectLead.email)
+                  : ''
+                const leadName =
+                  projectLead?.display_name || projectLead?.email || null
+
+                // Show archive button only for paid or canceled jobs and only if user is project lead
+                const isProjectLead = userId && projectLead?.user_id === userId
+                const canArchive =
+                  (j.status === 'paid' || j.status === 'canceled') &&
+                  isProjectLead
+                const isPaid = j.status === 'paid'
+                const isCanceled = j.status === 'canceled'
+
+                return (
+                  <Table.Row
+                    key={j.id}
+                    onClick={() => onSelect(j.id)}
+                    style={{
+                      cursor: 'pointer',
+                      background: active
+                        ? 'var(--accent-a3)'
+                        : isPaid
+                          ? 'var(--green-a2)'
+                          : isCanceled
+                            ? 'var(--red-a2)'
+                            : undefined,
+                    }}
+                    data-state={active ? 'active' : undefined}
+                  >
+                    <Table.Cell style={{ width: 50 }}>
+                      {leadName ? (
+                        <Tooltip content={leadName}>
+                          <Avatar
+                            size="2"
+                            radius="full"
+                            fallback={initials}
+                            src={avatarUrl || undefined}
+                            style={{ border: '1px solid var(--gray-5)' }}
+                          />
+                        </Tooltip>
+                      ) : (
+                        <Avatar
+                          size="2"
+                          radius="full"
+                          fallback="—"
+                          style={{
+                            border: '1px solid var(--gray-5)',
+                            opacity: 0.5,
+                          }}
+                        />
+                      )}
+                    </Table.Cell>
+                    <Table.Cell>{j.title}</Table.Cell>
+                    <Table.Cell>
+                      {j.customer?.name ??
+                        j.customer_user?.display_name ??
+                        j.customer_user?.email ??
+                        '—'}
+                    </Table.Cell>
+                    <Table.Cell>
+                      {j.start_at
+                        ? (() => {
+                            const d = new Date(j.start_at)
+                            const hours = String(d.getHours()).padStart(2, '0')
+                            const minutes = String(d.getMinutes()).padStart(
+                              2,
+                              '0',
+                            )
+                            return (
+                              d.toLocaleString(undefined, {
+                                year: 'numeric',
+                                month: '2-digit',
+                                day: '2-digit',
+                              }) + ` ${hours}:${minutes}`
+                            )
+                          })()
+                        : '—'}
+                    </Table.Cell>
+                    <Table.Cell>
+                      {(() => {
+                        const displayStatus = getDisplayStatus(
+                          j.status,
+                          companyRole,
+                        )
+                        return (
+                          <Badge
+                            color={
+                              displayStatus === 'canceled'
+                                ? 'red'
+                                : displayStatus === 'paid'
+                                  ? 'green'
+                                  : displayStatus === 'in_progress'
+                                    ? 'amber'
+                                    : 'blue'
+                            }
+                            radius="full"
+                            highContrast
+                          >
+                            {makeWordPresentable(displayStatus)}
+                          </Badge>
+                        )
+                      })()}
+                    </Table.Cell>
+                    <Table.Cell
+                      style={{ textAlign: 'right', verticalAlign: 'middle' }}
+                    >
+                      {canArchive && (
+                        <Flex
+                          align="center"
+                          justify="end"
+                          style={{ height: '100%' }}
+                        >
+                          <Tooltip
+                            content={
+                              j.archived ? 'Unarchive job' : 'Archive job'
+                            }
+                          >
+                            <IconButton
+                              size="2"
+                              variant="soft"
+                              color={j.archived ? 'blue' : 'gray'}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                archiveJob.mutate({
+                                  jobId: j.id,
+                                  archived: !j.archived,
+                                })
+                              }}
+                              disabled={archiveJob.isPending}
+                            >
+                              <Archive width={18} height={18} />
+                            </IconButton>
+                          </Tooltip>
+                        </Flex>
+                      )}
+                    </Table.Cell>
+                  </Table.Row>
+                )
+              })
+            )}
+            {/* Probe row for height measurement */}
+            <Table.Row
+              data-row-probe
+              style={{
+                display: 'none',
+              }}
+            >
+              <Table.Cell colSpan={6}>probe</Table.Cell>
+            </Table.Row>
+          </Table.Body>
+        </Table.Root>
       </Box>
 
       {allData.length > 0 && (
         <div ref={pagerRef}>
           <Flex align="center" justify="between" mt="3">
             <Text size="2" color="gray">
-              Showing {startIndex + 1}-
-              {Math.min(endIndex, allData.length)} of {allData.length} jobs
+              Showing {startIndex + 1}-{Math.min(endIndex, allData.length)} of{' '}
+              {allData.length} jobs
             </Text>
             <Flex gap="2">
               <Button

@@ -271,7 +271,7 @@ export default function EditCategoriesDialog({
           <Button
             onClick={() => createMutation.mutate({ name: form.name })}
             disabled={!form.name.trim() || createMutation.isPending}
-            variant="classic"
+            variant="solid"
           >
             {createMutation.isPending ? 'Saving…' : 'Create'}
           </Button>

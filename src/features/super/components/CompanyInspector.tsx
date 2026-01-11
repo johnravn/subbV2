@@ -80,16 +80,40 @@ export default function CompanyInspector({
     },
   })
 
-  // If query returns no data (company was deleted), clear selection
+  // If query returns no data or error (company was deleted), clear selection
   React.useEffect(() => {
-    if (id && !isLoading && data === undefined && !isError && onDeleted) {
-      onDeleted()
+    if (id && !isLoading) {
+      // Check if error is a "not found" or "single row" error (company was deleted)
+      const errorMessage = (error as any)?.message || ''
+      const isNotFoundError =
+        errorMessage.includes('Cannot coerce') ||
+        errorMessage.includes('JSON object') ||
+        errorMessage.includes('No rows returned') ||
+        errorMessage.includes('PGRST116')
+      
+      if ((!data && !isError) || (isError && isNotFoundError)) {
+        onDeleted?.()
+      }
     }
-  }, [id, isLoading, data, isError, onDeleted])
+  }, [id, isLoading, data, isError, error, onDeleted])
 
   if (!id) return <Text color="gray">Select a company to view details.</Text>
 
   if (isLoading) return <InspectorSkeleton />
+
+  // If error is a "not found" error (company was deleted), clear selection
+  const errorMessage = (error as any)?.message || ''
+  const isNotFoundError =
+    errorMessage.includes('Cannot coerce') ||
+    errorMessage.includes('JSON object') ||
+    errorMessage.includes('No rows returned') ||
+    errorMessage.includes('PGRST116')
+  
+  if (isError && isNotFoundError) {
+    // Clear selection and show "select a company" message
+    // The useEffect will handle clearing the id, but we need to render something now
+    return <Text color="gray">Select a company to view details.</Text>
+  }
 
   if (isError)
     return (

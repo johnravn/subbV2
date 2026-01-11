@@ -32,17 +32,102 @@ import {
 import { logActivity } from '@features/latest/api/queries'
 import type { JobStatus, TimePeriodLite } from '@features/jobs/types'
 
-const JOB_STATUS_ORDER: Array<JobStatus> = [
+// Main flow statuses (canceled is separate)
+const JOB_STATUS_FLOW: Array<JobStatus> = [
   'draft',
   'planned',
   'requested',
-  'canceled',
   'confirmed',
   'in_progress',
   'completed',
   'invoiced',
   'paid',
 ]
+
+// Subtle color variants using blue-to-green gradient progression
+const getStatusColor = (status: JobStatus): { bg: string; border: string; text: string; dotBg: string } => {
+  // Use a single blue color family with progressive intensity
+  const baseBlue = 'var(--blue-9)'
+  const baseGreen = 'var(--green-9)'
+  
+  switch (status) {
+    case 'draft':
+      return {
+        bg: 'var(--blue-3)',
+        border: 'var(--blue-6)',
+        text: 'var(--blue-11)',
+        dotBg: 'var(--blue-5)',
+      }
+    case 'planned':
+      return {
+        bg: 'var(--blue-4)',
+        border: 'var(--blue-7)',
+        text: 'var(--blue-11)',
+        dotBg: 'var(--blue-6)',
+      }
+    case 'requested':
+      return {
+        bg: 'var(--blue-5)',
+        border: 'var(--blue-8)',
+        text: 'var(--blue-11)',
+        dotBg: 'var(--blue-7)',
+      }
+    case 'confirmed':
+      return {
+        bg: 'var(--blue-6)',
+        border: 'var(--blue-9)',
+        text: 'var(--blue-11)',
+        dotBg: 'var(--blue-8)',
+      }
+    case 'in_progress':
+      return {
+        bg: 'var(--blue-7)',
+        border: 'var(--blue-10)',
+        text: 'var(--blue-11)',
+        dotBg: 'var(--blue-9)',
+      }
+    case 'completed':
+      return {
+        bg: 'var(--blue-8)',
+        border: 'var(--blue-11)',
+        text: 'var(--blue-12)',
+        dotBg: 'var(--blue-10)',
+      }
+    case 'invoiced':
+      return {
+        bg: 'var(--teal-6)',
+        border: 'var(--teal-9)',
+        text: 'var(--teal-11)',
+        dotBg: 'var(--teal-8)',
+      }
+    case 'paid':
+      return {
+        bg: 'var(--green-7)',
+        border: 'var(--green-10)',
+        text: 'var(--green-12)',
+        dotBg: 'var(--green-9)',
+      }
+    case 'canceled':
+      return {
+        bg: 'var(--red-3)',
+        border: 'var(--red-6)',
+        text: 'var(--red-11)',
+        dotBg: 'var(--red-5)',
+      }
+  }
+}
+
+const STATUS_COLORS: Record<JobStatus, { bg: string; border: string; text: string; dotBg: string }> = {
+  draft: getStatusColor('draft'),
+  planned: getStatusColor('planned'),
+  requested: getStatusColor('requested'),
+  confirmed: getStatusColor('confirmed'),
+  in_progress: getStatusColor('in_progress'),
+  completed: getStatusColor('completed'),
+  invoiced: getStatusColor('invoiced'),
+  paid: getStatusColor('paid'),
+  canceled: getStatusColor('canceled'),
+}
 
 // Helper function to mask status for freelancers
 function getDisplayStatus(
@@ -112,9 +197,7 @@ function JobStatusTimeline({
   const { success, error } = useToast()
   const { companyRole } = useAuthz()
   const displayStatus = getDisplayStatus(currentStatus, companyRole)
-  const currentIndex = JOB_STATUS_ORDER.indexOf(displayStatus)
   const isCanceled = displayStatus === 'canceled'
-  const canceledIndex = JOB_STATUS_ORDER.indexOf('canceled')
   const [pendingStatusChange, setPendingStatusChange] =
     React.useState<JobStatus | null>(null)
 
@@ -180,201 +263,236 @@ function JobStatusTimeline({
   })
 
   // Filter statuses for freelancers - only show up to 'completed'
-  const visibleStatuses = React.useMemo(() => {
+  const flowStatuses = React.useMemo(() => {
     if (companyRole === 'freelancer') {
-      return JOB_STATUS_ORDER.filter((s) => s !== 'invoiced' && s !== 'paid')
+      return JOB_STATUS_FLOW.filter((s) => s !== 'invoiced' && s !== 'paid')
     }
-    return JOB_STATUS_ORDER
+    return JOB_STATUS_FLOW
   }, [companyRole])
+
+  // Find current position in flow
+  const currentFlowIndex = flowStatuses.indexOf(displayStatus)
 
   return (
     <Box>
-      {/* Progress Bar */}
-      <Flex direction="column" gap="2" mb="4">
-        <Flex align="center" justify="between">
-          {visibleStatuses.map((status, idx) => {
-            const isActive = status === displayStatus
-            const isCanceledStatus = status === 'canceled'
-            const isPaidStatus = status === 'paid'
-            const isInProgressStatus = status === 'in_progress'
-            const originalIndex = JOB_STATUS_ORDER.indexOf(status)
+      {/* Main Flow Timeline */}
+      <Flex direction="column" gap="3" mb="4">
+        <Flex align="center" gap="2" style={{ position: 'relative' }}>
+          {/* Main Flow Statuses */}
+          <Flex align="center" style={{ flex: 1 }} gap="0">
+            {flowStatuses.map((status, idx) => {
+              const isActive = status === displayStatus && !isCanceled
+              const statusIndex = flowStatuses.indexOf(status)
+              const isPast = !isCanceled && statusIndex < currentFlowIndex && statusIndex >= 0
+              const isFuture = statusIndex > currentFlowIndex
+              const colors = STATUS_COLORS[status]
+              const nextColors = idx < flowStatuses.length - 1 ? STATUS_COLORS[flowStatuses[idx + 1]] : null
 
-            // For non-canceled statuses: past if before current (unless current is canceled)
-            // For canceled status: active only when current is canceled
-            const isPast =
-              !isCanceledStatus && originalIndex < currentIndex && !isCanceled
-            const isFuture = isCanceledStatus
-              ? !isActive
-              : originalIndex > currentIndex ||
-                (isCanceled && originalIndex > canceledIndex)
+              return (
+                <React.Fragment key={status}>
+                  <Flex
+                    direction="column"
+                    align="center"
+                    style={{
+                      flex: 1,
+                      position: 'relative',
+                      cursor: companyRole === 'freelancer' ? 'default' : 'pointer',
+                      opacity: updateStatus.isPending ? 0.5 : 1,
+                      pointerEvents: companyRole === 'freelancer' ? 'none' : 'auto',
+                      minWidth: 0,
+                    }}
+                    onClick={() => {
+                      if (
+                        companyRole !== 'freelancer' &&
+                        !updateStatus.isPending &&
+                        status !== displayStatus
+                      ) {
+                        setPendingStatusChange(status)
+                      }
+                    }}
+                  >
+                    {/* Connector line to next status */}
+                    {idx < flowStatuses.length - 1 && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: '14px',
+                          left: '50%',
+                          width: 'calc(100% - 28px)',
+                          height: '2px',
+                          background: isPast || isActive
+                            ? nextColors
+                              ? `linear-gradient(to right, ${colors.dotBg}, ${nextColors.dotBg})`
+                              : colors.dotBg
+                            : 'var(--gray-a4)',
+                          zIndex: 0,
+                          borderRadius: '1px',
+                          transition: 'background 0.4s ease',
+                          opacity: isFuture ? 0.4 : 1,
+                        }}
+                      />
+                    )}
 
-            return (
-              <Flex
-                key={status}
-                direction="column"
-                align="center"
-                style={{
-                  flex: 1,
-                  position: 'relative',
-                  cursor: companyRole === 'freelancer' ? 'default' : 'pointer',
-                  opacity: updateStatus.isPending ? 0.6 : 1,
-                  pointerEvents: companyRole === 'freelancer' ? 'none' : 'auto',
-                }}
-                onClick={() => {
-                  if (
-                    companyRole !== 'freelancer' &&
-                    !updateStatus.isPending &&
-                    status !== displayStatus
-                  ) {
-                    setPendingStatusChange(status)
-                  }
-                }}
-              >
-                {/* Connector line - skip before canceled to avoid breaking the flow */}
-                {idx < visibleStatuses.length - 1 &&
-                  !isCanceledStatus &&
-                  visibleStatuses[idx + 1] !== 'canceled' && (
-                    <div
+                    {/* Status dot */}
+                    <Box
                       style={{
-                        position: 'absolute',
-                        top: '16px',
-                        left: '50%',
-                        width: '100%',
-                        height: '2px',
-                        background: isPast
-                          ? 'var(--accent-9)'
-                          : 'var(--gray-a5)',
-                        zIndex: 0,
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '50%',
+                        background: isActive 
+                          ? colors.dotBg 
+                          : isPast 
+                            ? colors.dotBg
+                            : 'var(--gray-a3)',
+                        border: 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 1,
+                        position: 'relative',
+                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                       }}
-                    />
-                  )}
+                      className="status-dot"
+                    >
+                      {(isPast || (isActive && status === 'paid')) && (
+                        <Text size="1" weight="bold" style={{ color: 'white', fontSize: '12px' }}>
+                          ✓
+                        </Text>
+                      )}
+                      {isActive && status !== 'paid' && (
+                        <Box
+                          style={{
+                            width: '8px',
+                            height: '8px',
+                            borderRadius: '50%',
+                            background: 'white',
+                          }}
+                        />
+                      )}
+                    </Box>
 
-                {/* Status dot */}
-                <Box
-                  style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '50%',
-                    background: isCanceledStatus
-                      ? isActive
-                        ? 'var(--red-9)'
-                        : 'var(--gray-a5)'
-                      : isPaidStatus
-                        ? isActive
-                          ? 'var(--green-9)'
-                          : isPast
-                            ? 'var(--green-9)'
-                            : 'var(--gray-a5)'
-                        : isInProgressStatus
-                          ? isActive
-                            ? 'var(--amber-9)'
-                            : isPast
-                              ? 'var(--amber-9)'
-                              : 'var(--gray-a5)'
-                          : isActive
-                            ? 'var(--accent-9)'
-                            : isPast
-                              ? 'var(--accent-9)'
-                              : 'var(--gray-a5)',
-                    border: isActive
-                      ? isCanceledStatus
-                        ? '3px solid var(--red-a9)'
-                        : isPaidStatus
-                          ? '3px solid var(--green-a9)'
-                          : isInProgressStatus
-                            ? '3px solid var(--amber-a9)'
-                            : '3px solid var(--accent-a9)'
-                      : '2px solid transparent',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: 1,
-                    position: 'relative',
-                    transition: 'transform 0.2s, box-shadow 0.2s',
-                  }}
-                  className="status-dot"
-                >
-                  {isPast && (
-                    <Text size="1" style={{ color: 'white' }}>
-                      ✓
+                    {/* Status label */}
+                    <Text
+                      size="1"
+                      mt="2"
+                      weight={isActive ? 'medium' : 'regular'}
+                      style={{
+                        color: isActive || isPast ? colors.text : 'var(--gray-a9)',
+                        textAlign: 'center',
+                        transition: 'color 0.3s ease',
+                        fontSize: '11px',
+                        opacity: isFuture ? 0.5 : 1,
+                      }}
+                    >
+                      {makeWordPresentable(status)}
                     </Text>
-                  )}
-                  {isActive && isCanceledStatus && (
-                    <Text size="1" style={{ color: 'white' }}>
-                      ✕
-                    </Text>
-                  )}
-                  {isActive && isPaidStatus && (
-                    <Text size="1" style={{ color: 'white' }}>
-                      ✓
-                    </Text>
-                  )}
-                </Box>
+                  </Flex>
+                </React.Fragment>
+              )
+            })}
+          </Flex>
 
-                {/* Status label */}
-                <Text
-                  size="1"
-                  mt="2"
-                  weight={isActive ? 'bold' : 'regular'}
-                  style={{
-                    color: isCanceledStatus
-                      ? isActive
-                        ? 'var(--red-11)'
-                        : 'var(--gray-a9)'
-                      : isPaidStatus
-                        ? isActive
-                          ? 'var(--green-11)'
-                          : isPast
-                            ? 'var(--green-11)'
-                            : 'var(--gray-a9)'
-                        : isInProgressStatus
-                          ? isActive
-                            ? 'var(--amber-11)'
-                            : isPast
-                              ? 'var(--amber-11)'
-                              : 'var(--gray-a9)'
-                          : isActive
-                            ? 'var(--accent-11)'
-                            : isFuture
-                              ? 'var(--gray-a9)'
-                              : 'inherit',
-                  }}
-                >
-                  {makeWordPresentable(status)}
+          {/* Separator */}
+          {!isCanceled && (
+            <Box
+              style={{
+                width: '1px',
+                height: '50px',
+                background: 'var(--gray-a4)',
+                margin: '0 20px',
+                opacity: 0.5,
+              }}
+            />
+          )}
+
+          {/* Canceled Status (on the right) */}
+          <Flex
+            direction="column"
+            align="center"
+            style={{
+              cursor: companyRole === 'freelancer' ? 'default' : 'pointer',
+              opacity: updateStatus.isPending ? 0.5 : 1,
+              pointerEvents: companyRole === 'freelancer' ? 'none' : 'auto',
+              minWidth: '70px',
+            }}
+            onClick={() => {
+              if (
+                companyRole !== 'freelancer' &&
+                !updateStatus.isPending &&
+                !isCanceled
+              ) {
+                setPendingStatusChange('canceled')
+              }
+            }}
+          >
+            <Box
+              style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: '50%',
+                background: isCanceled 
+                  ? STATUS_COLORS.canceled.dotBg 
+                  : 'var(--gray-a3)',
+                border: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 1,
+                position: 'relative',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              }}
+              className="status-dot"
+            >
+              {isCanceled && (
+                <Text size="1" weight="bold" style={{ color: 'white', fontSize: '12px' }}>
+                  ✕
                 </Text>
-              </Flex>
-            )
-          })}
+              )}
+            </Box>
+            <Text
+              size="1"
+              mt="2"
+              weight={isCanceled ? 'medium' : 'regular'}
+              style={{
+                color: isCanceled ? STATUS_COLORS.canceled.text : 'var(--gray-a9)',
+                textAlign: 'center',
+                transition: 'color 0.3s ease',
+                fontSize: '11px',
+                opacity: !isCanceled ? 0.5 : 1,
+              }}
+            >
+              {makeWordPresentable('canceled')}
+            </Text>
+          </Flex>
         </Flex>
       </Flex>
 
       {/* Current Status Badge */}
-      <Flex align="center" gap="2">
-        <Text size="2" weight="medium">
-          Current:
+      <Flex align="center" gap="2" mt="4" pt="3" style={{ borderTop: '1px solid var(--gray-a4)' }}>
+        <Text size="2" weight="regular" color="gray">
+          Current status:
         </Text>
         <Badge
           size="2"
-          variant="solid"
-          color={
-            isCanceled
-              ? 'red'
-              : displayStatus === 'paid'
-                ? 'green'
-                : displayStatus === 'in_progress'
-                  ? 'amber'
-                  : 'blue'
-          }
+          variant="soft"
+          style={{
+            background: STATUS_COLORS[displayStatus].bg,
+            color: STATUS_COLORS[displayStatus].text,
+            borderColor: STATUS_COLORS[displayStatus].border,
+          }}
         >
           {makeWordPresentable(displayStatus)}
         </Badge>
       </Flex>
 
-      {/* Add hover styles */}
+      {/* Subtle hover styles */}
       <style>{`
         .status-dot:hover {
           transform: scale(1.1);
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+          transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .status-dot:active {
+          transform: scale(1.0);
         }
       `}</style>
 
