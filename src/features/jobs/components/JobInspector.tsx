@@ -73,6 +73,7 @@ export default function JobInspector({
   const { userId, companyRole } = useAuthz()
   const [editOpen, setEditOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
+  const [archiveOpen, setArchiveOpen] = React.useState(false)
   const [statusTimelineOpen, setStatusTimelineOpen] = React.useState(false)
   const [activeTab, setActiveTab] = React.useState<string>(
     initialTab || 'overview',
@@ -147,6 +148,7 @@ export default function JobInspector({
       await qc.invalidateQueries({ queryKey: ['company'] })
       await qc.invalidateQueries({ queryKey: ['jobs-index'] })
       await qc.invalidateQueries({ queryKey: ['jobs-detail'] })
+      setArchiveOpen(false)
       success('Job updated', archived ? 'Job has been archived.' : 'Job has been unarchived.')
     },
     onError: (err: any) => {
@@ -201,20 +203,6 @@ export default function JobInspector({
           })()}
           {companyRole !== 'freelancer' && (
             <>
-              {/* Archive button - only for paid jobs and only for project lead */}
-              {job.status === 'paid' && userId && job.project_lead_user_id === userId && (
-                <Tooltip content={job.archived ? 'Unarchive job' : 'Archive job'}>
-                  <Button
-                    size="2"
-                    variant="soft"
-                    color={job.archived ? 'blue' : 'gray'}
-                    onClick={() => archiveJob.mutate({ jobId: job.id, archived: !job.archived })}
-                    disabled={archiveJob.isPending}
-                  >
-                    <Archive width={16} height={16} />
-                  </Button>
-                </Tooltip>
-              )}
               <Button size="2" variant="soft" onClick={() => setEditOpen(true)}>
                 <Edit width={16} height={16} />
               </Button>
@@ -226,6 +214,17 @@ export default function JobInspector({
               >
                 <Trash width={16} height={16} />
               </Button>
+              <Tooltip content={job.archived ? 'Unarchive job' : 'Archive job'}>
+                <Button
+                  size="2"
+                  variant="soft"
+                  color={job.archived ? 'blue' : 'gray'}
+                  onClick={() => setArchiveOpen(true)}
+                  disabled={archiveJob.isPending}
+                >
+                  <Archive width={16} height={16} />
+                </Button>
+              </Tooltip>
               <JobDialog
                 open={editOpen}
                 onOpenChange={setEditOpen}
@@ -239,6 +238,13 @@ export default function JobInspector({
                 job={job}
                 onConfirm={() => deleteJob.mutate(job.id)}
                 isDeleting={deleteJob.isPending}
+              />
+              <ArchiveJobDialog
+                open={archiveOpen}
+                onOpenChange={setArchiveOpen}
+                job={job}
+                onConfirm={() => archiveJob.mutate({ jobId: job.id, archived: !job.archived })}
+                isArchiving={archiveJob.isPending}
               />
             </>
           )}
@@ -391,6 +397,87 @@ function DeleteJobDialog({
           </Button>
           <Button color="red" onClick={onConfirm} disabled={isDeleting}>
             {isDeleting ? 'Deleting...' : 'Delete Job'}
+          </Button>
+        </Flex>
+      </Dialog.Content>
+    </Dialog.Root>
+  )
+}
+
+function ArchiveJobDialog({
+  open,
+  onOpenChange,
+  job,
+  onConfirm,
+  isArchiving,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  job: JobDetail
+  onConfirm: () => void
+  isArchiving: boolean
+}) {
+  const actionText = job.archived ? 'unarchive' : 'archive'
+  const actionTitle = job.archived
+    ? `Unarchive Job: ${job.title}?`
+    : `Archive Job: ${job.title}?`
+
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Content maxWidth="500px">
+        <Dialog.Title>{actionTitle}</Dialog.Title>
+        <Separator my="3" />
+
+        <Flex direction="column" gap="3">
+          <Text size="2">
+            Are you sure you want to {actionText} this job?
+          </Text>
+
+          <Text size="2" color="gray">
+            {job.archived
+              ? 'Unarchiving will make this job visible in the jobs list again.'
+              : 'Archiving will hide this job from the default jobs list, but it can be viewed by enabling "Show archived" in the filter.'}
+          </Text>
+
+          <Text size="2" color="gray">
+            Job details:
+          </Text>
+          <Box
+            p="2"
+            style={{
+              background: 'var(--gray-a2)',
+              borderRadius: '6px',
+              fontSize: '13px',
+            }}
+          >
+            <Flex direction="column" gap="1">
+              <Text size="1">
+                <strong>Title:</strong> {job.title}
+              </Text>
+              <Text size="1">
+                <strong>Status:</strong> {makeWordPresentable(job.status)}
+              </Text>
+              {job.customer && (
+                <Text size="1">
+                  <strong>Customer:</strong> {job.customer.name}
+                </Text>
+              )}
+            </Flex>
+          </Box>
+        </Flex>
+
+        <Flex gap="3" mt="4" justify="end">
+          <Button
+            variant="soft"
+            onClick={() => onOpenChange(false)}
+            disabled={isArchiving}
+          >
+            Cancel
+          </Button>
+          <Button onClick={onConfirm} disabled={isArchiving}>
+            {isArchiving
+              ? `${actionText.charAt(0).toUpperCase() + actionText.slice(1)}ing...`
+              : `${actionText.charAt(0).toUpperCase() + actionText.slice(1)} Job`}
           </Button>
         </Flex>
       </Dialog.Content>

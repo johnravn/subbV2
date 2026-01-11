@@ -53,9 +53,11 @@ type SortDir = 'asc' | 'desc'
 export default function JobsTable({
   selectedId,
   onSelect,
+  onWidthChange,
 }: {
   selectedId: string | null
   onSelect: (id: string | null) => void
+  onWidthChange?: (width: number) => void
 }) {
   const { companyId } = useCompany()
   const { userId, companyRole } = useAuthz()
@@ -133,7 +135,8 @@ export default function JobsTable({
     const theadH = theadRef.current?.offsetHeight ?? 0
     const pagerH = pagerRef.current?.offsetHeight ?? 0
 
-    const miscPadding = 48 // Increased to account for pagination controls
+    // Reduced padding to allow for one more row - account for table padding and margins
+    const miscPadding = 24
 
     const available = Math.max(
       0,
@@ -150,8 +153,10 @@ export default function JobsTable({
     )
     const rowH = visibleRow?.getBoundingClientRect().height || 60
 
-    // Be conservative - don't add extra rows, and use floor to ensure we don't overflow
-    const rows = Math.max(5, Math.min(50, Math.floor(available / rowH)))
+    // Calculate rows more accurately - use a small buffer (2px) to account for rounding
+    // This allows showing one more row when there's sufficient space
+    const rowsWithBuffer = (available + 2) / rowH
+    const rows = Math.max(5, Math.min(50, Math.floor(rowsWithBuffer)))
     setPageSize(rows)
   }, [])
 
@@ -190,6 +195,84 @@ export default function JobsTable({
       })
     }
   }, [allData.length, recomputePageSize])
+
+  // Calculate optimal table width and notify parent
+  const calculateOptimalWidth = React.useCallback(() => {
+    if (!containerRef.current || !onWidthChange) return
+
+    const table = containerRef.current.querySelector('table')
+    if (!table) return
+
+    // Measure the table's scroll width (actual content width)
+    const tableScrollWidth = table.scrollWidth
+
+    // Get the container's parent (Card) to account for card padding
+    const card = containerRef.current.closest(
+      '[class*="Card"], [class*="card"]',
+    )
+    if (!card) return
+
+    const cardElement = card as HTMLElement
+    const cardStyle = window.getComputedStyle(cardElement)
+    const cardPaddingLeft = parseFloat(cardStyle.paddingLeft) || 0
+    const cardPaddingRight = parseFloat(cardStyle.paddingRight) || 0
+    const cardPadding = cardPaddingLeft + cardPaddingRight
+
+    // Get the container (section/page) width for percentage calculation
+    const pageContainer = cardElement.closest('section, [class*="Page"]')
+    if (!pageContainer) return
+
+    const pageContainerElement = pageContainer as HTMLElement
+
+    const pageWidth = pageContainerElement.getBoundingClientRect().width
+    if (pageWidth === 0) return
+
+    // Calculate required width: table width + card padding + small buffer
+    const requiredWidth = tableScrollWidth + cardPadding + 32 // 32px buffer for margins/gaps
+
+    // Calculate as percentage of page width
+    const widthPercent = (requiredWidth / pageWidth) * 100
+
+    // Respect min/max constraints: min 15%, max 75%
+    const constrainedWidth = Math.max(15, Math.min(75, widthPercent))
+
+    onWidthChange(constrainedWidth)
+  }, [onWidthChange])
+
+  // Calculate optimal width when data changes or window resizes
+  React.useEffect(() => {
+    if (!onWidthChange || allData.length === 0) return
+
+    // Use a small delay to ensure table has rendered
+    const timeoutId = setTimeout(() => {
+      requestAnimationFrame(() => {
+        calculateOptimalWidth()
+      })
+    }, 100)
+
+    return () => clearTimeout(timeoutId)
+  }, [
+    allData.length,
+    search,
+    sortBy,
+    sortDir,
+    calculateOptimalWidth,
+    onWidthChange,
+  ])
+
+  // Also recalculate on window resize
+  React.useEffect(() => {
+    if (!onWidthChange) return
+
+    const handleResize = () => {
+      requestAnimationFrame(() => {
+        calculateOptimalWidth()
+      })
+    }
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [calculateOptimalWidth, onWidthChange])
 
   // Reset to page 1 when filters change
   React.useEffect(() => {
