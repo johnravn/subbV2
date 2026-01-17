@@ -45,15 +45,15 @@ export default function AddCrewDialog({
         const patterns = [
           `%${term}%`,
           term.length > 2 ? `%${term.split('').join('%')}%` : null,
-        ].filter(Boolean) as string[]
-        
+        ].filter(Boolean) as Array<string>
+
         const conditions = patterns
           .flatMap((pattern) => [
             `display_name.ilike.${pattern}`,
             `email.ilike.${pattern}`,
           ])
           .join(',')
-        
+
         q = q.or(conditions)
       }
 
@@ -209,9 +209,8 @@ export default function AddCrewDialog({
             <Select.Trigger />
             <Select.Content style={{ zIndex: 10000 }}>
               <Select.Item value="planned">planned</Select.Item>
-              <Select.Item value="requested">requested</Select.Item>
-              <Select.Item value="declined">declined</Select.Item>
-              <Select.Item value="accepted">accepted</Select.Item>
+              <Select.Item value="confirmed">confirmed</Select.Item>
+              <Select.Item value="canceled">canceled</Select.Item>
             </Select.Content>
           </Select.Root>
         </Field>
@@ -290,9 +289,8 @@ export function EditCrewDialog({
             <Select.Trigger />
             <Select.Content style={{ zIndex: 10000 }}>
               <Select.Item value="planned">planned</Select.Item>
-              <Select.Item value="requested">requested</Select.Item>
-              <Select.Item value="declined">declined</Select.Item>
-              <Select.Item value="accepted">accepted</Select.Item>
+              <Select.Item value="confirmed">confirmed</Select.Item>
+              <Select.Item value="canceled">canceled</Select.Item>
             </Select.Content>
           </Select.Root>
         </Field>

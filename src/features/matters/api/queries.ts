@@ -699,10 +699,10 @@ export async function sendCrewInvites(
     }
   }
 
-  // Update reserved_crew status to 'requested'
+  // Keep reserved_crew in planned status after sending invites
   const { error: updateError } = await supabase
     .from('reserved_crew')
-    .update({ status: 'requested' as const })
+    .update({ status: 'planned' as const })
     .eq('time_period_id', timePeriodId)
     .eq('status', 'planned')
     .in('user_id', userIds)
@@ -850,10 +850,10 @@ export async function sendCrewInvite(
   // Store map query in matter content or metadata (we'll fetch it separately in UI)
   // For now, the address is in the content, and we'll fetch it in MatterDetail
 
-  // Update reserved_crew status to 'requested'
+  // Keep reserved_crew in planned status after sending invite
   const { error: updateError } = await supabase
     .from('reserved_crew')
-    .update({ status: 'requested' as const })
+    .update({ status: 'planned' as const })
     .eq('id', crewRow.id)
 
   if (updateError) throw updateError
@@ -899,15 +899,15 @@ export async function respondToMatter(
 
   // Determine recipient status based on response
   // For votes: 'approved' -> 'accepted', 'rejected' -> 'declined', otherwise -> 'responded'
-  // For crew_invite: 'approved' -> 'accepted', 'rejected' -> 'declined'
+  // For crew_invite: 'approved' -> 'confirmed', 'rejected' -> 'canceled'
   let recipientStatus: 'accepted' | 'declined' | 'responded' = 'responded'
-  let crewStatus: 'accepted' | 'declined' | null = null
+  let crewStatus: 'confirmed' | 'canceled' | null = null
   if (trimmedResponse === 'approved') {
     recipientStatus = 'accepted'
-    crewStatus = 'accepted'
+    crewStatus = 'confirmed'
   } else if (trimmedResponse === 'rejected') {
     recipientStatus = 'declined'
-    crewStatus = 'declined'
+    crewStatus = 'canceled'
   }
 
   // Update recipient status

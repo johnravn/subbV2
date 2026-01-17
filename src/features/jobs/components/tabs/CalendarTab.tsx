@@ -131,73 +131,89 @@ export default function CalendarTab({ jobId }: { jobId: string }) {
       {/* Filter Controls */}
       <Box
         mb="3"
-        p="2"
-        style={{ background: 'var(--gray-a2)', borderRadius: 8 }}
+        p="3"
+        style={{
+          background: 'var(--gray-a2)',
+          borderRadius: 8,
+          border: '1px solid var(--gray-a4)',
+        }}
       >
         <Flex align="center" gap="4" wrap="wrap">
-          <Text size="2" weight="medium">
+          <Text
+            size="2"
+            weight="medium"
+            color="gray"
+            style={{ minWidth: 'fit-content' }}
+          >
             Show:
           </Text>
-          <Flex
-            align="center"
-            gap="2"
-            style={{ cursor: 'pointer' }}
-            onClick={() => toggleFilter('jobDuration')}
-          >
-            <Checkbox
-              checked={selectedFilters.has('jobDuration')}
-              onCheckedChange={() => toggleFilter('jobDuration')}
-            />
-            <Text as="span">Job Duration</Text>
-          </Flex>
-          <Flex
-            align="center"
-            gap="2"
-            style={{ cursor: 'pointer' }}
-            onClick={() => toggleFilter('program')}
-          >
-            <Checkbox
-              checked={selectedFilters.has('program')}
-              onCheckedChange={() => toggleFilter('program')}
-            />
-            <Text as="span">Program</Text>
-          </Flex>
-          <Flex
-            align="center"
-            gap="2"
-            style={{ cursor: 'pointer' }}
-            onClick={() => toggleFilter('equipment')}
-          >
-            <Checkbox
-              checked={selectedFilters.has('equipment')}
-              onCheckedChange={() => toggleFilter('equipment')}
-            />
-            <Text as="span">Equipment</Text>
-          </Flex>
-          <Flex
-            align="center"
-            gap="2"
-            style={{ cursor: 'pointer' }}
-            onClick={() => toggleFilter('crew')}
-          >
-            <Checkbox
-              checked={selectedFilters.has('crew')}
-              onCheckedChange={() => toggleFilter('crew')}
-            />
-            <Text as="span">Crew</Text>
-          </Flex>
-          <Flex
-            align="center"
-            gap="2"
-            style={{ cursor: 'pointer' }}
-            onClick={() => toggleFilter('transport')}
-          >
-            <Checkbox
-              checked={selectedFilters.has('transport')}
-              onCheckedChange={() => toggleFilter('transport')}
-            />
-            <Text as="span">Transport</Text>
-          </Flex>
+          {(
+            [
+              { key: 'jobDuration' as CategoryFilter, label: 'Job Duration' },
+              { key: 'program' as CategoryFilter, label: 'Program' },
+              { key: 'equipment' as CategoryFilter, label: 'Equipment' },
+              { key: 'crew' as CategoryFilter, label: 'Crew' },
+              { key: 'transport' as CategoryFilter, label: 'Transport' },
+            ] as const
+          ).map(({ key, label }) => {
+            const colors = getCategoryColor(key)
+            const isChecked = selectedFilters.has(key)
+            return (
+              <Flex
+                key={key}
+                align="center"
+                gap="1"
+                style={{
+                  cursor: 'pointer',
+                  padding: '4px 8px',
+                  borderRadius: 6,
+                  transition: 'background-color 0.2s',
+                }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  toggleFilter(key)
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--gray-a3)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent'
+                }}
+              >
+                <Checkbox
+                  checked={isChecked}
+                  onCheckedChange={(checked) => {
+                    if (checked !== isChecked) {
+                      toggleFilter(key)
+                    }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <Text
+                  as="span"
+                  size="2"
+                  style={{
+                    color: isChecked ? 'var(--gray-12)' : 'var(--gray-11)',
+                    fontWeight: isChecked ? '500' : '400',
+                    transition: 'color 0.2s',
+                  }}
+                >
+                  {label}
+                </Text>
+                <Box
+                  style={{
+                    width: '14px',
+                    height: '14px',
+                    borderRadius: '50%',
+                    background: colors.bg,
+                    border: `2px solid ${colors.border}`,
+                    flexShrink: 0,
+                    boxShadow: `0 0 0 1px ${colors.border}20`,
+                  }}
+                />
+              </Flex>
+            )
+          })}
         </Flex>
       </Box>
 
@@ -273,6 +289,52 @@ export default function CalendarTab({ jobId }: { jobId: string }) {
       </Box>
     </Box>
   )
+}
+
+// Helper to get color for a category filter (for the filter UI)
+function getCategoryColor(category: CategoryFilter): {
+  bg: string
+  border: string
+  text: string
+} {
+  switch (category) {
+    case 'jobDuration':
+      return {
+        bg: 'var(--blue-a6)',
+        border: 'var(--blue-a8)',
+        text: 'var(--blue-12)',
+      }
+    case 'equipment':
+      return {
+        bg: 'var(--violet-a6)',
+        border: 'var(--violet-a8)',
+        text: 'var(--violet-12)',
+      }
+    case 'crew':
+      return {
+        bg: 'var(--green-a6)',
+        border: 'var(--green-a8)',
+        text: 'var(--green-12)',
+      }
+    case 'transport':
+      return {
+        bg: 'var(--amber-a6)',
+        border: 'var(--amber-a8)',
+        text: 'var(--amber-12)',
+      }
+    case 'program':
+      return {
+        bg: 'var(--pink-a6)',
+        border: 'var(--pink-a8)',
+        text: 'var(--pink-12)',
+      }
+    default:
+      return {
+        bg: 'var(--gray-a6)',
+        border: 'var(--gray-a8)',
+        text: 'var(--gray-12)',
+      }
+  }
 }
 
 // Helper to assign colors to time periods

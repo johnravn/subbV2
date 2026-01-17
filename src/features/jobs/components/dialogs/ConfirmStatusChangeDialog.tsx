@@ -6,7 +6,7 @@ import {
   Flex,
   Text,
 } from '@radix-ui/themes'
-import type { CrewReqStatus } from '../../types'
+import type { BookingStatus } from '../../types'
 
 export default function ConfirmStatusChangeDialog({
   open,
@@ -18,16 +18,15 @@ export default function ConfirmStatusChangeDialog({
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
-  currentStatus: CrewReqStatus
-  newStatus: CrewReqStatus
+  currentStatus: BookingStatus
+  newStatus: BookingStatus
   crewName: string
   onConfirm: () => void
 }) {
-  const statusLabels: Record<CrewReqStatus, string> = {
+  const statusLabels: Record<BookingStatus, string> = {
     planned: 'Planned',
-    requested: 'Requested',
-    accepted: 'Accepted',
-    declined: 'Declined',
+    confirmed: 'Confirmed',
+    canceled: 'Canceled',
   }
 
   return (
@@ -46,7 +45,7 @@ export default function ConfirmStatusChangeDialog({
           </Dialog.Close>
           <Button
             variant="classic"
-            color={newStatus === 'declined' ? 'red' : undefined}
+            color={newStatus === 'canceled' ? 'red' : undefined}
             onClick={() => {
               onConfirm()
               onOpenChange(false)

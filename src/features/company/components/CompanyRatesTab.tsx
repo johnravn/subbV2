@@ -992,8 +992,6 @@ const DEFAULT_RENTAL_FACTORS: RentalFactorConfig = {
   30: 4.5,
 }
 
-// Standard days to show in the editor
-const STANDARD_DAYS = [1, 2, 3, 4, 5, 7, 10, 14, 21, 30]
 
 function RentalFactorsEditor({
   config,
@@ -1034,10 +1032,19 @@ function RentalFactorsEditor({
     onChange(DEFAULT_RENTAL_FACTORS)
   }
 
-  // Filter days based on maxDays (if set)
-  const daysToShow = maxDays
-    ? STANDARD_DAYS.filter((days) => days <= maxDays)
-    : STANDARD_DAYS
+  const resolvedMaxDays = React.useMemo(() => {
+    if (maxDays && maxDays > 0) return maxDays
+    const configDays = Object.keys(localConfig).map((day) => Number(day))
+    const maxFromConfig = configDays.length
+      ? Math.max(...configDays)
+      : Math.max(...Object.keys(DEFAULT_RENTAL_FACTORS).map((day) => Number(day)))
+    return Math.max(1, maxFromConfig)
+  }, [localConfig, maxDays])
+
+  const daysToShow = React.useMemo(
+    () => Array.from({ length: resolvedMaxDays }, (_, index) => index + 1),
+    [resolvedMaxDays],
+  )
 
   return (
     <Flex direction="column" gap="4">
@@ -1086,7 +1093,7 @@ function RentalFactorsEditor({
                     <TextField.Root
                       type="number"
                       min="0"
-                      step="0.1"
+                      step="0.01"
                       placeholder="Auto"
                       value={
                         days in localConfig ? String(localConfig[days]) : ''

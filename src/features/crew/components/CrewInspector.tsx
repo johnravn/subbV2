@@ -2,16 +2,19 @@ import * as React from 'react'
 import {
   Badge,
   Box,
+  Button,
   Code,
   DropdownMenu,
   Flex,
   Avatar as RadixAvatar,
+  Select,
   Separator,
   Spinner,
   Text,
+  TextField,
 } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@shared/api/supabase'
 import { getInitials } from '@shared/lib/generalFunctions'
 import { prettyPhone } from '@shared/phone/phone'
@@ -19,14 +22,22 @@ import { EditPencil } from 'iconoir-react'
 import { toEventInputs } from '@features/calendar/components/domain'
 import InspectorCalendar from '@features/calendar/components/InspectorCalendar'
 import { crewCalendarQuery } from '@features/calendar/api/queries'
-import { crewDetailQuery, crewIndexQuery } from '../api/queries'
+import {
+  crewDetailQuery,
+  crewIndexQuery,
+  updateCrewMemberRate,
+} from '../api/queries'
 import type { CrewDetail } from '../api/queries'
 import ChangeRoleConfirmDialog from '@features/company/components/dialogs/ChangeRoleConfirmDialog'
 import type { CompanyRole } from '@features/company/api/queries'
+import { useToast } from '@shared/ui/toast/ToastProvider'
+import { useAuthz } from '@shared/auth/useAuthz'
 
 export default function CrewInspector({ userId }: { userId: string | null }) {
   const { companyId } = useCompany()
   const qc = useQueryClient()
+  const { success, error: toastError } = useToast()
+  const { companyRole } = useAuthz()
   const [changeRoleOpen, setChangeRoleOpen] = React.useState(false)
   const [roleChangeInfo, setRoleChangeInfo] = React.useState<{
     userId: string
@@ -35,6 +46,11 @@ export default function CrewInspector({ userId }: { userId: string | null }) {
     currentRole: CompanyRole
     newRole: CompanyRole
   } | null>(null)
+  
+  // Rate editing state
+  const [isEditingRate, setIsEditingRate] = React.useState(false)
+  const [rateType, setRateType] = React.useState<'daily' | 'hourly' | null>(null)
+  const [rate, setRate] = React.useState<string>('')
 
   const { data, isLoading, isError, error } = useQuery<CrewDetail | null>({
     ...(companyId && userId
@@ -69,6 +85,57 @@ export default function CrewInspector({ userId }: { userId: string | null }) {
     () => toEventInputs(calendarRecords),
     [calendarRecords],
   )
+
+  // Fetch company general rates for employees/owners
+  const { data: companyRates } = useQuery({
+    queryKey: ['company', companyId, 'general-rates'] as const,
+    enabled: !!companyId && !!data && (data.role === 'employee' || data.role === 'owner'),
+    queryFn: async () => {
+      if (!companyId) return null
+      const { data, error } = await supabase
+        .from('companies')
+        .select('employee_daily_rate, employee_hourly_rate, owner_daily_rate, owner_hourly_rate')
+        .eq('id', companyId)
+        .single()
+      if (error) throw error
+      return data
+    },
+  })
+
+  // Initialize rate editing state when data loads
+  React.useEffect(() => {
+    if (data) {
+      setRateType(data.rate_type)
+      setRate(data.rate?.toString() ?? '')
+    }
+  }, [data])
+
+  // Rate update mutation
+  const updateRateMutation = useMutation({
+    mutationFn: async () => {
+      if (!companyId || !userId) throw new Error('Missing company or user ID')
+      const rateValue = rate.trim() === '' ? null : parseFloat(rate)
+      if (rateValue !== null && (isNaN(rateValue) || rateValue < 0)) {
+        throw new Error('Rate must be a positive number')
+      }
+      await updateCrewMemberRate({
+        companyId,
+        userId,
+        rateType,
+        rate: rateValue,
+      })
+    },
+    onSuccess: () => {
+      success('Success', 'Rate updated successfully')
+      setIsEditingRate(false)
+      qc.invalidateQueries({
+        queryKey: ['company', companyId, 'crew-detail', userId],
+      })
+    },
+    onError: (e: any) => {
+      toastError('Failed to update rate', e?.message ?? 'Please try again.')
+    },
+  })
 
   const avatarUrl = React.useMemo(() => {
     if (!data?.avatar_url) return null
@@ -262,6 +329,170 @@ export default function CrewInspector({ userId }: { userId: string | null }) {
         <DT>Display name</DT>
         <DD>{data.display_name || '—'}</DD>
       </DefinitionList>
+
+      <Separator my="2" />
+
+      {/* Billing Rate - show for employees, freelancers, and owners */}
+      {(data.role === 'employee' || data.role === 'freelancer' || data.role === 'owner') && (
+        <>
+          <SectionTitle>Billing Rate</SectionTitle>
+          {data.role === 'freelancer' && !isEditingRate ? (
+            <Box mb="3">
+              <DefinitionList>
+                <DT>Rate type</DT>
+                <DD>{data.rate_type ? data.rate_type : '—'}</DD>
+
+                <DT>Rate</DT>
+                <DD>
+                  {data.rate !== null
+                    ? `${data.rate.toFixed(2)} kr ${data.rate_type === 'daily' ? 'per day' : 'per hour'}`
+                    : '—'}
+                </DD>
+
+                {data.rate_updated_at && (
+                  <>
+                    <DT>Last updated</DT>
+                    <DD>
+                      <Text size="1" color="gray">
+                        {formatMonthYear(data.rate_updated_at)}
+                      </Text>
+                    </DD>
+                  </>
+                )}
+              </DefinitionList>
+              <Button
+                size="2"
+                variant="soft"
+                onClick={() => setIsEditingRate(true)}
+                style={{ marginTop: 8 }}
+              >
+                <EditPencil width={14} height={14} />
+                Edit rate
+              </Button>
+            </Box>
+          ) : data.role === 'freelancer' && isEditingRate ? (
+            <Box mb="3">
+              <Flex direction="column" gap="3">
+                <Flex align="end" gap="3" wrap="wrap">
+                  <Box style={{ flex: 1, minWidth: 150 }}>
+                    <Text as="label" size="2" weight="medium" mb="1" style={{ display: 'block' }}>
+                      Rate type
+                    </Text>
+                    <Select.Root
+                      value={rateType ?? 'none'}
+                      onValueChange={(value) =>
+                        setRateType(value === 'none' ? null : (value as 'daily' | 'hourly'))
+                      }
+                    >
+                      <Select.Trigger placeholder="Select rate type" />
+                      <Select.Content>
+                        <Select.Item value="none">None</Select.Item>
+                        <Select.Item value="daily">Daily</Select.Item>
+                        <Select.Item value="hourly">Hourly</Select.Item>
+                      </Select.Content>
+                    </Select.Root>
+                  </Box>
+
+                  <Box style={{ flex: '0 0 auto', minWidth: 120 }}>
+                    <Text as="label" size="2" weight="medium" mb="1" style={{ display: 'block' }}>
+                      Rate amount
+                    </Text>
+                    <Flex align="center" gap="2">
+                      <TextField.Root
+                        type="number"
+                        value={rate}
+                        onChange={(e) => setRate(e.target.value)}
+                        placeholder="0.00"
+                        min="0"
+                        step="0.01"
+                        style={{ width: 100 }}
+                      />
+                      <Text size="2" color="gray">
+                        kr
+                      </Text>
+                    </Flex>
+                  </Box>
+                </Flex>
+
+                <Flex gap="2">
+                  <Button
+                    size="2"
+                    variant="solid"
+                    onClick={() => updateRateMutation.mutate()}
+                    disabled={updateRateMutation.isPending}
+                  >
+                    {updateRateMutation.isPending ? (
+                      <>
+                        <Spinner size="2" /> Saving...
+                      </>
+                    ) : (
+                      'Save'
+                    )}
+                  </Button>
+                  <Button
+                    size="2"
+                    variant="soft"
+                    onClick={() => {
+                      setIsEditingRate(false)
+                      // Reset to original values
+                      setRateType(data.rate_type)
+                      setRate(data.rate?.toString() ?? '')
+                    }}
+                    disabled={updateRateMutation.isPending}
+                  >
+                    Cancel
+                  </Button>
+                </Flex>
+              </Flex>
+            </Box>
+          ) : (
+            // Read-only display for employees and owners (using general rates)
+            <Box mb="3">
+              <DefinitionList>
+                {data.role === 'employee' && (
+                  <>
+                    <DT>Daily rate</DT>
+                    <DD>
+                      {companyRates?.employee_daily_rate
+                        ? `${Number(companyRates.employee_daily_rate).toFixed(2)} kr per day`
+                        : '—'}
+                    </DD>
+                    <DT>Hourly rate</DT>
+                    <DD>
+                      {companyRates?.employee_hourly_rate
+                        ? `${Number(companyRates.employee_hourly_rate).toFixed(2)} kr per hour`
+                        : '—'}
+                    </DD>
+                  </>
+                )}
+                {data.role === 'owner' && (
+                  <>
+                    <DT>Daily rate</DT>
+                    <DD>
+                      {companyRates?.owner_daily_rate
+                        ? `${Number(companyRates.owner_daily_rate).toFixed(2)} kr per day`
+                        : '—'}
+                    </DD>
+                    <DT>Hourly rate</DT>
+                    <DD>
+                      {companyRates?.owner_hourly_rate
+                        ? `${Number(companyRates.owner_hourly_rate).toFixed(2)} kr per hour`
+                        : '—'}
+                    </DD>
+                  </>
+                )}
+                <DT>Note</DT>
+                <DD>
+                  <Text size="1" color="gray">
+                    General rates are set in Company → Setup (owners only)
+                  </Text>
+                </DD>
+              </DefinitionList>
+            </Box>
+          )}
+          <Separator my="2" />
+        </>
+      )}
 
       {/* Bio */}
       <SectionTitle>Bio</SectionTitle>

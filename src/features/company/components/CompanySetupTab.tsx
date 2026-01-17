@@ -24,6 +24,7 @@ import { supabase } from '@shared/api/supabase'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import EditWelcomeMatterDialog from './dialogs/EditWelcomeMatterDialog'
 import EditBrandsDialog from '@features/inventory/components/EditBrandsDialog'
+import { useAuthz } from '@shared/auth/useAuthz'
 
 type ItemCategory = {
   id: string
@@ -269,10 +270,318 @@ function CategoriesDialogContent({
   )
 }
 
+function GeneralRatesSection({ companyId }: { companyId: string }) {
+  const qc = useQueryClient()
+  const { success, error: toastError } = useToast()
+  const [isEditing, setIsEditing] = React.useState(false)
+  const [employeeDailyRate, setEmployeeDailyRate] = React.useState<string>('')
+  const [employeeHourlyRate, setEmployeeHourlyRate] = React.useState<string>('')
+  const [ownerDailyRate, setOwnerDailyRate] = React.useState<string>('')
+  const [ownerHourlyRate, setOwnerHourlyRate] = React.useState<string>('')
+
+  // Fetch current rates
+  const { data: companyRates, isLoading } = useQuery({
+    queryKey: ['company', companyId, 'general-rates'] as const,
+    enabled: !!companyId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('companies')
+        .select('employee_daily_rate, employee_hourly_rate, owner_daily_rate, owner_hourly_rate')
+        .eq('id', companyId)
+        .single()
+      if (error) throw error
+      return data
+    },
+  })
+
+  // Initialize form when data loads
+  React.useEffect(() => {
+    if (companyRates && !isEditing) {
+      setEmployeeDailyRate(companyRates.employee_daily_rate?.toString() ?? '')
+      setEmployeeHourlyRate(companyRates.employee_hourly_rate?.toString() ?? '')
+      setOwnerDailyRate(companyRates.owner_daily_rate?.toString() ?? '')
+      setOwnerHourlyRate(companyRates.owner_hourly_rate?.toString() ?? '')
+    }
+  }, [companyRates, isEditing])
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const updateData: any = {
+        employee_daily_rate: employeeDailyRate.trim() ? parseFloat(employeeDailyRate) : null,
+        employee_hourly_rate: employeeHourlyRate.trim() ? parseFloat(employeeHourlyRate) : null,
+        owner_daily_rate: ownerDailyRate.trim() ? parseFloat(ownerDailyRate) : null,
+        owner_hourly_rate: ownerHourlyRate.trim() ? parseFloat(ownerHourlyRate) : null,
+      }
+
+      // Validate rates
+      Object.values(updateData).forEach((val) => {
+        if (val !== null && (isNaN(val) || val < 0)) {
+          throw new Error('All rates must be positive numbers')
+        }
+      })
+
+      const { error } = await supabase
+        .from('companies')
+        .update(updateData)
+        .eq('id', companyId)
+
+      if (error) throw error
+    },
+    onSuccess: async () => {
+      setIsEditing(false)
+      await qc.invalidateQueries({
+        queryKey: ['company', companyId, 'general-rates'],
+      })
+      success('General rates updated', 'Rates have been saved successfully.')
+    },
+    onError: (e: any) => {
+      toastError('Failed to update rates', e?.message ?? 'Please try again.')
+    },
+  })
+
+  if (isLoading) {
+    return (
+      <Flex align="center" gap="1" mb="4">
+        <Text>Loading</Text>
+        <Spinner size="2" />
+      </Flex>
+    )
+  }
+
+  return (
+    <Flex direction="column" gap="4" mb="6">
+      {!isEditing ? (
+        <>
+          <Box
+            p="3"
+            style={{
+              border: '1px solid var(--gray-a6)',
+              borderRadius: 8,
+              background: 'var(--gray-a2)',
+            }}
+          >
+            <Flex direction="column" gap="3">
+              <Box>
+                <Text size="2" weight="bold" mb="2" style={{ display: 'block' }}>
+                  Employee Rates
+                </Text>
+                <DefinitionList>
+                  <DT>Daily rate</DT>
+                  <DD>
+                    {companyRates?.employee_daily_rate
+                      ? `${Number(companyRates.employee_daily_rate).toFixed(2)} kr per day`
+                      : '—'}
+                  </DD>
+                  <DT>Hourly rate</DT>
+                  <DD>
+                    {companyRates?.employee_hourly_rate
+                      ? `${Number(companyRates.employee_hourly_rate).toFixed(2)} kr per hour`
+                      : '—'}
+                  </DD>
+                </DefinitionList>
+              </Box>
+              <Separator />
+              <Box>
+                <Text size="2" weight="bold" mb="2" style={{ display: 'block' }}>
+                  Owner Rates
+                </Text>
+                <DefinitionList>
+                  <DT>Daily rate</DT>
+                  <DD>
+                    {companyRates?.owner_daily_rate
+                      ? `${Number(companyRates.owner_daily_rate).toFixed(2)} kr per day`
+                      : '—'}
+                  </DD>
+                  <DT>Hourly rate</DT>
+                  <DD>
+                    {companyRates?.owner_hourly_rate
+                      ? `${Number(companyRates.owner_hourly_rate).toFixed(2)} kr per hour`
+                      : '—'}
+                  </DD>
+                </DefinitionList>
+              </Box>
+            </Flex>
+          </Box>
+          <Button size="2" variant="outline" onClick={() => setIsEditing(true)}>
+            <Edit width={16} height={16} />
+            Edit General Rates
+          </Button>
+        </>
+      ) : (
+        <>
+          <Flex direction="column" gap="4">
+            <Box>
+              <Text size="2" weight="bold" mb="3" style={{ display: 'block' }}>
+                Employee Rates
+              </Text>
+              <Flex direction="column" gap="3">
+                <Box>
+                  <Text as="label" size="2" weight="medium" mb="1" style={{ display: 'block' }}>
+                    Daily rate
+                  </Text>
+                  <Flex align="center" gap="2">
+                    <TextField.Root
+                      type="number"
+                      value={employeeDailyRate}
+                      onChange={(e) => setEmployeeDailyRate(e.target.value)}
+                      placeholder="0.00"
+                      min="0"
+                      step="0.01"
+                      style={{ width: 150 }}
+                    />
+                    <Text size="2" color="gray">
+                      kr per day
+                    </Text>
+                  </Flex>
+                </Box>
+                <Box>
+                  <Text as="label" size="2" weight="medium" mb="1" style={{ display: 'block' }}>
+                    Hourly rate
+                  </Text>
+                  <Flex align="center" gap="2">
+                    <TextField.Root
+                      type="number"
+                      value={employeeHourlyRate}
+                      onChange={(e) => setEmployeeHourlyRate(e.target.value)}
+                      placeholder="0.00"
+                      min="0"
+                      step="0.01"
+                      style={{ width: 150 }}
+                    />
+                    <Text size="2" color="gray">
+                      kr per hour
+                    </Text>
+                  </Flex>
+                </Box>
+              </Flex>
+            </Box>
+
+            <Separator />
+
+            <Box>
+              <Text size="2" weight="bold" mb="3" style={{ display: 'block' }}>
+                Owner Rates
+              </Text>
+              <Flex direction="column" gap="3">
+                <Box>
+                  <Text as="label" size="2" weight="medium" mb="1" style={{ display: 'block' }}>
+                    Daily rate
+                  </Text>
+                  <Flex align="center" gap="2">
+                    <TextField.Root
+                      type="number"
+                      value={ownerDailyRate}
+                      onChange={(e) => setOwnerDailyRate(e.target.value)}
+                      placeholder="0.00"
+                      min="0"
+                      step="0.01"
+                      style={{ width: 150 }}
+                    />
+                    <Text size="2" color="gray">
+                      kr per day
+                    </Text>
+                  </Flex>
+                </Box>
+                <Box>
+                  <Text as="label" size="2" weight="medium" mb="1" style={{ display: 'block' }}>
+                    Hourly rate
+                  </Text>
+                  <Flex align="center" gap="2">
+                    <TextField.Root
+                      type="number"
+                      value={ownerHourlyRate}
+                      onChange={(e) => setOwnerHourlyRate(e.target.value)}
+                      placeholder="0.00"
+                      min="0"
+                      step="0.01"
+                      style={{ width: 150 }}
+                    />
+                    <Text size="2" color="gray">
+                      kr per hour
+                    </Text>
+                  </Flex>
+                </Box>
+              </Flex>
+            </Box>
+          </Flex>
+
+          <Flex gap="2" justify="end">
+            <Button
+              size="2"
+              variant="soft"
+              onClick={() => {
+                setIsEditing(false)
+                // Reset to original values
+                if (companyRates) {
+                  setEmployeeDailyRate(companyRates.employee_daily_rate?.toString() ?? '')
+                  setEmployeeHourlyRate(companyRates.employee_hourly_rate?.toString() ?? '')
+                  setOwnerDailyRate(companyRates.owner_daily_rate?.toString() ?? '')
+                  setOwnerHourlyRate(companyRates.owner_hourly_rate?.toString() ?? '')
+                }
+              }}
+              disabled={saveMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="2"
+              variant="classic"
+              onClick={() => saveMutation.mutate()}
+              disabled={saveMutation.isPending}
+            >
+              {saveMutation.isPending ? (
+                <>
+                  <Spinner size="2" /> Saving...
+                </>
+              ) : (
+                'Save'
+              )}
+            </Button>
+          </Flex>
+        </>
+      )}
+    </Flex>
+  )
+}
+
+function DefinitionList({ children }: { children: React.ReactNode }) {
+  return (
+    <dl
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '140px 1fr',
+        rowGap: 8,
+        columnGap: 12,
+      }}
+    >
+      {children}
+    </dl>
+  )
+}
+
+function DT({ children }: { children: React.ReactNode }) {
+  return (
+    <dt>
+      <Text size="1" color="gray">
+        {children}
+      </Text>
+    </dt>
+  )
+}
+
+function DD({ children }: { children: React.ReactNode }) {
+  return (
+    <dd>
+      <Text size="2">{children}</Text>
+    </dd>
+  )
+}
+
 export default function CompanySetupTab() {
   const { companyId } = useCompany()
   const qc = useQueryClient()
   const { success, error: toastError, info } = useToast()
+  const { companyRole } = useAuthz()
   const [editCategoriesOpen, setEditCategoriesOpen] = React.useState(false)
   const [editBrandsOpen, setEditBrandsOpen] = React.useState(false)
   const [welcomeMatterOpen, setWelcomeMatterOpen] = React.useState(false)
@@ -553,8 +862,24 @@ export default function CompanySetupTab() {
         companyId={companyId}
       />
 
-      <Card size="4" style={{ minHeight: 0, overflow: 'auto' }}>
-        <Box p="4">
+      <Card
+        size="4"
+        style={{
+          minHeight: 0,
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
+        <Box
+          p="4"
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+          }}
+        >
           {/* Welcome Matter Section */}
           <Heading size="4" mb="4">
             Welcome Message
@@ -930,6 +1255,17 @@ export default function CompanySetupTab() {
           )}
 
           <Separator size="4" mb="6" />
+
+          {/* General Rates Section - Owners only */}
+          {companyRole === 'owner' && (
+            <>
+              <Heading size="4" mb="4">
+                General Rates
+              </Heading>
+              <GeneralRatesSection companyId={companyId} />
+              <Separator size="4" mb="6" />
+            </>
+          )}
 
           {/* Latest Feed Settings */}
           <Heading size="4" mb="4">

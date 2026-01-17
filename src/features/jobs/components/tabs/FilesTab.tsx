@@ -185,8 +185,7 @@ const FilesTab = React.forwardRef<FilesTabHandle, { job: JobDetail }>(
   return (
     <Box>
       <Box mb="4">
-        <Heading size="3">Notes</Heading>
-        <Separator size="4" mb="3" />
+        <Heading size="3" mb="3">Notes</Heading>
         {isReadOnly ? (
           <Text style={{ whiteSpace: 'pre-wrap' }}>{notes || '—'}</Text>
         ) : (

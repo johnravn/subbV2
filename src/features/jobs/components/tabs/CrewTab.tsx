@@ -12,15 +12,27 @@ import {
   Text,
 } from '@radix-ui/themes'
 import { supabase } from '@shared/api/supabase'
-import { Mail, NavArrowDown, NavArrowRight, Plus, Trash } from 'iconoir-react'
+import {
+  Edit,
+  Mail,
+  NavArrowDown,
+  NavArrowRight,
+  Plus,
+  Trash,
+} from 'iconoir-react'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { useAuthz } from '@shared/auth/useAuthz'
 import { sendCrewInvite, sendCrewInvites } from '../../../matters/api/queries'
 import AddRoleDialog from '../dialogs/AddRoleDialog'
+import EditRoleDialog from '../dialogs/EditRoleDialog'
 import AddCrewToRoleDialog from '../dialogs/AddCrewToRoleDialog'
 import ConfirmStatusChangeDialog from '../dialogs/ConfirmStatusChangeDialog'
 import SendInviteDialog from '../dialogs/SendInviteDialog'
-import type { CrewReqStatus, ReservedCrewRow } from '../../types'
+import type { BookingStatus, ReservedCrewRow } from '../../types'
+
+type ReservedCrewRowWithInvite = ReservedCrewRow & {
+  invited?: boolean
+}
 
 export default function CrewTab({
   jobId,
@@ -43,8 +55,8 @@ export default function CrewTab({
   const [statusChangeConfirm, setStatusChangeConfirm] = React.useState<{
     crewId: string
     crewName: string
-    currentStatus: CrewReqStatus
-    newStatus: CrewReqStatus
+    currentStatus: BookingStatus
+    newStatus: BookingStatus
   } | null>(null)
   const [sendInviteDialog, setSendInviteDialog] = React.useState<{
     userId?: string // Optional - if not provided, it's "send to all"
@@ -57,6 +69,14 @@ export default function CrewTab({
     roleId: string
     roleTitle: string
     crewCount: number
+  } | null>(null)
+  const [editRole, setEditRole] = React.useState<{
+    id: string
+    title: string | null
+    start_at: string | null
+    end_at: string | null
+    needed_count: number | null
+    role_category: string | null
   } | null>(null)
 
   const qc = useQueryClient()
@@ -82,7 +102,31 @@ export default function CrewTab({
         )
         .in('time_period_id', resIds)
       if (error) throw error
-      return rows as unknown as Array<ReservedCrewRow>
+
+      const { data: invites, error: inviteError } = await supabase
+        .from('matters' as any)
+        .select('time_period_id, matter_recipients(user_id)')
+        .eq('matter_type', 'crew_invite')
+        .in('time_period_id', resIds)
+
+      if (inviteError) throw inviteError
+
+      const invitedSet = new Set<string>()
+      for (const invite of invites || []) {
+        const tpId = invite.time_period_id as string | null
+        if (!tpId) continue
+        const recipients = invite.matter_recipients as
+          | Array<{ user_id: string }>
+          | null
+        for (const recipient of recipients || []) {
+          invitedSet.add(`${tpId}:${recipient.user_id}`)
+        }
+      }
+
+      return (rows as unknown as Array<ReservedCrewRow>).map((row) => ({
+        ...row,
+        invited: invitedSet.has(`${row.time_period_id}:${row.user_id}`),
+      }))
     },
   })
 
@@ -151,7 +195,7 @@ export default function CrewTab({
       status,
     }: {
       id: string
-      status: CrewReqStatus
+      status: BookingStatus
     }) => {
       const { error } = await supabase
         .from('reserved_crew')
@@ -289,8 +333,8 @@ export default function CrewTab({
   const handleStatusChange = (
     crewId: string,
     crewName: string,
-    currentStatus: CrewReqStatus,
-    newStatus: CrewReqStatus,
+    currentStatus: BookingStatus,
+    newStatus: BookingStatus,
   ) => {
     if (currentStatus === newStatus) return
     setStatusChangeConfirm({
@@ -409,7 +453,7 @@ export default function CrewTab({
 
   // Get crew for a specific role
   const crewByRoleId = React.useMemo(() => {
-    const map = new Map<string, Array<ReservedCrewRow>>()
+    const map = new Map<string, Array<ReservedCrewRowWithInvite>>()
     for (const crew of data || []) {
       const roleId = crew.time_period_id
       const existing = map.get(roleId) || []
@@ -433,13 +477,13 @@ export default function CrewTab({
 
   // Helper function to determine role status
   const getRoleStatus = (
-    roleCrew: Array<ReservedCrewRow>,
+    roleCrew: Array<ReservedCrewRowWithInvite>,
     counts: Record<string, number>,
     neededCount: number | null | undefined,
   ): { label: string; color: 'red' | 'yellow' | 'green' } => {
-    // Crew accepted (green) - when all needed crew are accepted
-    if ((counts['accepted'] ?? 0) >= (neededCount ?? 1)) {
-      return { label: 'crew accepted', color: 'green' }
+    // Crew confirmed (green) - when all needed crew are confirmed
+    if ((counts['confirmed'] ?? 0) >= (neededCount ?? 1)) {
+      return { label: 'crew confirmed', color: 'green' }
     }
 
     // No crew assigned (red)
@@ -447,16 +491,14 @@ export default function CrewTab({
       return { label: 'no crew assigned', color: 'red' }
     }
 
-    // Check if there are any requested crew members
-    const hasRequested = (counts['requested'] ?? 0) > 0
-
-    // Waiting for crew response (yellow) - when there are requested crew
-    if (hasRequested) {
-      return { label: 'waiting for crew response', color: 'yellow' }
+    // Some crew canceled (yellow) - when there are canceled crew
+    const hasCanceled = (counts['canceled'] ?? 0) > 0
+    if (hasCanceled) {
+      return { label: 'some crew canceled', color: 'yellow' }
     }
 
-    // No crew requested (yellow) - when there's crew but all are planned
-    return { label: 'no crew requested', color: 'yellow' }
+    // Crew planned (yellow) - when there's crew but all are planned
+    return { label: 'crew planned', color: 'yellow' }
   }
 
   // Helper function to format date and time
@@ -620,6 +662,23 @@ export default function CrewTab({
                             <Button
                               size="1"
                               variant="soft"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setEditRole({
+                                  id: role.id,
+                                  title: role.title ?? null,
+                                  start_at: role.start_at ?? null,
+                                  end_at: role.end_at ?? null,
+                                  needed_count: role.needed_count ?? 1,
+                                  role_category: role.role_category ?? null,
+                                })
+                              }}
+                            >
+                              <Edit width={14} height={14} />
+                            </Button>
+                            <Button
+                              size="1"
+                              variant="soft"
                               color="red"
                               onClick={(e) => {
                                 e.stopPropagation()
@@ -652,13 +711,10 @@ export default function CrewTab({
                               • Planned: {counts['planned'] ?? 0}
                             </Text>
                             <Text size="2" color="gray">
-                              • Requested: {counts['requested'] ?? 0}
+                              • Confirmed: {counts['confirmed'] ?? 0}
                             </Text>
                             <Text size="2" color="gray">
-                              • Accepted: {counts['accepted'] ?? 0}
-                            </Text>
-                            <Text size="2" color="gray">
-                              • Declined: {counts['declined'] ?? 0}
+                              • Canceled: {counts['canceled'] ?? 0}
                             </Text>
                           </Flex>
 
@@ -723,62 +779,64 @@ export default function CrewTab({
                                     <Table.Row key={crew.id}>
                                       <Table.Cell>{crewName}</Table.Cell>
                                       <Table.Cell>
-                                        {isReadOnly ? (
-                                          <Badge
-                                            radius="full"
-                                            highContrast
-                                            color={
-                                              crew.status === 'accepted'
-                                                ? 'green'
-                                                : crew.status === 'declined'
-                                                  ? 'red'
-                                                  : crew.status === 'requested'
-                                                    ? 'blue'
+                                        <Flex align="center" gap="2" wrap="wrap">
+                                          {isReadOnly ? (
+                                            <Badge
+                                              radius="full"
+                                              highContrast
+                                              color={
+                                                crew.status === 'confirmed'
+                                                  ? 'green'
+                                                  : crew.status === 'canceled'
+                                                    ? 'red'
                                                     : 'gray'
-                                            }
-                                          >
-                                            {crew.status}
-                                          </Badge>
-                                        ) : (
-                                          <SegmentedControl.Root
-                                            size="1"
-                                            value={crew.status}
-                                            onValueChange={(v) =>
-                                              handleStatusChange(
-                                                crew.id,
-                                                crewName,
-                                                crew.status,
-                                                v as CrewReqStatus,
-                                              )
-                                            }
-                                          >
-                                            {(
-                                              [
-                                                'planned',
-                                                'requested',
-                                                'declined',
-                                                'accepted',
-                                              ] as Array<CrewReqStatus>
-                                            ).map((s) => (
-                                              <SegmentedControl.Item
-                                                key={s}
-                                                value={s}
-                                                style={{
-                                                  color:
-                                                    s === 'accepted'
-                                                      ? 'var(--green-9)'
-                                                      : s === 'declined'
-                                                        ? 'var(--red-9)'
-                                                        : s === 'requested'
-                                                          ? 'var(--blue-9)'
+                                              }
+                                            >
+                                              {crew.status}
+                                            </Badge>
+                                          ) : (
+                                            <SegmentedControl.Root
+                                              size="1"
+                                              value={crew.status}
+                                              onValueChange={(v) =>
+                                                handleStatusChange(
+                                                  crew.id,
+                                                  crewName,
+                                                  crew.status,
+                                                  v as BookingStatus,
+                                                )
+                                              }
+                                            >
+                                              {(
+                                                [
+                                                  'planned',
+                                                  'confirmed',
+                                                  'canceled',
+                                                ] as Array<BookingStatus>
+                                              ).map((s) => (
+                                                <SegmentedControl.Item
+                                                  key={s}
+                                                  value={s}
+                                                  style={{
+                                                    color:
+                                                      s === 'confirmed'
+                                                        ? 'var(--green-9)'
+                                                        : s === 'canceled'
+                                                          ? 'var(--red-9)'
                                                           : undefined,
-                                                }}
-                                              >
-                                                {s}
-                                              </SegmentedControl.Item>
-                                            ))}
-                                          </SegmentedControl.Root>
-                                        )}
+                                                  }}
+                                                >
+                                                  {s}
+                                                </SegmentedControl.Item>
+                                              ))}
+                                            </SegmentedControl.Root>
+                                          )}
+                                          {crew.invited && (
+                                            <Badge size="1" color="blue">
+                                              Invited
+                                            </Badge>
+                                          )}
+                                        </Flex>
                                       </Table.Cell>
                                       <Table.Cell>
                                         <Flex gap="2">
@@ -846,6 +904,15 @@ export default function CrewTab({
             jobId={jobId}
             timePeriodId={addCrewToRole}
             companyId={companyId}
+          />
+        )}
+
+        {editRole && (
+          <EditRoleDialog
+            open={!!editRole}
+            onOpenChange={(v) => !v && setEditRole(null)}
+            jobId={jobId}
+            initial={editRole}
           />
         )}
 
@@ -1000,13 +1067,11 @@ export default function CrewTab({
                     radius="full"
                     highContrast
                     color={
-                      r.status === 'accepted'
+                      r.status === 'confirmed'
                         ? 'green'
-                        : r.status === 'declined'
+                        : r.status === 'canceled'
                           ? 'red'
-                          : r.status === 'requested'
-                            ? 'blue'
-                            : 'gray'
+                          : 'gray'
                     }
                   >
                     {r.status}

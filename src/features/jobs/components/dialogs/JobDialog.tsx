@@ -192,6 +192,59 @@ export default function JobDialog({
     phone: string | null
   }) => [c.name, c.email, c.phone].filter(Boolean).join(' · ')
 
+  const cascadeBookingStatus = async (
+    jobId: UUID,
+    nextStatus: JobStatus,
+  ) => {
+    if (nextStatus !== 'confirmed' && nextStatus !== 'canceled') return
+
+    const { data: timePeriods, error: tpErr } = await supabase
+      .from('time_periods')
+      .select('id')
+      .eq('job_id', jobId)
+    if (tpErr) throw tpErr
+
+    const timePeriodIds = timePeriods.map((tp) => tp.id)
+    if (!timePeriodIds.length) return
+
+    const { error: itemsErr } = await supabase
+      .from('reserved_items')
+      .update({ status: nextStatus })
+      .in('time_period_id', timePeriodIds)
+      .eq('status', 'planned')
+    if (itemsErr) throw itemsErr
+
+    const { error: crewErr } = await supabase
+      .from('reserved_crew')
+      .update({ status: nextStatus })
+      .in('time_period_id', timePeriodIds)
+      .eq('status', 'planned')
+    if (crewErr) throw crewErr
+
+    const { error: vehicleErr } = await supabase
+      .from('reserved_vehicles')
+      .update({ status: nextStatus })
+      .in('time_period_id', timePeriodIds)
+      .eq('status', 'planned')
+    if (vehicleErr) throw vehicleErr
+
+    if (nextStatus === 'confirmed') {
+      const { error: itemsExternalErr } = await supabase
+        .from('reserved_items')
+        .update({ external_status: 'confirmed' })
+        .in('time_period_id', timePeriodIds)
+        .eq('external_status', 'planned')
+      if (itemsExternalErr) throw itemsExternalErr
+
+      const { error: vehiclesExternalErr } = await supabase
+        .from('reserved_vehicles')
+        .update({ external_status: 'confirmed' })
+        .in('time_period_id', timePeriodIds)
+        .eq('external_status', 'planned')
+      if (vehiclesExternalErr) throw vehiclesExternalErr
+    }
+  }
+
   // ...unchanged imports
   // const { success, info, error } = useToast()  // you already have this
 
@@ -300,6 +353,13 @@ export default function JobDialog({
           start_at: periodStart,
           end_at: periodEnd,
         })
+
+        if (
+          previousStatus !== status &&
+          (status === 'confirmed' || status === 'canceled')
+        ) {
+          await cascadeBookingStatus(initialData.id, status)
+        }
 
         // Log activity if status changed to confirmed, canceled, or paid
         if (

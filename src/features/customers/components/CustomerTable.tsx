@@ -13,6 +13,7 @@ import {
   Tooltip,
 } from '@radix-ui/themes'
 import { useCompany } from '@shared/companies/CompanyProvider'
+import { useDebouncedValue } from '@tanstack/react-pacer'
 import { prettyPhone } from '@shared/phone/phone'
 import { InfoCircle, Search } from 'iconoir-react'
 import { customersIndexQuery } from '../api/queries'
@@ -34,6 +35,7 @@ export default function CustomerTable({
   const { companyId } = useCompany()
   const qc = useQueryClient()
   const [search, setSearch] = React.useState('')
+  const [debouncedSearch] = useDebouncedValue(search, { wait: 300 })
   const [addOpen, setAddOpen] = React.useState(false)
   const [page, setPage] = React.useState(1)
   const [pageSize, setPageSize] = React.useState(10)
@@ -65,7 +67,7 @@ export default function CustomerTable({
   } = useQuery({
     ...customersIndexQuery({
       companyId: companyId ?? '__none__',
-      search,
+      search: debouncedSearch,
       showRegular: derivedShowRegular,
       showPartner: derivedShowPartner,
     }),

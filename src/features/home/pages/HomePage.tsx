@@ -11,22 +11,12 @@ import {
   Grid,
   Heading,
   Select,
-  Separator,
   Spinner,
   Switch,
   Text,
 } from '@radix-ui/themes'
 import { useQuery } from '@tanstack/react-query'
-import {
-  ArrowDown,
-  Building,
-  Coins,
-  Eye,
-  GoogleDocs,
-  Message,
-  RssFeed,
-  Wallet,
-} from 'iconoir-react'
+import { ArrowDown, GoogleDocs, Message, RssFeed } from 'iconoir-react'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { useAuthz } from '@shared/auth/useAuthz'
 import { supabase } from '@shared/api/supabase'
@@ -35,8 +25,6 @@ import { formatDistanceToNow } from 'date-fns'
 import { jobsIndexQuery } from '@features/jobs/api/queries'
 import { latestFeedQuery } from '@features/latest/api/queries'
 import { mattersIndexQueryAll } from '@features/matters/api/queries'
-import { incomeAndExpensesQuery } from '@features/home/api/queries'
-import { IncomeExpensesChart } from '@shared/ui/components/IncomeExpensesChart'
 import { groupInventoryActivities } from '@features/latest/utils/groupInventoryActivities'
 import type {
   ActivityFeedItem,
@@ -123,52 +111,6 @@ export default function HomePage() {
     }),
     enabled: !!companyId && canSeeLatest,
   })
-
-  // Check if accounting system is configured
-  const { data: accountingConfig, isLoading: accountingLoading } = useQuery({
-    queryKey: ['company', companyId, 'accounting-config'],
-    enabled: !!companyId && !isFreelancer,
-    queryFn: async () => {
-      if (!companyId) return null
-      const { data, error } = await supabase
-        .from('company_expansions')
-        .select(
-          'accounting_software, accounting_api_key_encrypted, accounting_organization_id',
-        )
-        .eq('company_id', companyId)
-        .maybeSingle()
-      if (error) throw error
-      return data
-    },
-  })
-
-  const hasAccountingSystem =
-    accountingConfig?.accounting_software === 'conta' &&
-    accountingConfig.accounting_api_key_encrypted !== null
-
-  // Get current year for revenue data
-  const currentYear = new Date().getFullYear()
-  const [selectedYear, setSelectedYear] = React.useState(currentYear)
-  const [chartType, setChartType] = React.useState<
-    'bar' | 'line' | 'area' | 'composed'
-  >('area')
-
-  // Generate list of years (current year and 4 previous years)
-  const availableYears = React.useMemo(() => {
-    const years = []
-    for (let i = 0; i < 5; i++) {
-      years.push(currentYear - i)
-    }
-    return years
-  }, [currentYear])
-
-  // Fetch income and expenses data
-  // The query will attempt to get the organization ID automatically if not provided
-  const { data: incomeExpensesData, isLoading: incomeExpensesLoading } =
-    useQuery({
-      ...incomeAndExpensesQuery(companyId, null, selectedYear),
-      enabled: hasAccountingSystem && !!companyId, // Only fetch if accounting system is configured and companyId is available
-    })
 
   const handleLatestClick = (activityId: string) => {
     navigate({
@@ -336,28 +278,11 @@ export default function HomePage() {
     return (
       <Box style={{ width: '100%', height: '100%' }}>
         <Grid columns="1fr" gap="4" style={{ height: '100%' }}>
-          {/* Left Column: Revenue and Latest */}
+          {/* Left Column: Bible verse and Latest */}
           <Flex direction="column" gap="4" style={{ height: '100%' }}>
-            {!isFreelancer && (
-              <Box style={{ flex: 3, minHeight: 0 }}>
-                <RevenueSection
-                  hasAccountingSystem={hasAccountingSystem}
-                  loading={accountingLoading}
-                  isOwner={companyRole === 'owner'}
-                  incomeExpensesData={incomeExpensesData}
-                  incomeExpensesLoading={incomeExpensesLoading}
-                  selectedYear={selectedYear}
-                  availableYears={availableYears}
-                  onYearChange={setSelectedYear}
-                  chartType={chartType}
-                  onChartTypeChange={setChartType}
-                  accountingSoftware={accountingConfig?.accounting_software}
-                  accountingOrganizationId={
-                    accountingConfig?.accounting_organization_id
-                  }
-                />
-              </Box>
-            )}
+            <Box style={{ minHeight: 0 }}>
+              <BibleVerseSection />
+            </Box>
             {canSeeLatest && (
               <Box style={{ flex: 1, minHeight: '40%' }}>
                 <LatestSection
@@ -422,7 +347,7 @@ export default function HomePage() {
           minHeight: 0,
         }}
       >
-        {/* Left Column: Revenue and Latest */}
+        {/* Left Column: Bible verse and Latest */}
         <Flex
           direction="column"
           gap="4"
@@ -436,26 +361,9 @@ export default function HomePage() {
             transition: isResizing ? 'none' : 'width 0.1s ease-out',
           }}
         >
-          {!isFreelancer && (
-            <Box style={{ flex: 3, minHeight: 0 }}>
-              <RevenueSection
-                hasAccountingSystem={hasAccountingSystem}
-                loading={accountingLoading}
-                isOwner={companyRole === 'owner'}
-                incomeExpensesData={incomeExpensesData}
-                incomeExpensesLoading={incomeExpensesLoading}
-                selectedYear={selectedYear}
-                availableYears={availableYears}
-                onYearChange={setSelectedYear}
-                chartType={chartType}
-                onChartTypeChange={setChartType}
-                accountingSoftware={accountingConfig?.accounting_software}
-                accountingOrganizationId={
-                  accountingConfig?.accounting_organization_id
-                }
-              />
-            </Box>
-          )}
+          <Box style={{ minHeight: 0 }}>
+            <BibleVerseSection />
+          </Box>
           {canSeeLatest && (
             <Box style={{ flex: 1, minHeight: '40%' }}>
               <LatestSection
@@ -545,291 +453,65 @@ export default function HomePage() {
   )
 }
 
-function RevenueSection({
-  hasAccountingSystem,
-  loading,
-  isOwner,
-  incomeExpensesData,
-  incomeExpensesLoading,
-  selectedYear,
-  availableYears,
-  onYearChange,
-  chartType,
-  onChartTypeChange,
-  accountingSoftware,
-  accountingOrganizationId: _accountingOrganizationId,
-}: {
-  hasAccountingSystem: boolean
-  loading: boolean
-  isOwner: boolean
-  incomeExpensesData:
-    | {
-        sumIncome?: number
-        sumExpenses?: number
-        sumResult?: number
-        income?: Array<string>
-        expenses?: Array<string>
-        result?: Array<string>
+function BibleVerseSection() {
+  const todayKey = new Date().toISOString().slice(0, 10)
+  const langPreference = 'en'
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['youversion', 'verse-of-the-day', todayKey, langPreference],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/verse-of-the-day?lang=${encodeURIComponent(langPreference)}`,
+      )
+      const json = await res.json().catch(() => null)
+      if (!res.ok) {
+        throw new Error(
+          typeof json?.message === 'string'
+            ? json.message
+            : 'Failed to load verse of the day',
+        )
       }
-    | null
-    | undefined
-  incomeExpensesLoading: boolean
-  selectedYear: number
-  availableYears: Array<number>
-  onYearChange: (year: number) => void
-  chartType: 'bar' | 'line' | 'area' | 'composed'
-  onChartTypeChange: (type: 'bar' | 'line' | 'area' | 'composed') => void
-  accountingSoftware?: string | null
-  accountingOrganizationId?: string | null
-}) {
-  const navigate = useNavigate()
-  const [logoError, setLogoError] = React.useState(false)
-  const [showKPIs, setShowKPIs] = React.useState(false)
+      return json
+    },
+    staleTime: 1000 * 60 * 60 * 24, // cache for a day
+    gcTime: 1000 * 60 * 60 * 48,
+    retry: 1,
+  })
 
-  const showConfigureButton = isOwner && !hasAccountingSystem
-
-  // Get accounting system URL
-  const getAccountingSystemUrl = () => {
-    if (accountingSoftware === 'conta') {
-      // Conta website URL - can include organization ID if needed
-      return 'https://conta.no'
-    }
-    return null
-  }
-
-  const accountingSystemUrl = getAccountingSystemUrl()
-
-  // Transform API data into chart format
-  const chartData = React.useMemo(() => {
-    if (
-      !incomeExpensesData ||
-      !incomeExpensesData.income ||
-      !incomeExpensesData.expenses
-    ) {
-      return []
-    }
-
-    const monthNames = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ]
-
-    return monthNames.map((month, index) => ({
-      month,
-      income: parseFloat(incomeExpensesData.income?.[index] || '0'),
-      expenses: parseFloat(incomeExpensesData.expenses?.[index] || '0'),
-    }))
-  }, [incomeExpensesData])
-
-  // Format currency for KPI display
-  const formatCurrency = (value: number | undefined) => {
-    if (value === undefined) return '--'
-    return new Intl.NumberFormat('no-NO', {
-      style: 'currency',
-      currency: 'NOK',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value)
-  }
+  const citation = data?.citation ? String(data.citation) : ''
+  const passage = data?.passage ? String(data.passage) : ''
+  const version = data?.version ? String(data.version) : ''
 
   return (
     <DashboardCard
-      title="Revenue"
-      icon={<Wallet width={18} height={18} />}
-      headerAction={
-        hasAccountingSystem ? (
-          <Flex gap="2" align="center">
-            <Button
-              size="2"
-              variant="soft"
-              onClick={() => setShowKPIs(!showKPIs)}
-              aria-label={
-                showKPIs ? 'Hide revenue numbers' : 'Show revenue numbers'
-              }
-              style={{
-                padding: 'var(--space-2) var(--space-3)',
-                minWidth: 'auto',
-              }}
-            >
-              <Coins width={16} height={16} style={{ color: 'currentColor' }} />
-            </Button>
-            <Select.Root
-              value={chartType}
-              onValueChange={(value) =>
-                onChartTypeChange(value as 'bar' | 'line' | 'area' | 'composed')
-              }
-            >
-              <Select.Trigger variant="soft">
-                <Eye width={16} height={16} />
-              </Select.Trigger>
-              <Select.Content>
-                <Select.Item value="bar">Bar</Select.Item>
-                <Select.Item value="line">Line</Select.Item>
-                <Select.Item value="area">Area</Select.Item>
-                <Select.Item value="composed">Composed</Select.Item>
-              </Select.Content>
-            </Select.Root>
-            <Select.Root
-              value={selectedYear.toString()}
-              onValueChange={(value) => onYearChange(parseInt(value, 10))}
-            >
-              <Select.Trigger variant="soft" />
-              <Select.Content>
-                {availableYears.map((year) => (
-                  <Select.Item key={year} value={year.toString()}>
-                    {year}
-                  </Select.Item>
-                ))}
-              </Select.Content>
-            </Select.Root>
-          </Flex>
-        ) : undefined
-      }
-      footer={
-        showConfigureButton ? (
-          <Button
-            size="2"
-            variant="soft"
-            onClick={() =>
-              navigate({ to: '/company', search: { tab: 'expansions' } })
-            }
-          >
-            Configure
-          </Button>
-        ) : undefined
-      }
+      title="Today's Bible verse"
+      icon={<Message width={18} height={18} />}
+      notFullHeight
     >
-      {loading ? (
+      {isLoading ? (
         <Flex align="center" justify="center" py="4">
           <Spinner size="2" />
         </Flex>
-      ) : hasAccountingSystem ? (
-        <Box style={{ height: '100%', position: 'relative' }}>
-          {incomeExpensesLoading ? (
-            <Flex
-              align="center"
-              justify="center"
-              py="6"
-              style={{ height: '100%' }}
-            >
-              <Spinner size="2" />
-            </Flex>
-          ) : (
-            <>
-              <Flex gap="4" style={{ height: '100%', minHeight: 0 }}>
-                {/* Chart on the left */}
-                <Box
-                  style={{ flex: 1, minWidth: 0, height: '100%', minHeight: 0 }}
-                >
-                  <IncomeExpensesChart
-                    data={chartData}
-                    chartType={chartType}
-                    onChartTypeChange={onChartTypeChange}
-                  />
-                </Box>
-                {/* KPIs on the right - conditionally rendered */}
-                {showKPIs && (
-                  <Box style={{ width: '160px', minWidth: '160px' }}>
-                    <Flex direction="column" gap="3">
-                      <Flex
-                        direction="column"
-                        gap="3"
-                        style={{
-                          padding: '12px',
-                          background: 'var(--gray-2)',
-                          borderRadius: '8px',
-                          height: 'fit-content',
-                        }}
-                      >
-                        <KPI
-                          label={`${selectedYear} Revenue`}
-                          value={formatCurrency(incomeExpensesData?.sumIncome)}
-                        />
-                        <Separator />
-                        <KPI
-                          label={`${selectedYear} Expenses`}
-                          value={formatCurrency(
-                            incomeExpensesData?.sumExpenses,
-                          )}
-                        />
-                        <Separator />
-                        <KPI
-                          label="Net Profit"
-                          value={formatCurrency(incomeExpensesData?.sumResult)}
-                          highlight
-                        />
-                      </Flex>
-                    </Flex>
-                  </Box>
-                )}
-              </Flex>
-              {/* Accounting system redirect button - bottom right */}
-              {accountingSystemUrl && (
-                <Button
-                  size="2"
-                  variant="soft"
-                  style={{
-                    position: 'absolute',
-                    bottom: '0',
-                    right: '12px',
-                    borderRadius: '8px',
-                    padding: '8px 12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-                    zIndex: 10,
-                  }}
-                  onClick={() => {
-                    window.open(
-                      accountingSystemUrl,
-                      '_blank',
-                      'noopener,noreferrer',
-                    )
-                  }}
-                >
-                  {accountingSoftware === 'conta' ? (
-                    logoError ? (
-                      <Building width={18} height={18} />
-                    ) : (
-                      <img
-                        src="https://conta.no/favicon.ico"
-                        alt="Conta"
-                        style={{
-                          width: '18px',
-                          height: '18px',
-                          objectFit: 'contain',
-                        }}
-                        onError={() => setLogoError(true)}
-                      />
-                    )
-                  ) : (
-                    <Building width={18} height={18} />
-                  )}
-                  <Text size="2" weight="medium">
-                    {accountingSoftware === 'conta' ? 'Conta' : 'Accounting'}
-                  </Text>
-                </Button>
-              )}
-            </>
-          )}
-        </Box>
-      ) : (
+      ) : error ? (
         <Box py="4">
           <Text size="2" color="gray" align="center">
-            No accounting system configured
+            Couldn&apos;t load today&apos;s verse.
           </Text>
         </Box>
+      ) : (
+        <Flex direction="column" gap="2" py="2">
+          <Text weight="bold" size="4">
+            {citation || 'Verse of the Day'}
+          </Text>
+          <Text size="3" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+            {passage || 'No verse text available.'}
+          </Text>
+          {version && (
+            <Text size="1" color="gray">
+              Translation: {version}
+            </Text>
+          )}
+        </Flex>
       )}
     </DashboardCard>
   )
@@ -1659,31 +1341,6 @@ function DashboardCard({
         {footer && <Flex justify="end">{footer}</Flex>}
       </Flex>
     </Card>
-  )
-}
-
-function KPI({
-  label,
-  value,
-  highlight,
-}: {
-  label: string
-  value: string
-  highlight?: boolean
-}) {
-  return (
-    <Flex direction="column" gap="1">
-      <Text color="gray" size={highlight ? '2' : '1'} weight="medium">
-        {label}
-      </Text>
-      <Text
-        weight="bold"
-        size={highlight ? '5' : '4'}
-        style={{ lineHeight: 1.2 }}
-      >
-        {value}
-      </Text>
-    </Flex>
   )
 }
 

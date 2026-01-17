@@ -16,6 +16,7 @@ type Initial = {
   vat_number: string
   address: string
   is_partner: boolean
+  logo_path?: string | null
 }
 
 export default function EditCustomerDialog({
@@ -96,6 +97,7 @@ export default function EditCustomerDialog({
         vat_number: form.vat_number.trim() || null,
         address: addressString,
         is_partner: !!form.is_partner,
+        logo_path: form.logo_path ?? null,
       })
     },
     onSuccess: async () => {

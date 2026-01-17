@@ -7,30 +7,10 @@ export type Json =
   | Json[]
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "13.0.5"
   }
   public: {
     Tables: {
@@ -222,6 +202,8 @@ export type Database = {
           address: string | null
           contact_person_id: string | null
           created_at: string
+          employee_daily_rate: number | null
+          employee_hourly_rate: number | null
           general_email: string | null
           id: string
           job_number_counter: number | null
@@ -229,6 +211,8 @@ export type Database = {
           logo_light_path: string | null
           logo_path: string | null
           name: string
+          owner_daily_rate: number | null
+          owner_hourly_rate: number | null
           terms_and_conditions_pdf_path: string | null
           terms_and_conditions_text: string | null
           terms_and_conditions_type: string | null
@@ -243,6 +227,8 @@ export type Database = {
           address?: string | null
           contact_person_id?: string | null
           created_at?: string
+          employee_daily_rate?: number | null
+          employee_hourly_rate?: number | null
           general_email?: string | null
           id?: string
           job_number_counter?: number | null
@@ -250,6 +236,8 @@ export type Database = {
           logo_light_path?: string | null
           logo_path?: string | null
           name: string
+          owner_daily_rate?: number | null
+          owner_hourly_rate?: number | null
           terms_and_conditions_pdf_path?: string | null
           terms_and_conditions_text?: string | null
           terms_and_conditions_type?: string | null
@@ -264,6 +252,8 @@ export type Database = {
           address?: string | null
           contact_person_id?: string | null
           created_at?: string
+          employee_daily_rate?: number | null
+          employee_hourly_rate?: number | null
           general_email?: string | null
           id?: string
           job_number_counter?: number | null
@@ -271,6 +261,8 @@ export type Database = {
           logo_light_path?: string | null
           logo_path?: string | null
           name?: string
+          owner_daily_rate?: number | null
+          owner_hourly_rate?: number | null
           terms_and_conditions_pdf_path?: string | null
           terms_and_conditions_text?: string | null
           terms_and_conditions_type?: string | null
@@ -367,16 +359,25 @@ export type Database = {
       company_users: {
         Row: {
           company_id: string
+          rate: number | null
+          rate_type: string | null
+          rate_updated_at: string | null
           role: Database["public"]["Enums"]["company_role"]
           user_id: string
         }
         Insert: {
           company_id: string
+          rate?: number | null
+          rate_type?: string | null
+          rate_updated_at?: string | null
           role: Database["public"]["Enums"]["company_role"]
           user_id: string
         }
         Update: {
           company_id?: string
+          rate?: number | null
+          rate_type?: string | null
+          rate_updated_at?: string | null
           role?: Database["public"]["Enums"]["company_role"]
           user_id?: string
         }
@@ -1402,6 +1403,7 @@ export type Database = {
           description: string | null
           end_at: string | null
           id: string
+          invoice_basis: string | null
           job_address_id: string | null
           jobnr: number | null
           project_lead_user_id: string | null
@@ -1420,6 +1422,7 @@ export type Database = {
           description?: string | null
           end_at?: string | null
           id?: string
+          invoice_basis?: string | null
           job_address_id?: string | null
           jobnr?: number | null
           project_lead_user_id?: string | null
@@ -1438,6 +1441,7 @@ export type Database = {
           description?: string | null
           end_at?: string | null
           id?: string
+          invoice_basis?: string | null
           job_address_id?: string | null
           jobnr?: number | null
           project_lead_user_id?: string | null
@@ -1763,33 +1767,45 @@ export type Database = {
       }
       offer_crew_items: {
         Row: {
+          billing_type: string | null
           crew_count: number
           daily_rate: number
           end_date: string
+          hourly_rate: number | null
+          hours_per_day: number | null
           id: string
           offer_id: string
+          role_category: string | null
           role_title: string
           sort_order: number
           start_date: string
           total_price: number
         }
         Insert: {
+          billing_type?: string | null
           crew_count?: number
           daily_rate?: number
           end_date: string
+          hourly_rate?: number | null
+          hours_per_day?: number | null
           id?: string
           offer_id: string
+          role_category?: string | null
           role_title: string
           sort_order?: number
           start_date: string
           total_price?: number
         }
         Update: {
+          billing_type?: string | null
           crew_count?: number
           daily_rate?: number
           end_date?: string
+          hourly_rate?: number | null
+          hours_per_day?: number | null
           id?: string
           offer_id?: string
+          role_category?: string | null
           role_title?: string
           sort_order?: number
           start_date?: string
@@ -1853,6 +1869,7 @@ export type Database = {
       }
       offer_equipment_items: {
         Row: {
+          group_id: string | null
           id: string
           is_internal: boolean
           item_id: string | null
@@ -1863,6 +1880,7 @@ export type Database = {
           unit_price: number
         }
         Insert: {
+          group_id?: string | null
           id?: string
           is_internal?: boolean
           item_id?: string | null
@@ -1873,6 +1891,7 @@ export type Database = {
           unit_price?: number
         }
         Update: {
+          group_id?: string | null
           id?: string
           is_internal?: boolean
           item_id?: string | null
@@ -1909,6 +1928,20 @@ export type Database = {
             columns: ["item_id"]
             isOneToOne: false
             referencedRelation: "items_with_price"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "offer_equipment_items_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups_with_rollups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "offer_equipment_items_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "item_groups"
             referencedColumns: ["id"]
           },
           {
@@ -2222,7 +2255,7 @@ export type Database = {
           id: string
           notes: string | null
           requested_at: string | null
-          status: Database["public"]["Enums"]["crew_request_status"]
+          status: Database["public"]["Enums"]["booking_status"]
           time_period_id: string
           user_id: string
         }
@@ -2232,7 +2265,7 @@ export type Database = {
           id?: string
           notes?: string | null
           requested_at?: string | null
-          status?: Database["public"]["Enums"]["crew_request_status"]
+          status?: Database["public"]["Enums"]["booking_status"]
           time_period_id: string
           user_id: string
         }
@@ -2242,7 +2275,7 @@ export type Database = {
           id?: string
           notes?: string | null
           requested_at?: string | null
-          status?: Database["public"]["Enums"]["crew_request_status"]
+          status?: Database["public"]["Enums"]["booking_status"]
           time_period_id?: string
           user_id?: string
         }
@@ -2284,6 +2317,7 @@ export type Database = {
           source_group_id: string | null
           source_kind: Database["public"]["Enums"]["reservation_source_kind"]
           start_at: string | null
+          status: Database["public"]["Enums"]["booking_status"]
           time_period_id: string
         }
         Insert: {
@@ -2299,6 +2333,7 @@ export type Database = {
           source_group_id?: string | null
           source_kind?: Database["public"]["Enums"]["reservation_source_kind"]
           start_at?: string | null
+          status?: Database["public"]["Enums"]["booking_status"]
           time_period_id: string
         }
         Update: {
@@ -2314,6 +2349,7 @@ export type Database = {
           source_group_id?: string | null
           source_kind?: Database["public"]["Enums"]["reservation_source_kind"]
           start_at?: string | null
+          status?: Database["public"]["Enums"]["booking_status"]
           time_period_id?: string
         }
         Relationships: [
@@ -2379,6 +2415,7 @@ export type Database = {
             | null
           id: string
           start_at: string | null
+          status: Database["public"]["Enums"]["booking_status"]
           time_period_id: string
           vehicle_id: string
         }
@@ -2392,6 +2429,7 @@ export type Database = {
             | null
           id?: string
           start_at?: string | null
+          status?: Database["public"]["Enums"]["booking_status"]
           time_period_id: string
           vehicle_id: string
         }
@@ -2405,6 +2443,7 @@ export type Database = {
             | null
           id?: string
           start_at?: string | null
+          status?: Database["public"]["Enums"]["booking_status"]
           time_period_id?: string
           vehicle_id?: string
         }
@@ -2620,6 +2659,9 @@ export type Database = {
           first_name: string | null
           last_name: string | null
           phone: string | null
+          rate: number | null
+          rate_type: string | null
+          rate_updated_at: string | null
           role: Database["public"]["Enums"]["company_role"] | null
           user_id: string | null
         }
@@ -3206,8 +3248,6 @@ export type Database = {
         }
         Returns: Json
       }
-      show_limit: { Args: never; Returns: number }
-      show_trgm: { Args: { "": string }; Returns: string[] }
       update_my_avatar: { Args: { p_path: string }; Returns: undefined }
       update_my_profile: {
         Args: {
@@ -3272,9 +3312,14 @@ export type Database = {
         | "job_deleted"
         | "announcement"
         | "job_status_changed"
+      booking_status: "planned" | "confirmed" | "canceled"
       company_role: "super_user" | "owner" | "employee" | "freelancer"
       crew_request_status: "planned" | "requested" | "declined" | "accepted"
-      external_request_status: "planned" | "requested" | "confirmed"
+      external_request_status:
+        | "planned"
+        | "requested"
+        | "confirmed"
+        | "canceled"
       fuel: "electric" | "diesel" | "petrol"
       group_type: "group" | "bundle"
       item_kind: "bulk" | "unique"
@@ -3456,9 +3501,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       activity_type: [
@@ -3477,9 +3519,15 @@ export const Constants = {
         "announcement",
         "job_status_changed",
       ],
+      booking_status: ["planned", "confirmed", "canceled"],
       company_role: ["super_user", "owner", "employee", "freelancer"],
       crew_request_status: ["planned", "requested", "declined", "accepted"],
-      external_request_status: ["planned", "requested", "confirmed"],
+      external_request_status: [
+        "planned",
+        "requested",
+        "confirmed",
+        "canceled",
+      ],
       fuel: ["electric", "diesel", "petrol"],
       group_type: ["group", "bundle"],
       item_kind: ["bulk", "unique"],
@@ -3545,4 +3593,3 @@ export const Constants = {
     },
   },
 } as const
-

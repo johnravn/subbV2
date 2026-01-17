@@ -5,29 +5,44 @@ import {
   Box,
   Button,
   Card,
+  Dialog,
   Flex,
   Heading,
-  SegmentedControl,
   Separator,
   Table,
   Text,
+  TextArea,
 } from '@radix-ui/themes'
-import { CheckCircle, GoogleDocs, Plus, XmarkCircle, Eye } from 'iconoir-react'
+import {
+  CheckCircle,
+  Edit,
+  Eye,
+  GoogleDocs,
+  Plus,
+  XmarkCircle,
+} from 'iconoir-react'
 import { supabase } from '@shared/api/supabase'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { contaClient } from '@shared/api/conta/client'
 import { makeWordPresentable } from '@shared/lib/generalFunctions'
-import {
-  jobBookingsForInvoiceQuery,
-  type BookingsForInvoice,
-} from '../../api/invoiceQueries'
-import type { JobDetail, JobOffer } from '../../types'
 import InvoicePreview from '../invoice/InvoicePreview'
 import InvoiceHistory from '../invoice/InvoiceHistory'
-import { Dialog } from '@radix-ui/themes'
+import { jobBookingsForInvoiceQuery } from '../../api/invoiceQueries'
+import { ensureContaProjectId } from '../../utils/contaProjects'
+import type { BookingsForInvoice } from '../../api/invoiceQueries'
+import type { InvoiceBasis, JobDetail, JobOffer } from '../../types'
 
-type InvoiceBasis = 'offer' | 'bookings'
+type InvoiceRecipient = { type: string; ehfRecipient?: string }
+type InvoiceRecipientResult = {
+  recipients: Array<InvoiceRecipient>
+  requiresManualSend: boolean
+  reason?: string
+}
+type PendingInvoiceAction =
+  | { kind: 'offer'; offer: JobOffer; invoiceMessage: string }
+  | { kind: 'bookings'; bookings: BookingsForInvoice; invoiceMessage: string }
+  | { kind: 'all-offers'; invoiceMessage: string }
 
 export default function InvoiceTab({
   jobId,
@@ -39,10 +54,26 @@ export default function InvoiceTab({
   const { companyId } = useCompany()
   const qc = useQueryClient()
   const { info, success, error: toastError } = useToast()
-  const [invoiceBasis, setInvoiceBasis] = React.useState<InvoiceBasis>('offer')
+  const [invoiceBasis, setInvoiceBasis] = React.useState<InvoiceBasis | null>(
+    job.invoice_basis ?? null,
+  )
+  const [basisSelectionDirty, setBasisSelectionDirty] =
+    React.useState<boolean>(false)
   const [previewOffer, setPreviewOffer] = React.useState<JobOffer | null>(null)
-  const [previewBookings, setPreviewBookings] = React.useState<BookingsForInvoice | null>(null)
-  
+  const [previewBookings, setPreviewBookings] =
+    React.useState<BookingsForInvoice | null>(null)
+  const [manualSendDialogOpen, setManualSendDialogOpen] = React.useState(false)
+  const [manualSendReason, setManualSendReason] = React.useState('')
+  const [pendingInvoiceAction, setPendingInvoiceAction] =
+    React.useState<PendingInvoiceAction | null>(null)
+  const [pendingInvoiceRecipients, setPendingInvoiceRecipients] =
+    React.useState<Array<InvoiceRecipient> | null>(null)
+  const [invoiceMessageDialogOpen, setInvoiceMessageDialogOpen] =
+    React.useState(false)
+  const [invoiceMessageDraft, setInvoiceMessageDraft] = React.useState('')
+  const [invoiceMessageAction, setInvoiceMessageAction] =
+    React.useState<PendingInvoiceAction | null>(null)
+
   // Get current user ID for tracking
   const { data: authUser } = useQuery({
     queryKey: ['auth', 'user'],
@@ -51,10 +82,11 @@ export default function InvoiceTab({
       return data.user
     },
   })
-  
+
   // Check if we're in test/sandbox mode
   const isTestMode = React.useMemo(() => {
-    const apiUrl = import.meta.env.VITE_CONTA_API_URL || 'https://api.gateway.conta.no'
+    const apiUrl =
+      import.meta.env.VITE_CONTA_API_URL || 'https://api.gateway.conta.no'
     return apiUrl.includes('sandbox') || apiUrl.includes('test')
   }, [])
 
@@ -83,6 +115,45 @@ export default function InvoiceTab({
     }),
     enabled: invoiceBasis === 'bookings' && !!companyId,
   })
+
+  React.useEffect(() => {
+    setBasisSelectionDirty(false)
+    setInvoiceBasis(job.invoice_basis ?? null)
+  }, [jobId])
+
+  React.useEffect(() => {
+    if (basisSelectionDirty) return
+    setInvoiceBasis(job.invoice_basis ?? null)
+  }, [job.invoice_basis, basisSelectionDirty])
+
+  const saveInvoiceBasisMutation = useMutation({
+    mutationFn: async (basis: InvoiceBasis) => {
+      const { error } = await supabase
+        .from('jobs')
+        .update({ invoice_basis: basis } as any)
+        .eq('id', jobId)
+      if (error) throw error
+      return basis
+    },
+    onSuccess: (basis) => {
+      setInvoiceBasis(basis)
+      setBasisSelectionDirty(false)
+      qc.invalidateQueries({ queryKey: ['jobs-detail', jobId] })
+    },
+    onError: (err: any) => {
+      setBasisSelectionDirty(true)
+      toastError(
+        'Failed to Save Invoice Basis',
+        err?.message ||
+          'An error occurred while saving your selection. Please try again.',
+      )
+    },
+  })
+
+  const handleChooseInvoiceBasis = (basis: InvoiceBasis) => {
+    setBasisSelectionDirty(true)
+    saveInvoiceBasisMutation.mutate(basis)
+  }
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('nb-NO', {
@@ -122,43 +193,297 @@ export default function InvoiceTab({
   })
 
   // Helper function to find or create a customer in Conta
+  const parseCustomerAddress = (address: string) => {
+    const normalized = address.replace(/\r/g, '').trim()
+    let addressLine1 = ''
+    let addressPostcode = ''
+    let addressCity = ''
+    let addressCountry = ''
+
+    const postcodeMatch = normalized.match(/\b(\d{4,5})\b/)
+    if (postcodeMatch && postcodeMatch.index !== undefined) {
+      addressPostcode = postcodeMatch[1]
+      const before = normalized.slice(0, postcodeMatch.index).trim()
+      const after = normalized
+        .slice(postcodeMatch.index + postcodeMatch[1].length)
+        .trim()
+      const beforeParts = before
+        .split(/[,\n]+/)
+        .map((part) => part.trim())
+        .filter(Boolean)
+      addressLine1 = beforeParts[0] || before
+      const afterParts = after
+        .split(/[,\n]+/)
+        .map((part) => part.trim())
+        .filter(Boolean)
+      addressCity = afterParts[0] || ''
+      if (afterParts.length > 1) {
+        addressCountry = afterParts[afterParts.length - 1] || ''
+      }
+    } else {
+      const parts = normalized
+        .split(/[,\n]+/)
+        .map((part) => part.trim())
+        .filter(Boolean)
+      addressLine1 = parts[0] || ''
+      const zipPart = parts.find((part) => /\d{4,5}/.test(part))
+      if (zipPart) {
+        const zipMatch = zipPart.match(/\b(\d{4,5})\b/)
+        if (zipMatch) {
+          addressPostcode = zipMatch[1]
+          addressCity = zipPart.replace(zipMatch[1], '').trim()
+        }
+      }
+      if (!addressCity && parts.length > 1) {
+        addressCity = parts[1] || ''
+      }
+      if (parts.length > 2) {
+        addressCountry = parts[parts.length - 1] || ''
+      }
+    }
+
+    return {
+      addressLine1,
+      addressPostcode,
+      addressCity,
+      addressCountry,
+    }
+  }
+
+  const resolveInvoiceRecipients = async (
+    customer: JobDetail['customer'],
+  ): Promise<InvoiceRecipientResult> => {
+    const rawVatNumber = customer?.vat_number?.trim() || ''
+    const vatNumber = rawVatNumber.replace(/\D/g, '')
+    if (!vatNumber) {
+      return {
+        recipients: [{ type: 'DO_NOT_DELIVER' }],
+        requiresManualSend: true,
+        reason:
+          'Customer organization number is missing, so EHF cannot be used.',
+      }
+    }
+    if (!isValidNorwegianOrgNumber(vatNumber)) {
+      return {
+        recipients: [{ type: 'DO_NOT_DELIVER' }],
+        requiresManualSend: true,
+        reason:
+          'Customer organization number is invalid, so EHF cannot be used.',
+      }
+    }
+    try {
+      const recipientInfo = (await contaClient.get(
+        `/invoice/conta-ehf/recipients/${vatNumber}`,
+      )) as { canReceiveInvoices?: boolean; inputValid?: boolean }
+      if (!recipientInfo.canReceiveInvoices) {
+        return {
+          recipients: [{ type: 'DO_NOT_DELIVER' }],
+          requiresManualSend: true,
+          reason: 'Customer cannot receive invoices via EHF.',
+        }
+      }
+      return {
+        recipients: [{ type: 'EHF', ehfRecipient: vatNumber }],
+        requiresManualSend: false,
+      }
+    } catch (error) {
+      return {
+        recipients: [{ type: 'DO_NOT_DELIVER' }],
+        requiresManualSend: true,
+        reason: 'Could not verify if the customer can receive EHF.',
+      }
+    }
+  }
+
+  const isValidNorwegianOrgNumber = (orgNo: string) => {
+    if (!/^\d{9}$/.test(orgNo)) return false
+    const weights = [3, 2, 7, 6, 5, 4, 3, 2]
+    const digits = orgNo.split('').map((d) => Number(d))
+    const sum = weights.reduce(
+      (acc, weight, idx) => acc + weight * digits[idx],
+      0,
+    )
+    const remainder = sum % 11
+    const checkDigit = remainder === 0 ? 0 : 11 - remainder
+    if (checkDigit === 11) return false
+    return checkDigit === digits[8]
+  }
+
+  const getEhfOrderReference = () => {
+    if (job.jobnr) return String(job.jobnr)
+    return String(jobId)
+  }
+
+  const getDefaultPersonalMessage = (details: {
+    type: 'offer' | 'bookings'
+    offerTitle?: string
+    bookingsCount?: number
+  }) => {
+    const jobLabel = `${job.title}${job.jobnr ? ` (#${job.jobnr})` : ''}`
+    if (details.type === 'offer') {
+      return `Job: ${jobLabel}\n`
+    }
+    const lineCount = details.bookingsCount ?? 0
+    return `Job: ${jobLabel}\nInvoice based on bookings (${lineCount} line${lineCount !== 1 ? 's' : ''})`
+  }
+
+  const openInvoiceMessageDialog = (action: PendingInvoiceAction) => {
+    setInvoiceMessageAction(action)
+    const defaultMessage =
+      action.kind === 'offer'
+        ? getDefaultPersonalMessage({
+            type: 'offer',
+            offerTitle: action.offer.title || `v${action.offer.version_number}`,
+          })
+        : action.kind === 'bookings'
+          ? getDefaultPersonalMessage({
+              type: 'bookings',
+              bookingsCount: action.bookings.all.length,
+            })
+          : getDefaultPersonalMessage({ type: 'offer' })
+    setInvoiceMessageDraft(defaultMessage)
+    setInvoiceMessageDialogOpen(true)
+  }
+
+  const getProjectLeadReference = () =>
+    job.project_lead?.display_name || job.project_lead?.email || undefined
+
+  const getCustomerContactReference = () =>
+    job.customer_contact?.name || undefined
+
+  const getJobReferenceLabel = () => {
+    if (job.jobnr) return `Job #${String(job.jobnr).padStart(6, '0')}`
+    return `Job #${jobId}`
+  }
+
+  const getOrgReference = () => {
+    const parts = [getJobReferenceLabel()]
+    const projectLead = getProjectLeadReference()
+    if (projectLead) parts.push(projectLead)
+    return parts.join(' · ')
+  }
+
+  const downloadContaInvoicePdf = async (
+    organizationId: string,
+    invoiceResponse: any,
+  ) => {
+    const invoiceFileId =
+      invoiceResponse?.invoiceFileId || invoiceResponse?.attachmentFileId
+    if (!invoiceFileId) {
+      toastError(
+        'PDF Not Available',
+        'Conta did not return a file reference for this invoice.',
+      )
+      return
+    }
+    try {
+      const fileInfo = (await contaClient.get(
+        `/invoice/organizations/${organizationId}/files/${invoiceFileId}`,
+      )) as { fileUrl?: string }
+      if (!fileInfo.fileUrl) {
+        toastError(
+          'PDF Not Available',
+          'Conta did not return a download link for this invoice.',
+        )
+        return
+      }
+      window.open(fileInfo.fileUrl, '_blank', 'noopener')
+    } catch (error: any) {
+      toastError(
+        'PDF Download Failed',
+        error?.message || 'Failed to download invoice PDF from Conta.',
+      )
+    }
+  }
+
+  const ensureContaBankAccount = async (organizationId: string) => {
+    try {
+      const accounts = (await contaClient.get(
+        `/invoice/organizations/${organizationId}/bank-accounts`,
+      )) as Array<{ id?: number }>
+      if (!Array.isArray(accounts) || accounts.length === 0) {
+        info(
+          'Missing Bank Account',
+          'Conta requires a bank account on the organization before invoices can be created.',
+        )
+        return false
+      }
+      return true
+    } catch (error: any) {
+      toastError(
+        'Bank Account Check Failed',
+        error?.message || 'Could not verify Conta bank account.',
+      )
+      return false
+    }
+  }
+
   const findOrCreateContaCustomer = async (
     organizationId: string,
     customer: JobDetail['customer'],
   ): Promise<number | null> => {
     if (!customer) return null
+    const customerName = customer.name?.trim() || ''
+    const fallbackName =
+      customerName || customer.email?.trim() || customer.phone?.trim() || ''
+    if (!fallbackName) {
+      throw new Error(
+        'Conta requires a customer name, email, or phone number to create an invoice.',
+      )
+    }
+    const customerAddress = customer.address?.trim() || ''
+    if (!customerAddress) {
+      throw new Error(
+        'Conta requires a customer address. Add an address to the customer record before invoicing.',
+      )
+    }
+    const { addressLine1, addressPostcode, addressCity, addressCountry } =
+      parseCustomerAddress(customerAddress)
+    if (!addressLine1 || !addressPostcode || !addressCity) {
+      throw new Error(
+        'Conta requires a customer address with line, postal code, and city. Update the customer address (e.g. "Street 1, 1234 City").',
+      )
+    }
 
     try {
       // First, try to search for the customer by name
-      const searchResponse = await contaClient.get<Array<{ id: number }>>(
-        `/invoice/organizations/${organizationId}/customers/v1?name=${encodeURIComponent(customer.name || '')}`,
-      )
+      if (customerName.length > 0) {
+        const searchResponse = (await contaClient.get(
+          `/invoice/organizations/${organizationId}/customers?q=${encodeURIComponent(customerName)}`,
+        )) as {
+          hits?: Array<{ id?: number }>
+        }
 
-      if (
-        searchResponse &&
-        Array.isArray(searchResponse) &&
-        searchResponse.length > 0
-      ) {
-        // Customer found, return the first match's ID
-        return searchResponse[0].id
+        const hits = Array.isArray(searchResponse.hits)
+          ? searchResponse.hits
+          : []
+        if (hits.length) {
+          const hitId = hits[0]?.id
+          if (hitId) return hitId
+        }
       }
 
       // Customer not found, create a new one
-      const createResponse = await contaClient.post<{ id: number }>(
-        `/invoice/organizations/${organizationId}/customers/v1`,
+      const createResponse = (await contaClient.post(
+        `/invoice/organizations/${organizationId}/customers`,
         {
-          name: customer.name || '',
-          email: customer.email || undefined,
-          phone: customer.phone || undefined,
+          name: fallbackName,
+          customerType: 'ORGANIZATION',
+          orgNo: customer.vat_number?.trim() || undefined,
+          emailAddress: customer.email?.trim() || undefined,
+          phoneNo: customer.phone?.trim() || undefined,
+          customerAddressLine1: addressLine1,
+          customerAddressPostcode: addressPostcode,
+          customerAddressCity: addressCity,
+          customerAddressCountry: addressCountry || undefined,
           // Additional fields can be added based on Conta API requirements
         },
-      )
+      )) as { id: number }
 
-      return createResponse?.id || null
+      return createResponse.id
     } catch (error: any) {
-      // If customer creation/search fails, log but don't block invoice creation
       console.error('Failed to find/create Conta customer:', error)
-      return null
+      throw error
     }
   }
 
@@ -177,17 +502,42 @@ export default function InvoiceTab({
     mutationFn: async ({
       offer,
       organizationId,
+      invoiceRecipients,
+      downloadPdfAfterCreate: _downloadPdfAfterCreate,
+      invoiceMessage,
     }: {
       offer: JobOffer
       organizationId: string
+      invoiceRecipients: Array<InvoiceRecipient>
+      downloadPdfAfterCreate?: boolean
+      invoiceMessage?: string
     }) => {
       // Find or create the customer in Conta
       const contaCustomerId = await findOrCreateContaCustomer(
         organizationId,
         job.customer,
       )
+      if (!contaCustomerId) {
+        throw new Error(
+          'Conta customer could not be created or found. Check customer name and address.',
+        )
+      }
+
+      let contaProjectId: number | null = null
+      try {
+        contaProjectId = await ensureContaProjectId(organizationId, {
+          jobTitle: job.title,
+          jobnr: job.jobnr,
+          jobId,
+          customerId: contaCustomerId,
+        })
+      } catch (projectError) {
+        console.warn('Failed to resolve Conta project for job', projectError)
+      }
 
       // Create invoice with single line for the offer
+      const shouldSendEhf =
+        invoiceRecipients[0] && invoiceRecipients[0].type === 'EHF'
       const invoiceData = {
         customerId: contaCustomerId,
         invoiceDate: new Date().toISOString().split('T')[0], // YYYY-MM-DD format
@@ -195,10 +545,22 @@ export default function InvoiceTab({
           .toISOString()
           .split('T')[0], // 14 days from now
         invoiceCurrency: 'NOK',
+        ...(contaProjectId ? { projectId: contaProjectId } : {}),
+        ...(shouldSendEhf ? { invoiceRecipients } : {}),
+        ...(shouldSendEhf ? { ehfOrderReference: getEhfOrderReference() } : {}),
+        ...(getOrgReference() ? { orgReference: getOrgReference() } : {}),
+        ...(getCustomerContactReference()
+          ? { customerReference: getCustomerContactReference() }
+          : {}),
+        personalMessage:
+          invoiceMessage?.trim() ||
+          getDefaultPersonalMessage({
+            type: 'offer',
+            offerTitle: offer.title || `v${offer.version_number}`,
+          }),
         invoiceLines: [
           {
-            description:
-              offer.title || `Invoice for Job ${job.jobnr || jobId}`,
+            description: offer.title || `Invoice for Job ${job.jobnr || jobId}`,
             quantity: 1,
             price: offer.total_after_discount, // Price ex VAT
             discount: offer.discount_percent,
@@ -206,8 +568,6 @@ export default function InvoiceTab({
             lineNo: 1,
           },
         ],
-        // Reference the job and offer
-        comment: `Job: ${job.title}${job.jobnr ? ` (#${job.jobnr})` : ''}\nOffer: ${offer.title || `v${offer.version_number}`}`,
       }
 
       // Create invoice record in database first (pending status)
@@ -235,7 +595,7 @@ export default function InvoiceTab({
 
       try {
         response = await contaClient.post(
-          `/invoice/organizations/${organizationId}/invoices/v1`,
+          `/invoice/organizations/${organizationId}/invoices`,
           invoiceData,
         )
 
@@ -245,14 +605,18 @@ export default function InvoiceTab({
             .from('job_invoices')
             .update({
               status: 'created',
-              conta_invoice_id: response?.id?.toString() || response?.invoiceId?.toString() || null,
+              conta_invoice_id:
+                response?.invoiceNo?.toString() ||
+                response?.id?.toString() ||
+                response?.invoiceId?.toString() ||
+                null,
               conta_response: response,
             })
             .eq('id', invoiceRecord.id)
         }
       } catch (error: any) {
         errorMessage = error?.message || 'Unknown error'
-        
+
         // Update invoice record with failure
         if (invoiceRecord) {
           await supabase
@@ -263,13 +627,13 @@ export default function InvoiceTab({
             })
             .eq('id', invoiceRecord.id)
         }
-        
+
         throw error
       }
 
       return { response, invoiceRecord }
     },
-    onSuccess: async (data) => {
+    onSuccess: async (data, variables) => {
       const invoiceId = data.response?.id || data.response?.invoiceId
       success(
         'Invoice Created',
@@ -296,6 +660,10 @@ export default function InvoiceTab({
       qc.invalidateQueries({
         queryKey: ['jobs', jobId, 'invoices'],
       })
+
+      if (variables.downloadPdfAfterCreate) {
+        await downloadContaInvoicePdf(variables.organizationId, data.response)
+      }
     },
     onError: (err: any) => {
       toastError(
@@ -311,17 +679,40 @@ export default function InvoiceTab({
     mutationFn: async ({
       bookingsData,
       organizationId,
+      invoiceRecipients,
+      downloadPdfAfterCreate: _downloadPdfAfterCreate,
+      invoiceMessage,
     }: {
       bookingsData: BookingsForInvoice
       organizationId: string
+      invoiceRecipients: Array<InvoiceRecipient>
+      downloadPdfAfterCreate?: boolean
+      invoiceMessage?: string
     }) => {
       // Find or create the customer in Conta
       const contaCustomerId = await findOrCreateContaCustomer(
         organizationId,
         job.customer,
       )
+      if (!contaCustomerId) {
+        throw new Error(
+          'Conta customer could not be created or found. Check customer name and address.',
+        )
+      }
 
-      if (!bookingsData.all || bookingsData.all.length === 0) {
+      let contaProjectId: number | null = null
+      try {
+        contaProjectId = await ensureContaProjectId(organizationId, {
+          jobTitle: job.title,
+          jobnr: job.jobnr,
+          jobId,
+          customerId: contaCustomerId,
+        })
+      } catch (projectError) {
+        console.warn('Failed to resolve Conta project for job', projectError)
+      }
+
+      if (bookingsData.all.length === 0) {
         throw new Error('No bookings available to invoice')
       }
 
@@ -335,6 +726,8 @@ export default function InvoiceTab({
         lineNo: index + 1,
       }))
 
+      const shouldSendEhf =
+        invoiceRecipients[0] && invoiceRecipients[0].type === 'EHF'
       const invoiceData = {
         customerId: contaCustomerId,
         invoiceDate: new Date().toISOString().split('T')[0], // YYYY-MM-DD format
@@ -342,9 +735,20 @@ export default function InvoiceTab({
           .toISOString()
           .split('T')[0], // 14 days from now
         invoiceCurrency: 'NOK',
+        ...(contaProjectId ? { projectId: contaProjectId } : {}),
+        ...(shouldSendEhf ? { invoiceRecipients } : {}),
+        ...(shouldSendEhf ? { ehfOrderReference: getEhfOrderReference() } : {}),
+        ...(getOrgReference() ? { orgReference: getOrgReference() } : {}),
+        ...(getCustomerContactReference()
+          ? { customerReference: getCustomerContactReference() }
+          : {}),
+        personalMessage:
+          invoiceMessage?.trim() ||
+          getDefaultPersonalMessage({
+            type: 'bookings',
+            bookingsCount: bookingsData.all.length,
+          }),
         invoiceLines,
-        // Reference the job
-        comment: `Job: ${job.title}${job.jobnr ? ` (#${job.jobnr})` : ''}\nInvoice based on bookings (${bookingsData.all.length} line${bookingsData.all.length !== 1 ? 's' : ''})`,
       }
 
       // Create invoice record in database first (pending status)
@@ -371,7 +775,7 @@ export default function InvoiceTab({
 
       try {
         response = await contaClient.post(
-          `/invoice/organizations/${organizationId}/invoices/v1`,
+          `/invoice/organizations/${organizationId}/invoices`,
           invoiceData,
         )
 
@@ -381,14 +785,18 @@ export default function InvoiceTab({
             .from('job_invoices')
             .update({
               status: 'created',
-              conta_invoice_id: response?.id?.toString() || response?.invoiceId?.toString() || null,
+              conta_invoice_id:
+                response?.invoiceNo?.toString() ||
+                response?.id?.toString() ||
+                response?.invoiceId?.toString() ||
+                null,
               conta_response: response,
             })
             .eq('id', invoiceRecord.id)
         }
       } catch (error: any) {
         errorMessage = error?.message || 'Unknown error'
-        
+
         // Update invoice record with failure
         if (invoiceRecord) {
           await supabase
@@ -399,13 +807,13 @@ export default function InvoiceTab({
             })
             .eq('id', invoiceRecord.id)
         }
-        
+
         throw error
       }
 
       return { response, invoiceRecord }
     },
-    onSuccess: async (data) => {
+    onSuccess: async (data, variables) => {
       const invoiceId = data.response?.id || data.response?.invoiceId
       success(
         'Invoice Created',
@@ -432,6 +840,10 @@ export default function InvoiceTab({
       qc.invalidateQueries({
         queryKey: ['jobs', jobId, 'invoices'],
       })
+
+      if (variables.downloadPdfAfterCreate) {
+        await downloadContaInvoicePdf(variables.organizationId, data.response)
+      }
     },
     onError: (err: any) => {
       toastError(
@@ -442,7 +854,54 @@ export default function InvoiceTab({
     },
   })
 
-  const handleCreateInvoiceFromOffer = (offerId: string, showPreview = false) => {
+  const openManualSendDialog = (
+    action: PendingInvoiceAction,
+    recipients: Array<InvoiceRecipient>,
+    reason?: string,
+  ) => {
+    setPendingInvoiceAction(action)
+    setPendingInvoiceRecipients(recipients)
+    setManualSendReason(reason || 'Customer cannot receive EHF.')
+    setManualSendDialogOpen(true)
+  }
+
+  const confirmManualSend = () => {
+    if (!pendingInvoiceAction || !pendingInvoiceRecipients) {
+      setManualSendDialogOpen(false)
+      return
+    }
+    if (!accountingConfig?.accounting_organization_id) {
+      setManualSendDialogOpen(false)
+      return
+    }
+    const organizationId = accountingConfig.accounting_organization_id
+    if (pendingInvoiceAction.kind === 'offer') {
+      createInvoiceFromOfferMutation.mutate({
+        offer: pendingInvoiceAction.offer,
+        organizationId,
+        invoiceRecipients: pendingInvoiceRecipients,
+        downloadPdfAfterCreate: true,
+        invoiceMessage: pendingInvoiceAction.invoiceMessage,
+      })
+    } else if (pendingInvoiceAction.kind === 'bookings') {
+      createInvoiceFromBookingsMutation.mutate({
+        bookingsData: pendingInvoiceAction.bookings,
+        organizationId,
+        invoiceRecipients: pendingInvoiceRecipients,
+        downloadPdfAfterCreate: true,
+        invoiceMessage: pendingInvoiceAction.invoiceMessage,
+      })
+    }
+    setManualSendDialogOpen(false)
+    setPendingInvoiceAction(null)
+    setPendingInvoiceRecipients(null)
+    setManualSendReason('')
+  }
+
+  const handleCreateInvoiceFromOffer = (
+    offerId: string,
+    showPreview = false,
+  ) => {
     const offer = acceptedOffers.find((o) => o.id === offerId)
     if (!offer) {
       toastError('Error', 'Offer not found')
@@ -469,10 +928,38 @@ export default function InvoiceTab({
       setPreviewOffer(offer)
       return
     }
+    openInvoiceMessageDialog({
+      kind: 'offer',
+      offer,
+      invoiceMessage: '',
+    })
+  }
+
+  const createInvoiceFromOfferWithMessage = async (
+    offer: JobOffer,
+    message: string,
+  ) => {
+    if (!accountingConfig?.accounting_organization_id) return
+    const hasBankAccount = await ensureContaBankAccount(
+      accountingConfig.accounting_organization_id,
+    )
+    if (!hasBankAccount) return
+
+    const recipientResult = await resolveInvoiceRecipients(job.customer)
+    if (recipientResult.requiresManualSend) {
+      openManualSendDialog(
+        { kind: 'offer', offer, invoiceMessage: message },
+        recipientResult.recipients,
+        recipientResult.reason,
+      )
+      return
+    }
 
     createInvoiceFromOfferMutation.mutate({
       offer,
       organizationId: accountingConfig.accounting_organization_id,
+      invoiceRecipients: recipientResult.recipients,
+      invoiceMessage: message,
     })
   }
 
@@ -502,14 +989,42 @@ export default function InvoiceTab({
       setPreviewBookings(bookings)
       return
     }
-
-    createInvoiceFromBookingsMutation.mutate({
-      bookingsData: bookings,
-      organizationId: accountingConfig.accounting_organization_id,
+    openInvoiceMessageDialog({
+      kind: 'bookings',
+      bookings,
+      invoiceMessage: '',
     })
   }
 
-  const handleCreateInvoiceForAllOffers = async () => {
+  const createInvoiceFromBookingsWithMessage = async (
+    bookingsData: BookingsForInvoice,
+    message: string,
+  ) => {
+    if (!accountingConfig?.accounting_organization_id) return
+    const hasBankAccount = await ensureContaBankAccount(
+      accountingConfig.accounting_organization_id,
+    )
+    if (!hasBankAccount) return
+
+    const recipientResult = await resolveInvoiceRecipients(job.customer)
+    if (recipientResult.requiresManualSend) {
+      openManualSendDialog(
+        { kind: 'bookings', bookings: bookingsData, invoiceMessage: message },
+        recipientResult.recipients,
+        recipientResult.reason,
+      )
+      return
+    }
+
+    createInvoiceFromBookingsMutation.mutate({
+      bookingsData,
+      organizationId: accountingConfig.accounting_organization_id,
+      invoiceRecipients: recipientResult.recipients,
+      invoiceMessage: message,
+    })
+  }
+
+  const handleCreateInvoiceForAllOffers = () => {
     if (offersNeedingInvoice.length === 0) {
       info('No Offers', 'There are no offers ready to invoice.')
       return
@@ -531,14 +1046,39 @@ export default function InvoiceTab({
       return
     }
 
-    // Create invoices for all pending offers
-    // For now, we'll do them sequentially to avoid overwhelming the API
-    // In the future, we could batch them or show progress
+    openInvoiceMessageDialog({
+      kind: 'all-offers',
+      invoiceMessage: '',
+    })
+  }
+
+  const createInvoicesForAllOffersWithMessage = async (message: string) => {
+    if (!accountingConfig?.accounting_organization_id) return
     try {
+      const hasBankAccount = await ensureContaBankAccount(
+        accountingConfig.accounting_organization_id,
+      )
+      if (!hasBankAccount) return
+
+      const recipientResult = await resolveInvoiceRecipients(job.customer)
+      if (recipientResult.requiresManualSend) {
+        openManualSendDialog(
+          {
+            kind: 'offer',
+            offer: offersNeedingInvoice[0],
+            invoiceMessage: message,
+          },
+          recipientResult.recipients,
+          recipientResult.reason,
+        )
+        return
+      }
       for (const offer of offersNeedingInvoice) {
         await createInvoiceFromOfferMutation.mutateAsync({
           offer,
           organizationId: accountingConfig.accounting_organization_id,
+          invoiceRecipients: recipientResult.recipients,
+          invoiceMessage: message,
         })
       }
       success(
@@ -562,13 +1102,15 @@ export default function InvoiceTab({
   // For now, we'll assume all accepted offers need invoicing
   // In the future, we might track invoice status per offer
   const offersNeedingInvoice = acceptedOffers
+  const hasAcceptedOffers = acceptedOffers.length > 0
 
   const totalToInvoice = offersNeedingInvoice.reduce(
     (sum, offer) => sum + offer.total_with_vat,
     0,
   )
 
-  const isLoading = isLoadingOffers || (invoiceBasis === 'bookings' && isLoadingBookings)
+  const isLoading =
+    isLoadingOffers || (invoiceBasis === 'bookings' && isLoadingBookings)
 
   if (isLoading) {
     return (
@@ -581,23 +1123,71 @@ export default function InvoiceTab({
     )
   }
 
+  if (!invoiceBasis) {
+    return (
+      <Box>
+        <Flex justify="between" align="center" mb="4">
+          <Heading size="3">Invoice</Heading>
+        </Flex>
+        <Card>
+          <Flex direction="column" gap="4">
+            <Box>
+              <Heading size="4" mb="1">
+                How do you want to create the invoice?
+              </Heading>
+              <Text size="2" color="gray">
+                Choose whether to invoice from the accepted offer or from
+                bookings on the job.
+              </Text>
+            </Box>
+            <Flex gap="3" wrap="wrap">
+              <Button
+                size="3"
+                variant="soft"
+                onClick={() => handleChooseInvoiceBasis('offer')}
+                disabled={saveInvoiceBasisMutation.isPending}
+              >
+                Accepted Offer
+              </Button>
+              <Button
+                size="3"
+                variant="soft"
+                onClick={() => handleChooseInvoiceBasis('bookings')}
+                disabled={saveInvoiceBasisMutation.isPending}
+              >
+                Bookings on Job
+              </Button>
+            </Flex>
+            {!hasAcceptedOffers && (
+              <Text size="2" color="gray">
+                No accepted offers for this job yet. You can still choose offers
+                and create the invoice once an offer is accepted.
+              </Text>
+            )}
+          </Flex>
+        </Card>
+      </Box>
+    )
+  }
+
   return (
     <Box>
       <Flex justify="between" align="center" mb="4">
         <Heading size="3">Invoice</Heading>
-        {!isInvoiced && (
-          <SegmentedControl.Root
-            value={invoiceBasis}
-            onValueChange={(value) => setInvoiceBasis(value as InvoiceBasis)}
-          >
-            <SegmentedControl.Item value="offer">
-              Accepted Offer
-            </SegmentedControl.Item>
-            <SegmentedControl.Item value="bookings">
-              Bookings on Job
-            </SegmentedControl.Item>
-          </SegmentedControl.Root>
-        )}
+        <Button
+          size="1"
+          variant="ghost"
+          onClick={() => {
+            setBasisSelectionDirty(true)
+            setInvoiceBasis(null)
+          }}
+        >
+          <Text size="2" color="gray">
+            Invoicing based on{' '}
+            {invoiceBasis === 'offer' ? 'offers' : 'bookings'}
+          </Text>
+          <Edit width={14} height={14} />
+        </Button>
       </Flex>
 
       {/* Job Invoice Status */}
@@ -650,180 +1240,212 @@ export default function InvoiceTab({
         <>
           {/* Accepted Offers Section */}
           {acceptedOffers.length > 0 ? (
-        <Card mb="4">
-          <Flex justify="between" align="center" mb="3">
-            <Heading size="4">Accepted Offers</Heading>
-            {offersNeedingInvoice.length > 0 && !isInvoiced && (
-              <Text size="2" color="gray">
-                {offersNeedingInvoice.length} offer
-                {offersNeedingInvoice.length !== 1 ? 's' : ''} ready to invoice
-              </Text>
-            )}
-          </Flex>
+            <Card mb="4">
+              <Flex justify="between" align="center" mb="3">
+                <Heading size="4">Accepted Offers</Heading>
+                {offersNeedingInvoice.length > 0 && !isInvoiced && (
+                  <Text size="2" color="gray">
+                    {offersNeedingInvoice.length} offer
+                    {offersNeedingInvoice.length !== 1 ? 's' : ''} ready to
+                    invoice
+                  </Text>
+                )}
+              </Flex>
 
-          {offersNeedingInvoice.length > 0 ? (
-            <>
-              <Table.Root>
-                <Table.Header>
-                  <Table.Row>
-                    <Table.ColumnHeaderCell>Offer</Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>Accepted</Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell style={{ textAlign: 'right' }}>
-                      Amount
-                    </Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell style={{ textAlign: 'center' }}>
-                      Invoice Status
-                    </Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell style={{ textAlign: 'right' }}>
-                      Actions
-                    </Table.ColumnHeaderCell>
-                  </Table.Row>
-                </Table.Header>
-                <Table.Body>
-                  {acceptedOffers.map((offer) => {
-                    const needsInvoice = offersNeedingInvoice.some(
-                      (o) => o.id === offer.id,
-                    )
-                    return (
-                      <Table.Row key={offer.id}>
-                        <Table.Cell>
-                          <Text weight="medium">{offer.title}</Text>
-                          <Text size="1" color="gray">
-                            {offer.offer_type === 'technical'
-                              ? 'Technical'
-                              : 'Pretty'}{' '}
-                            • v{offer.version_number}
-                          </Text>
-                        </Table.Cell>
-                        <Table.Cell>
-                          <Text size="2">{formatDate(offer.accepted_at)}</Text>
-                          {offer.accepted_by_name && (
-                            <Text size="1" color="gray">
-                              by {offer.accepted_by_name}
-                            </Text>
-                          )}
-                        </Table.Cell>
-                        <Table.Cell>
-                          <Text
-                            size="3"
-                            weight="medium"
+              {offersNeedingInvoice.length > 0 ? (
+                <>
+                  <Box style={{ overflowX: 'auto' }}>
+                    <Table.Root style={{ width: '100%', minWidth: 720 }}>
+                      <Table.Header>
+                        <Table.Row>
+                          <Table.ColumnHeaderCell>Offer</Table.ColumnHeaderCell>
+                          <Table.ColumnHeaderCell>
+                            Accepted
+                          </Table.ColumnHeaderCell>
+                          <Table.ColumnHeaderCell
                             style={{ textAlign: 'right' }}
                           >
-                            {formatCurrency(offer.total_with_vat)}
-                          </Text>
-                        </Table.Cell>
-                        <Table.Cell style={{ textAlign: 'center' }}>
-                          {needsInvoice ? (
-                            <Text size="2" color="orange">
-                              Pending
-                            </Text>
-                          ) : (
-                            <Flex align="center" justify="center" gap="1">
-                              <CheckCircle
-                                width={16}
-                                height={16}
-                                color="var(--green-9)"
-                              />
-                              <Text size="2" color="green">
-                                Invoiced
-                              </Text>
-                            </Flex>
-                          )}
-                        </Table.Cell>
-                        <Table.Cell style={{ textAlign: 'right' }}>
-                          {needsInvoice && (
-                            <Flex gap="2" justify="end">
-                              <Button
-                                size="2"
-                                variant="ghost"
-                                onClick={() => handleCreateInvoiceFromOffer(offer.id, true)}
-                                disabled={createInvoiceFromOfferMutation.isPending}
-                              >
-                                <Eye width={14} height={14} />
-                                Preview
-                              </Button>
-                              <Button
-                                size="2"
-                                variant="soft"
-                                onClick={() => handleCreateInvoiceFromOffer(offer.id)}
-                                disabled={createInvoiceFromOfferMutation.isPending}
-                              >
-                                <GoogleDocs width={14} height={14} />
-                                Create Invoice
-                              </Button>
-                            </Flex>
-                          )}
-                        </Table.Cell>
-                      </Table.Row>
-                    )
-                  })}
-                </Table.Body>
-              </Table.Root>
+                            Amount
+                          </Table.ColumnHeaderCell>
+                          <Table.ColumnHeaderCell
+                            style={{ textAlign: 'center' }}
+                          >
+                            Invoice Status
+                          </Table.ColumnHeaderCell>
+                          <Table.ColumnHeaderCell
+                            style={{ textAlign: 'right' }}
+                          >
+                            Actions
+                          </Table.ColumnHeaderCell>
+                        </Table.Row>
+                      </Table.Header>
+                      <Table.Body>
+                        {acceptedOffers.map((offer) => {
+                          const needsInvoice = offersNeedingInvoice.some(
+                            (o) => o.id === offer.id,
+                          )
+                          return (
+                            <Table.Row key={offer.id}>
+                              <Table.Cell>
+                                <Text weight="medium">{offer.title}</Text>
+                                <Text
+                                  size="1"
+                                  color="gray"
+                                  style={{ display: 'block' }}
+                                >
+                                  {offer.offer_type === 'technical'
+                                    ? 'Technical'
+                                    : 'Pretty'}{' '}
+                                  • v{offer.version_number}
+                                </Text>
+                              </Table.Cell>
+                              <Table.Cell>
+                                <Text size="2">
+                                  {formatDate(offer.accepted_at)}
+                                </Text>
+                                {offer.accepted_by_name && (
+                                  <Text
+                                    size="1"
+                                    color="gray"
+                                    style={{ display: 'block' }}
+                                  >
+                                    by {offer.accepted_by_name}
+                                  </Text>
+                                )}
+                              </Table.Cell>
+                              <Table.Cell>
+                                <Text
+                                  size="3"
+                                  weight="medium"
+                                  style={{ textAlign: 'right' }}
+                                >
+                                  {formatCurrency(offer.total_with_vat)}
+                                </Text>
+                              </Table.Cell>
+                              <Table.Cell style={{ textAlign: 'center' }}>
+                                {needsInvoice ? (
+                                  <Text size="2" color="orange">
+                                    Pending
+                                  </Text>
+                                ) : (
+                                  <Flex align="center" justify="center" gap="1">
+                                    <CheckCircle
+                                      width={16}
+                                      height={16}
+                                      color="var(--green-9)"
+                                    />
+                                    <Text size="2" color="green">
+                                      Invoiced
+                                    </Text>
+                                  </Flex>
+                                )}
+                              </Table.Cell>
+                              <Table.Cell style={{ textAlign: 'right' }}>
+                                {needsInvoice && (
+                                  <Flex gap="2" justify="end">
+                                    <Button
+                                      size="2"
+                                      variant="ghost"
+                                      onClick={() =>
+                                        handleCreateInvoiceFromOffer(
+                                          offer.id,
+                                          true,
+                                        )
+                                      }
+                                      disabled={
+                                        createInvoiceFromOfferMutation.isPending
+                                      }
+                                    >
+                                      <Eye width={14} height={14} />
+                                      Preview
+                                    </Button>
+                                    <Button
+                                      size="2"
+                                      variant="soft"
+                                      onClick={() =>
+                                        handleCreateInvoiceFromOffer(offer.id)
+                                      }
+                                      disabled={
+                                        createInvoiceFromOfferMutation.isPending
+                                      }
+                                    >
+                                      <GoogleDocs width={14} height={14} />
+                                      Create Invoice
+                                    </Button>
+                                  </Flex>
+                                )}
+                              </Table.Cell>
+                            </Table.Row>
+                          )
+                        })}
+                      </Table.Body>
+                    </Table.Root>
+                  </Box>
 
-              {offersNeedingInvoice.length > 0 && !isInvoiced && (
-                <>
-                  <Separator my="4" />
-                  <Flex justify="between" align="center">
-                    <Box>
-                      <Text size="2" color="gray" mb="1">
-                        Total to Invoice
-                      </Text>
-                      <Heading size="5">
-                        {formatCurrency(totalToInvoice)}
-                      </Heading>
-                    </Box>
-                    <Button
-                      size="3"
-                      onClick={handleCreateInvoiceForAllOffers}
-                      disabled={createInvoiceFromOfferMutation.isPending}
-                    >
-                      <Plus width={16} height={16} />
-                      Create Invoice for All
-                    </Button>
-                  </Flex>
+                  {offersNeedingInvoice.length > 0 && !isInvoiced && (
+                    <>
+                      <Separator my="4" />
+                      <Flex justify="between" align="center">
+                        <Box>
+                          <Text size="2" color="gray" mb="1">
+                            Total to Invoice
+                          </Text>
+                          <Heading size="5">
+                            {formatCurrency(totalToInvoice)}
+                          </Heading>
+                        </Box>
+                        <Button
+                          size="3"
+                          onClick={handleCreateInvoiceForAllOffers}
+                          disabled={createInvoiceFromOfferMutation.isPending}
+                        >
+                          <Plus width={16} height={16} />
+                          Create Invoice for All
+                        </Button>
+                      </Flex>
+                    </>
+                  )}
                 </>
+              ) : (
+                <Box
+                  p="4"
+                  style={{
+                    border: '2px dashed var(--green-a6)',
+                    borderRadius: 8,
+                    textAlign: 'center',
+                  }}
+                >
+                  <CheckCircle width={32} height={32} color="var(--green-9)" />
+                  <Text
+                    size="3"
+                    weight="medium"
+                    mt="2"
+                    style={{ display: 'block' }}
+                  >
+                    All offers have been invoiced
+                  </Text>
+                </Box>
               )}
-            </>
+            </Card>
           ) : (
-            <Box
-              p="4"
-              style={{
-                border: '2px dashed var(--green-a6)',
-                borderRadius: 8,
-                textAlign: 'center',
-              }}
-            >
-              <CheckCircle width={32} height={32} color="var(--green-9)" />
-              <Text
-                size="3"
-                weight="medium"
-                mt="2"
-                style={{ display: 'block' }}
+            <Card>
+              <Flex
+                direction="column"
+                align="center"
+                justify="center"
+                gap="3"
+                style={{ minHeight: '200px', padding: '40px' }}
               >
-                All offers have been invoiced
-              </Text>
-            </Box>
+                <Text size="4" color="gray" align="center">
+                  No accepted offers yet
+                </Text>
+                <Text size="2" color="gray" align="center">
+                  Once offers are accepted, they will appear here and can be
+                  invoiced.
+                </Text>
+              </Flex>
+            </Card>
           )}
-        </Card>
-      ) : (
-        <Card>
-          <Flex
-            direction="column"
-            align="center"
-            justify="center"
-            gap="3"
-            style={{ minHeight: '200px', padding: '40px' }}
-          >
-            <Text size="4" color="gray" align="center">
-              No accepted offers yet
-            </Text>
-            <Text size="2" color="gray" align="center">
-              Once offers are accepted, they will appear here and can be
-              invoiced.
-            </Text>
-          </Flex>
-        </Card>
-      )}
         </>
       )}
 
@@ -840,52 +1462,64 @@ export default function InvoiceTab({
                 </Text>
               </Flex>
 
-              <Table.Root mb="4">
-                <Table.Header>
-                  <Table.Row>
-                    <Table.ColumnHeaderCell>Type</Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>Description</Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell style={{ textAlign: 'right' }}>
-                      Quantity
-                    </Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell style={{ textAlign: 'right' }}>
-                      Unit Price
-                    </Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell style={{ textAlign: 'right' }}>
-                      Total (ex VAT)
-                    </Table.ColumnHeaderCell>
-                  </Table.Row>
-                </Table.Header>
-                <Table.Body>
-                  {bookings.all.map((line) => (
-                    <Table.Row key={line.id}>
-                      <Table.Cell>
-                        <Text size="2" weight="medium">
-                          {makeWordPresentable(line.type)}
-                        </Text>
-                      </Table.Cell>
-                      <Table.Cell>
-                        <Text>{line.description}</Text>
-                      </Table.Cell>
-                      <Table.Cell style={{ textAlign: 'right' }}>
-                        <Text>
-                          {line.type === 'crew' || line.type === 'transport'
-                            ? `${line.quantity} day${line.quantity !== 1 ? 's' : ''}`
-                            : line.quantity}
-                        </Text>
-                      </Table.Cell>
-                      <Table.Cell style={{ textAlign: 'right' }}>
-                        <Text>{formatCurrency(line.unitPrice)}</Text>
-                      </Table.Cell>
-                      <Table.Cell style={{ textAlign: 'right' }}>
-                        <Text weight="medium">
-                          {formatCurrency(line.totalPrice)}
-                        </Text>
-                      </Table.Cell>
+              <Box style={{ overflowX: 'auto' }}>
+                <Table.Root mb="4" style={{ width: '100%', minWidth: 720 }}>
+                  <Table.Header>
+                    <Table.Row>
+                      <Table.ColumnHeaderCell>Type</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Brand</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Model</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>
+                        Description
+                      </Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell style={{ textAlign: 'right' }}>
+                        Quantity
+                      </Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell style={{ textAlign: 'right' }}>
+                        Unit Price
+                      </Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell style={{ textAlign: 'right' }}>
+                        Total (ex VAT)
+                      </Table.ColumnHeaderCell>
                     </Table.Row>
-                  ))}
-                </Table.Body>
-              </Table.Root>
+                  </Table.Header>
+                  <Table.Body>
+                    {bookings.all.map((line) => (
+                      <Table.Row key={line.id}>
+                        <Table.Cell>
+                          <Text size="2" weight="medium">
+                            {makeWordPresentable(line.type)}
+                          </Text>
+                        </Table.Cell>
+                        <Table.Cell>
+                          <Text>{line.brandName || '—'}</Text>
+                        </Table.Cell>
+                        <Table.Cell>
+                          <Text>{line.model || '—'}</Text>
+                        </Table.Cell>
+                        <Table.Cell>
+                          <Text>{line.description}</Text>
+                        </Table.Cell>
+                        <Table.Cell style={{ textAlign: 'right' }}>
+                          <Text>
+                            {line.type === 'crew' || line.type === 'transport'
+                              ? `${line.quantity} day${line.quantity !== 1 ? 's' : ''}`
+                              : line.quantity}
+                          </Text>
+                        </Table.Cell>
+                        <Table.Cell style={{ textAlign: 'right' }}>
+                          <Text>{formatCurrency(line.unitPrice)}</Text>
+                        </Table.Cell>
+                        <Table.Cell style={{ textAlign: 'right' }}>
+                          <Text weight="medium">
+                            {formatCurrency(line.totalPrice)}
+                          </Text>
+                        </Table.Cell>
+                      </Table.Row>
+                    ))}
+                  </Table.Body>
+                </Table.Root>
+              </Box>
 
               <Separator my="4" />
 
@@ -902,7 +1536,9 @@ export default function InvoiceTab({
                   <Text size="2" color="gray" mb="1">
                     VAT (25%)
                   </Text>
-                  <Heading size="5">{formatCurrency(bookings.totalVat)}</Heading>
+                  <Heading size="5">
+                    {formatCurrency(bookings.totalVat)}
+                  </Heading>
                 </Box>
                 <Box style={{ textAlign: 'right' }}>
                   <Text size="2" color="gray" mb="1">
@@ -928,8 +1564,8 @@ export default function InvoiceTab({
                   }}
                 >
                   <Text size="2" color="orange" weight="medium">
-                    Warning: Some bookings have zero prices. Please verify prices
-                    before creating the invoice.
+                    Warning: Some bookings have zero prices. Please verify
+                    prices before creating the invoice.
                   </Text>
                 </Box>
               )}
@@ -981,13 +1617,20 @@ export default function InvoiceTab({
 
       {/* Test Mode Indicator */}
       {isTestMode && (
-        <Card mt="4" style={{ background: 'var(--yellow-a2)', border: '1px solid var(--yellow-a6)' }}>
+        <Card
+          mt="4"
+          style={{
+            background: 'var(--yellow-a2)',
+            border: '1px solid var(--yellow-a6)',
+          }}
+        >
           <Flex gap="2" align="center">
             <Text size="2" weight="bold" color="yellow">
               🧪 TEST MODE
             </Text>
             <Text size="2" color="gray">
-              You are connected to the Conta sandbox environment. Invoices created here will not appear in your production accounting system.
+              You are connected to the Conta sandbox environment. Invoices
+              created here will not appear in your production accounting system.
             </Text>
           </Flex>
         </Card>
@@ -1015,6 +1658,91 @@ export default function InvoiceTab({
         </Flex>
       </Card>
 
+      {/* Manual send confirmation dialog */}
+      <Dialog.Root
+        open={manualSendDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setManualSendDialogOpen(false)
+            setPendingInvoiceAction(null)
+            setPendingInvoiceRecipients(null)
+            setManualSendReason('')
+          }
+        }}
+      >
+        <Dialog.Content size="3" style={{ maxWidth: '520px' }}>
+          <Dialog.Title>EHF Not Available</Dialog.Title>
+          <Dialog.Description size="2" color="gray" mb="3">
+            This customer cannot receive invoices via EHF.
+          </Dialog.Description>
+          {manualSendReason && (
+            <Text size="2" color="gray">
+              {manualSendReason}
+            </Text>
+          )}
+          <Flex gap="3" mt="4" justify="end">
+            <Dialog.Close>
+              <Button variant="soft">Cancel</Button>
+            </Dialog.Close>
+            <Button onClick={confirmManualSend}>
+              Download PDF and send myself
+            </Button>
+          </Flex>
+        </Dialog.Content>
+      </Dialog.Root>
+
+      {/* Invoice message dialog */}
+      <Dialog.Root
+        open={invoiceMessageDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setInvoiceMessageDialogOpen(false)
+            setInvoiceMessageAction(null)
+          }
+        }}
+      >
+        <Dialog.Content size="3" style={{ maxWidth: '520px' }}>
+          <Dialog.Title>Invoice Message</Dialog.Title>
+          <Dialog.Description size="2" color="gray" mb="3">
+            Add the personal message that will appear on the invoice.
+          </Dialog.Description>
+          <TextArea
+            value={invoiceMessageDraft}
+            onChange={(event) => setInvoiceMessageDraft(event.target.value)}
+            placeholder="Write a custom message for the invoice..."
+            size="2"
+          />
+          <Flex gap="3" mt="4" justify="end">
+            <Dialog.Close>
+              <Button variant="soft">Cancel</Button>
+            </Dialog.Close>
+            <Button
+              onClick={async () => {
+                if (!invoiceMessageAction) return
+                const message = invoiceMessageDraft.trim()
+                if (invoiceMessageAction.kind === 'offer') {
+                  await createInvoiceFromOfferWithMessage(
+                    invoiceMessageAction.offer,
+                    message,
+                  )
+                } else if (invoiceMessageAction.kind === 'bookings') {
+                  await createInvoiceFromBookingsWithMessage(
+                    invoiceMessageAction.bookings,
+                    message,
+                  )
+                } else {
+                  await createInvoicesForAllOffersWithMessage(message)
+                }
+                setInvoiceMessageDialogOpen(false)
+                setInvoiceMessageAction(null)
+              }}
+            >
+              Create Invoice
+            </Button>
+          </Flex>
+        </Dialog.Content>
+      </Dialog.Root>
+
       {/* Invoice Preview Dialog */}
       <Dialog.Root
         open={!!previewOffer || !!previewBookings}
@@ -1028,9 +1756,10 @@ export default function InvoiceTab({
         <Dialog.Content size="4" style={{ maxWidth: '800px' }}>
           <Dialog.Title>Invoice Preview</Dialog.Title>
           <Dialog.Description size="2" color="gray" mb="4">
-            Review the invoice details before creating it in your accounting software.
+            Review the invoice details before creating it in your accounting
+            software.
           </Dialog.Description>
-          
+
           {previewOffer && (
             <InvoicePreview
               basis="offer"
@@ -1038,7 +1767,7 @@ export default function InvoiceTab({
               customerName={job.customer?.name || 'Unknown Customer'}
             />
           )}
-          
+
           {previewBookings && (
             <InvoicePreview
               basis="bookings"
@@ -1049,27 +1778,7 @@ export default function InvoiceTab({
 
           <Flex gap="3" mt="4" justify="end">
             <Dialog.Close>
-              <Button variant="soft">Cancel</Button>
-            </Dialog.Close>
-            <Dialog.Close>
-              <Button
-                onClick={() => {
-                  if (previewOffer) {
-                    handleCreateInvoiceFromOffer(previewOffer.id)
-                  } else if (previewBookings) {
-                    handleCreateInvoiceFromBookings()
-                  }
-                  setPreviewOffer(null)
-                  setPreviewBookings(null)
-                }}
-                disabled={
-                  createInvoiceFromOfferMutation.isPending ||
-                  createInvoiceFromBookingsMutation.isPending
-                }
-              >
-                <GoogleDocs width={16} height={16} />
-                Create Invoice
-              </Button>
+              <Button variant="soft">Close</Button>
             </Dialog.Close>
           </Flex>
         </Dialog.Content>

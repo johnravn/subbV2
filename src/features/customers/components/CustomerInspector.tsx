@@ -229,6 +229,7 @@ export default function CustomerInspector({
               phone: c.phone ?? '',
               vat_number: c.vat_number ?? '',
               is_partner: c.is_partner,
+              logo_path: c.logo_path ?? null,
             }}
             onSaved={() => {
               qc.invalidateQueries({

@@ -597,6 +597,7 @@ export default function AddItemDialog({
                 >
                   <Select.Trigger
                     placeholder={loading ? 'Loading…' : 'Select category'}
+                    style={{ width: '100%' }}
                   />
                   <Select.Content style={{ zIndex: 10000 }}>
                     <Select.Group>
@@ -640,6 +641,7 @@ export default function AddItemDialog({
                 <TextField.Root
                   value={form.model ?? ''}
                   onChange={(e) => set('model', e.target.value)}
+                  placeholder="e.g. Pro, Standard, 2024"
                 />
               </Field>
               <Field label="Owner">
@@ -659,25 +661,24 @@ export default function AddItemDialog({
                 </Select.Root>
               </Field>
 
-              {!form.internally_owned && (
-                <Field label="External owner">
-                  <Select.Root
-                    value={form.external_owner_id ?? undefined}
-                    onValueChange={(v) => set('external_owner_id', v)}
-                  >
-                    <Select.Trigger placeholder="Select partner…" />
-                    <Select.Content style={{ zIndex: 10000 }}>
-                      <Select.Group>
-                        {partners.map((p) => (
-                          <Select.Item key={p.id} value={p.id}>
-                            {p.name}
-                          </Select.Item>
-                        ))}
-                      </Select.Group>
-                    </Select.Content>
-                  </Select.Root>
-                </Field>
-              )}
+              <Field label="External owner">
+                <Select.Root
+                  value={form.external_owner_id ?? undefined}
+                  onValueChange={(v) => set('external_owner_id', v)}
+                  disabled={form.internally_owned}
+                >
+                  <Select.Trigger placeholder="Select partner…" />
+                  <Select.Content style={{ zIndex: 10000 }}>
+                    <Select.Group>
+                      {partners.map((p) => (
+                        <Select.Item key={p.id} value={p.id}>
+                          {p.name}
+                        </Select.Item>
+                      ))}
+                    </Select.Group>
+                  </Select.Content>
+                </Select.Root>
+              </Field>
             </Flex>
 
             <Flex gap="3" wrap="wrap">

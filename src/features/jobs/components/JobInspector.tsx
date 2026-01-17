@@ -25,12 +25,14 @@ import BookingsTab from './tabs/BookingsTab'
 import TimelineTab from './tabs/TimelineTab'
 import ContactsTab from './tabs/ContactsTab'
 import CalendarTab from './tabs/CalendarTab'
+import ProgramTab from './tabs/ProgramTab'
 import FilesTab from './tabs/FilesTab'
 import OffersTab from './tabs/OffersTab'
 import InvoiceTab from './tabs/InvoiceTab'
 import MoneyTab from './tabs/MoneyTab'
 import ToDoTab from './tabs/ToDoTab'
 import JobDialog from './dialogs/JobDialog'
+import { getJobStatusColor } from '../utils/statusColors'
 import type { JobDetail, JobStatus } from '../types'
 import type { FilesTabHandle } from './tabs/FilesTab'
 
@@ -185,15 +187,7 @@ export default function JobInspector({
             const displayStatus = getDisplayStatus(job.status, companyRole)
             return (
               <Badge
-                color={
-                  displayStatus === 'canceled'
-                    ? 'red'
-                    : displayStatus === 'paid'
-                      ? 'green'
-                      : displayStatus === 'in_progress'
-                        ? 'amber'
-                        : 'blue'
-                }
+                color={getJobStatusColor(displayStatus)}
                 radius="full"
                 highContrast
               >
@@ -271,7 +265,8 @@ export default function JobInspector({
       >
         <Tabs.List wrap="wrap" mb="2">
           <Tabs.Trigger value="overview">Overview</Tabs.Trigger>
-          <Tabs.Trigger value="timeline">Timeline</Tabs.Trigger>
+          <Tabs.Trigger value="timeline">Time Periods</Tabs.Trigger>
+          <Tabs.Trigger value="program">Program</Tabs.Trigger>
           <Tabs.Trigger value="calendar">Calendar</Tabs.Trigger>
           <Tabs.Trigger value="bookings">Bookings</Tabs.Trigger>
           <Tabs.Trigger value="offers">Offers</Tabs.Trigger>
@@ -287,6 +282,9 @@ export default function JobInspector({
         </Tabs.Content>
         <Tabs.Content value="timeline" mt={'10px'}>
           <TimelineTab jobId={job.id} />
+        </Tabs.Content>
+        <Tabs.Content value="program" mt={'10px'}>
+          <ProgramTab jobId={job.id} />
         </Tabs.Content>
         <Tabs.Content value="calendar" mt={'10px'}>
           <CalendarTab jobId={job.id} />
@@ -495,33 +493,10 @@ function StatusTimeline(job: JobDetail) {
         {ORDER.map((s, i) => {
           const active = s === job.status
           const past = ORDER.indexOf(s) <= ORDER.indexOf(job.status)
-          const isCanceledStatus = s === 'canceled'
-          const isPaidStatus = s === 'paid'
-          const isInProgressStatus = s === 'in_progress'
           return (
             <Flex key={s} align="center" gap="2">
               <Badge
-                color={
-                  isCanceledStatus
-                    ? active
-                      ? 'red'
-                      : 'gray'
-                    : isPaidStatus
-                      ? active
-                        ? 'green'
-                        : past
-                          ? 'green'
-                          : 'gray'
-                      : isInProgressStatus
-                        ? active
-                          ? 'amber'
-                          : past
-                            ? 'amber'
-                            : 'gray'
-                        : active
-                          ? 'blue'
-                          : 'gray'
-                }
+                color={active || past ? getJobStatusColor(s) : 'gray'}
                 variant={active ? 'solid' : 'soft'}
                 highContrast
               >
