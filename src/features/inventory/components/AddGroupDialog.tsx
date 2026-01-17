@@ -32,6 +32,9 @@ type PickerItem = {
   current_price: number | null
   on_hand: number | null
   type: 'item' | 'group'
+  brand_name?: string | null
+  model?: string | null
+  description?: string | null
 }
 type Part = {
   item_id: string | null
@@ -160,6 +163,16 @@ export default function AddGroupDialog({
 
   /* -------- Item and Group search (picker) -------- */
   const [search, setSearch] = React.useState('')
+  const matchesSearch = React.useCallback((item: PickerItem, term: string) => {
+    const normalized = term.trim().toLowerCase()
+    if (!normalized) return true
+    return [
+      item.name,
+      item.brand_name,
+      item.model,
+      item.description,
+    ].some((value) => value?.toLowerCase().includes(normalized))
+  }, [])
   const {
     data: pickerItems = [],
     isLoading: itemsLoading,
@@ -169,17 +182,38 @@ export default function AddGroupDialog({
     queryKey: ['company', companyId, 'picker-items-groups', search],
     enabled: !!companyId && open,
     queryFn: async (): Promise<Array<PickerItem>> => {
-      // Fetch items with on_hand from inventory_index view
+      let brandIds: Array<string> = []
+      if (search) {
+        const { data: brandMatches, error: brandErr } = await supabase
+          .from('item_brands')
+          .select('id')
+          .eq('company_id', companyId)
+          .ilike('name', `%${search}%`)
+          .limit(20)
+        if (brandErr) throw brandErr
+        brandIds = brandMatches.map((b) => b.id)
+      }
+
+      // Fetch items with on_hand from items table
       let itemsQ = supabase
-        .from('inventory_index')
-        .select('id, name, on_hand')
+        .from('items')
+        .select('id, name, total_quantity, model, notes, item_brands(name)')
         .eq('company_id', companyId)
-        .eq('is_group', false)
         .eq('active', true)
         .or('deleted.is.null,deleted.eq.false')
         .limit(20)
 
-      if (search) itemsQ = itemsQ.ilike('name', `%${search}%`)
+      if (search) {
+        const filters = [
+          `name.ilike.%${search}%`,
+          `model.ilike.%${search}%`,
+          `notes.ilike.%${search}%`,
+        ]
+        if (brandIds.length) {
+          filters.push(`brand_id.in.(${brandIds.join(',')})`)
+        }
+        itemsQ = itemsQ.or(filters.join(','))
+      }
 
       const { data: itemsData, error: itemsError } = await itemsQ
       if (itemsError) throw itemsError
@@ -187,13 +221,17 @@ export default function AddGroupDialog({
       // Fetch groups (exclude the current group being edited to prevent self-reference)
       let groupsQ = supabase
         .from('item_groups')
-        .select('id, name')
+        .select('id, name, description')
         .eq('company_id', companyId)
         .eq('active', true)
         .or('deleted.is.null,deleted.eq.false')
         .limit(20)
 
-      if (search) groupsQ = groupsQ.ilike('name', `%${search}%`)
+      if (search) {
+        groupsQ = groupsQ.or(
+          `name.ilike.%${search}%,description.ilike.%${search}%`,
+        )
+      }
       if (mode === 'edit' && initialData?.id) {
         groupsQ = groupsQ.neq('id', initialData.id) // Prevent self-reference
       }
@@ -240,8 +278,11 @@ export default function AddGroupDialog({
         id: r.id,
         name: r.name,
         current_price: r.id ? (prices[r.id] ?? null) : null,
-        on_hand: r.on_hand ?? null,
+        on_hand: r.total_quantity ?? null,
         type: 'item' as const,
+        brand_name: r.item_brands?.name ?? null,
+        model: r.model ?? null,
+        description: r.notes ?? null,
       }))
 
       const groups = groupsData.map((r) => ({
@@ -250,6 +291,7 @@ export default function AddGroupDialog({
         current_price: r.id ? (groupPrices[r.id] ?? null) : null,
         on_hand: null, // Groups don't have on_hand in the same way
         type: 'group' as const,
+        description: r.description ?? null,
       }))
 
       return [...items, ...groups]
@@ -818,9 +860,7 @@ export default function AddGroupDialog({
                       }}
                     >
                     {pickerItems
-                      .filter((item) =>
-                        item.name.toLowerCase().includes(search.toLowerCase()),
-                      )
+                      .filter((item) => matchesSearch(item, search))
                       .map((item) => (
                         <Box
                           key={item.id}
