@@ -20,6 +20,30 @@ function log(message, color = 'reset') {
   console.log(`${colors[color]}${message}${colors.reset}`)
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function runWithRetry(command, { retries = 2, delayMs = 15000 } = {}) {
+  for (let attempt = 1; attempt <= retries + 1; attempt += 1) {
+    try {
+      execSync(command, { stdio: 'inherit' })
+      return
+    } catch (error) {
+      if (attempt > retries) {
+        throw error
+      }
+
+      log(
+        '   ⚠️  Command failed (often transient during container restart)',
+        'yellow',
+      )
+      log(`   Retrying in ${Math.round(delayMs / 1000)}s...`, 'cyan')
+      await sleep(delayMs)
+    }
+  }
+}
+
 async function resetWithData() {
   log('🔄 Resetting local database and populating with remote data...', 'blue')
   console.log('')
@@ -28,7 +52,7 @@ async function resetWithData() {
     // Step 1: Reset database (applies migrations + seed file)
     log('1️⃣  Resetting local database...', 'cyan')
     log('   (This applies migrations and runs seed.sql)', 'cyan')
-    execSync('npm run db:reset', { stdio: 'inherit' })
+    await runWithRetry('npm run db:reset', { retries: 2, delayMs: 15000 })
     log('   ✅ Database reset complete', 'green')
     console.log('')
 

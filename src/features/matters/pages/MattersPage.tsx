@@ -75,7 +75,7 @@ export default function MattersPage() {
       : false,
   )
 
-  const [leftPanelWidth, setLeftPanelWidth] = React.useState<number>(50)
+  const [leftPanelWidth, setLeftPanelWidth] = React.useState<number>(55)
   const [isResizing, setIsResizing] = React.useState(false)
   const containerRef = React.useRef<HTMLDivElement>(null)
 

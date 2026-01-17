@@ -27,9 +27,12 @@ This directory contains the integration with Conta accounting software.
    npm run conta:types
    ```
 
-4. Configure environment variables in `.env.local` (optional, defaults to production gateway):
+4. Configure environment variables in `.env.local`:
 
    ```env
+   VITE_CONTA_API_URL_PROD=https://api.gateway.conta.no
+   VITE_CONTA_API_URL_SANDBOX=https://api.gateway.conta-sandbox.no
+   # Optional fallback for legacy setups:
    VITE_CONTA_API_URL=https://api.gateway.conta.no
    ```
 

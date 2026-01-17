@@ -26,6 +26,7 @@ import MattersPage from '@features/matters/pages/MattersPage'
 import CustomerPage from '@features/customers/pages/CostumerPage'
 import LatestPage from '@features/latest/pages/LatestPage'
 import PublicOfferPage from '@features/jobs/pages/PublicOfferPage'
+import LoggingPage from '@features/logging/pages/LoggingPage'
 import AppShell from '../layout/AppShell'
 import RequireCap from './guards/RequireCap'
 import type { Capability } from '@shared/auth/permissions'
@@ -133,6 +134,12 @@ const calendarRoute = createRoute({
   component: guarded('visit:calendar', CalendarPage),
 })
 
+const loggingRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: 'logging',
+  component: guarded('visit:logging', LoggingPage),
+})
+
 const vehiclesRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: 'vehicles',
@@ -216,6 +223,7 @@ const routeTree = rootRoute.addChildren([
     homeRoute,
     inventoryRoute,
     calendarRoute,
+    loggingRoute,
     vehiclesRoute,
     jobsRoute,
     crewRoute,

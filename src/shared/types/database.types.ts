@@ -7,10 +7,30 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "13.0.5"
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -284,7 +304,9 @@ export type Database = {
       }
       company_expansions: {
         Row: {
+          accounting_api_environment: string | null
           accounting_api_key_encrypted: string | null
+          accounting_api_key_sandbox_encrypted: string | null
           accounting_api_read_only: boolean
           accounting_organization_id: string | null
           accounting_software: string | null
@@ -305,7 +327,9 @@ export type Database = {
           vehicle_distance_rate: number | null
         }
         Insert: {
+          accounting_api_environment?: string | null
           accounting_api_key_encrypted?: string | null
+          accounting_api_key_sandbox_encrypted?: string | null
           accounting_api_read_only?: boolean
           accounting_organization_id?: string | null
           accounting_software?: string | null
@@ -326,7 +350,9 @@ export type Database = {
           vehicle_distance_rate?: number | null
         }
         Update: {
+          accounting_api_environment?: string | null
           accounting_api_key_encrypted?: string | null
+          accounting_api_key_sandbox_encrypted?: string | null
           accounting_api_read_only?: boolean
           accounting_organization_id?: string | null
           accounting_software?: string | null
@@ -2492,6 +2518,60 @@ export type Database = {
           },
         ]
       }
+      time_entries: {
+        Row: {
+          company_id: string
+          created_at: string
+          end_at: string
+          id: string
+          job_number: string | null
+          note: string | null
+          start_at: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          end_at: string
+          id?: string
+          job_number?: string | null
+          note?: string | null
+          start_at: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          end_at?: string
+          id?: string
+          job_number?: string | null
+          note?: string | null
+          start_at?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "time_entries_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "time_entries_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       time_periods: {
         Row: {
           category: Database["public"]["Enums"]["time_period_category"]
@@ -3501,6 +3581,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       activity_type: [
@@ -3593,3 +3676,4 @@ export const Constants = {
     },
   },
 } as const
+

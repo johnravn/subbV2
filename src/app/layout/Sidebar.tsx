@@ -20,6 +20,7 @@ import {
   Building,
   Calendar,
   Car,
+  Clock,
   GoogleDocs,
   Group,
   HomeAlt,
@@ -38,6 +39,7 @@ import { useCompany } from '@shared/companies/CompanyProvider'
 import { supabase } from '@shared/api/supabase'
 import { getInitials } from '@shared/lib/generalFunctions'
 import { unreadMattersCountQueryAll } from '@features/matters/api/queries'
+import { companyExpansionQuery } from '@features/company/api/queries'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useTheme } from '../hooks/useTheme'
 import { APP_VERSION } from '../config/version'
@@ -56,6 +58,7 @@ export const NAV: Array<Array<NavItem>> = [
     { to: '/crew', label: 'Crew', icon: <Group /> },
     { to: '/jobs', label: 'Jobs', icon: <GoogleDocs /> },
     { to: '/calendar', label: 'Calendar', icon: <Calendar /> },
+    { to: '/logging', label: 'Logging', icon: <Clock /> },
     { to: '/customers', label: 'Customers', icon: <UserLove /> },
   ],
   [
@@ -209,6 +212,15 @@ function SidebarContent({
       return data.user ?? null
     },
   })
+  const { data: companyExpansion } = useQuery({
+    ...(companyId
+      ? companyExpansionQuery({ companyId })
+      : {
+          queryKey: ['company', 'none', 'expansion'] as const,
+          queryFn: () => Promise.resolve(null),
+        }),
+    enabled: !!companyId,
+  })
   const hasUser = !!user
   const companiesSorted = React.useMemo(
     () => [...companies].sort((a, b) => a.name.localeCompare(b.name)),
@@ -217,6 +229,10 @@ function SidebarContent({
   const logo = isDark ? logoWhite : logoBlack
 
   const PUBLIC_LABELS = new Set(['Home', 'Calendar', 'Matters', 'Profile'])
+  const isSandboxMode =
+    !!companyExpansion &&
+    companyExpansion.accounting_software === 'conta' &&
+    companyExpansion.accounting_api_environment === 'sandbox'
 
   function allowed(label: string) {
     const labelToCap: Record<string, string> = {
@@ -226,6 +242,7 @@ function SidebarContent({
       Crew: 'visit:crew',
       Jobs: 'visit:jobs',
       Calendar: 'visit:calendar',
+      Logging: 'visit:logging',
       Customers: 'visit:customers',
       Latest: 'visit:latest',
       Matters: 'visit:matters',
@@ -349,6 +366,16 @@ function SidebarContent({
                     ))}
                   </Select.Content>
                 </Select.Root>
+              )}
+              {isSandboxMode && (
+                <Badge
+                  color="orange"
+                  variant="soft"
+                  size="1"
+                  style={{ marginTop: 6 }}
+                >
+                  Accounting in Sandbox Mode
+                </Badge>
               )}
             </div>
           )}

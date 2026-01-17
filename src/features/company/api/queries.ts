@@ -367,6 +367,8 @@ export type CompanyExpansion = {
   company_id: string
   accounting_software: 'none' | 'conta' | null
   accounting_api_key_encrypted: string | null
+  accounting_api_key_sandbox_encrypted: string | null
+  accounting_api_environment: 'production' | 'sandbox' | null
   accounting_organization_id: string | null
   accounting_api_read_only: boolean
   crew_rate_per_day: number | null
@@ -393,7 +395,7 @@ export function companyExpansionQuery({ companyId }: { companyId: string }) {
       const { data, error } = await supabase
         .from('company_expansions')
         .select(
-          'id, company_id, accounting_software, accounting_api_key_encrypted, accounting_organization_id, accounting_api_read_only, crew_rate_per_day, crew_rate_per_hour, vehicle_daily_rate, vehicle_distance_rate, vehicle_distance_increment, customer_discount_percent, partner_discount_percent, rental_factor_config, fixed_rate_start_day, fixed_rate_per_day, created_at, updated_at',
+          'id, company_id, accounting_software, accounting_api_key_encrypted, accounting_api_key_sandbox_encrypted, accounting_api_environment, accounting_organization_id, accounting_api_read_only, crew_rate_per_day, crew_rate_per_hour, vehicle_daily_rate, vehicle_distance_rate, vehicle_distance_increment, customer_discount_percent, partner_discount_percent, rental_factor_config, fixed_rate_start_day, fixed_rate_per_day, created_at, updated_at',
         )
         .eq('company_id', companyId)
         .maybeSingle()
@@ -423,12 +425,16 @@ export async function updateCompanyExpansion({
   companyId,
   accountingSoftware,
   apiKey,
+  sandboxApiKey,
+  apiEnvironment,
   organizationId,
   readOnly,
 }: {
   companyId: string
   accountingSoftware?: 'none' | 'conta'
   apiKey?: string | null
+  sandboxApiKey?: string | null
+  apiEnvironment?: 'production' | 'sandbox'
   organizationId?: string | null
   readOnly?: boolean
 }) {
@@ -437,7 +443,7 @@ export async function updateCompanyExpansion({
   const actorId = auth.user.id
   if (!actorId) throw new Error('Not authenticated')
 
-  // Encrypt the API key if provided
+  // Encrypt the API key(s) if provided
   let encryptedKey: string | null = null
   if (apiKey && accountingSoftware !== 'none') {
     const { data, error } = await supabase.rpc('encrypt_api_key', {
@@ -446,6 +452,16 @@ export async function updateCompanyExpansion({
     })
     if (error) throw error
     encryptedKey = data as string | null
+  }
+
+  let encryptedSandboxKey: string | null = null
+  if (sandboxApiKey && accountingSoftware !== 'none') {
+    const { data, error } = await supabase.rpc('encrypt_api_key', {
+      p_company_id: companyId,
+      p_api_key: sandboxApiKey,
+    })
+    if (error) throw error
+    encryptedSandboxKey = data as string | null
   }
 
   // Get current expansion to preserve existing values if not provided
@@ -470,6 +486,14 @@ export async function updateCompanyExpansion({
           apiKey !== undefined
             ? encryptedKey
             : (current?.accounting_api_key_encrypted ?? null),
+        accounting_api_key_sandbox_encrypted:
+          sandboxApiKey !== undefined
+            ? encryptedSandboxKey
+            : ((current as any)?.accounting_api_key_sandbox_encrypted ?? null),
+        accounting_api_environment:
+          apiEnvironment !== undefined
+            ? apiEnvironment
+            : ((current as any)?.accounting_api_environment ?? 'production'),
         accounting_organization_id:
           organizationId !== undefined
             ? organizationId
