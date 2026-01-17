@@ -189,44 +189,56 @@ export default function InvoicePreview(props: InvoicePreviewProps) {
           </Flex>
         </Box>
         <Separator />
-        <Table.Root>
-          <Table.Header>
-            <Table.Row>
-              <Table.ColumnHeaderCell>Description</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell style={{ textAlign: 'right' }}>
-                Quantity
-              </Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell style={{ textAlign: 'right' }}>
-                Unit Price
-              </Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell style={{ textAlign: 'right' }}>
-                Total (ex VAT)
-              </Table.ColumnHeaderCell>
-            </Table.Row>
-          </Table.Header>
-          <Table.Body>
-            {bookings.all.map((line) => (
-              <Table.Row key={line.id}>
-                <Table.Cell>
-                  <Text>{line.description}</Text>
-                </Table.Cell>
-                <Table.Cell style={{ textAlign: 'right' }}>
-                  <Text>
-                    {line.type === 'crew' || line.type === 'transport'
-                      ? `${line.quantity} day${line.quantity !== 1 ? 's' : ''}`
-                      : line.quantity}
-                  </Text>
-                </Table.Cell>
-                <Table.Cell style={{ textAlign: 'right' }}>
-                  <Text>{formatCurrency(line.unitPrice)}</Text>
-                </Table.Cell>
-                <Table.Cell style={{ textAlign: 'right' }}>
-                  <Text weight="medium">{formatCurrency(line.totalPrice)}</Text>
-                </Table.Cell>
+        <Box style={{ overflowX: 'auto' }}>
+          <Table.Root style={{ width: '100%', minWidth: 720 }}>
+            <Table.Header>
+              <Table.Row>
+                <Table.ColumnHeaderCell>Brand</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>Model</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>Description</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell style={{ textAlign: 'right' }}>
+                  Quantity
+                </Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell style={{ textAlign: 'right' }}>
+                  Unit Price
+                </Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell style={{ textAlign: 'right' }}>
+                  Total (ex VAT)
+                </Table.ColumnHeaderCell>
               </Table.Row>
-            ))}
-          </Table.Body>
-        </Table.Root>
+            </Table.Header>
+            <Table.Body>
+              {bookings.all.map((line) => (
+                <Table.Row key={line.id}>
+                  <Table.Cell>
+                    <Text>{line.brandName || '—'}</Text>
+                  </Table.Cell>
+                  <Table.Cell>
+                    <Text>{line.model || '—'}</Text>
+                  </Table.Cell>
+                  <Table.Cell>
+                    <Text>{line.description}</Text>
+                  </Table.Cell>
+                  <Table.Cell style={{ textAlign: 'right' }}>
+                    <Text>
+                      {line.type === 'crew' || line.type === 'transport'
+                        ? `${line.quantity} day${line.quantity !== 1 ? 's' : ''}`
+                        : line.quantity}
+                    </Text>
+                  </Table.Cell>
+                  <Table.Cell style={{ textAlign: 'right' }}>
+                    <Text>{formatCurrency(line.unitPrice)}</Text>
+                  </Table.Cell>
+                  <Table.Cell style={{ textAlign: 'right' }}>
+                    <Text weight="medium">
+                      {formatCurrency(line.totalPrice)}
+                    </Text>
+                  </Table.Cell>
+                </Table.Row>
+              ))}
+            </Table.Body>
+          </Table.Root>
+        </Box>
         <Separator />
         <Flex direction="column" gap="2" style={{ alignItems: 'flex-end' }}>
           <Flex justify="between" style={{ width: '100%', maxWidth: '300px' }}>

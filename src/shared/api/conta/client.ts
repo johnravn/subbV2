@@ -49,16 +49,70 @@ export async function contaRequest(
   }
 
   const url = `${contaApiUrl}${endpoint}`
+  const method = (options.method || 'GET').toUpperCase()
+  const hasBody = options.body !== undefined && options.body !== null
+  const normalizedHeaders = new Headers(options.headers || {})
+
+  if (hasBody && !normalizedHeaders.has('Content-Type')) {
+    normalizedHeaders.set('Content-Type', 'application/json')
+  }
+  if (!normalizedHeaders.has('Accept')) {
+    normalizedHeaders.set('Accept', 'application/json')
+  }
+  normalizedHeaders.set('apiKey', apiKey)
 
   return fetch(url, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
-      // Conta API expects 'apiKey' header, not 'Authorization: Bearer'
-      apiKey: apiKey,
-      ...options.headers,
+      ...Object.fromEntries(normalizedHeaders.entries()),
     },
   })
+}
+
+async function buildContaErrorMessage(
+  response: Response,
+): Promise<string> {
+  let errorMessage = `HTTP ${response.status}: ${response.statusText}`
+  try {
+    const errorData = await response.json()
+    errorMessage = errorData.message || errorData.error || errorMessage
+    if (errorData.hint) {
+      errorMessage += ` - ${errorData.hint}`
+    }
+    if (errorData.messages?.EN || errorData.messages?.NO) {
+      const message =
+        errorData.messages?.EN || errorData.messages?.NO || ''
+      if (message) {
+        errorMessage = message
+      }
+    }
+    if (Array.isArray(errorData.errors) && errorData.errors.length > 0) {
+      const firstError = errorData.errors[0]
+      const detail =
+        firstError?.messages?.EN ||
+        firstError?.messages?.NO ||
+        firstError?.id
+      if (detail) {
+        errorMessage = `${errorMessage} - ${detail}`
+      }
+    }
+  } catch (e) {
+    try {
+      const text = await response.clone().text()
+      if (text) {
+        errorMessage = text
+      }
+    } catch (innerError) {
+      // If JSON parsing fails, use the status text
+    }
+  }
+
+  if (response.status === 401) {
+    errorMessage +=
+      ' - Check that your API key matches the Conta environment (sandbox vs production) and that VITE_CONTA_API_URL is set correctly.'
+  }
+
+  return errorMessage
 }
 
 /**
@@ -74,17 +128,7 @@ export const contaClient = {
 
     // Check if response is ok before parsing JSON
     if (!response.ok) {
-      let errorMessage = `HTTP ${response.status}: ${response.statusText}`
-      try {
-        const errorData = await response.json()
-        errorMessage = errorData.message || errorData.error || errorMessage
-        if (errorData.hint) {
-          errorMessage += ` - ${errorData.hint}`
-        }
-      } catch (e) {
-        // If JSON parsing fails, use the status text
-      }
-      throw new Error(errorMessage)
+      throw new Error(await buildContaErrorMessage(response))
     }
 
     return response.json()
@@ -103,14 +147,7 @@ export const contaClient = {
     })
 
     if (!response.ok) {
-      let errorMessage = `HTTP ${response.status}: ${response.statusText}`
-      try {
-        const errorData = await response.json()
-        errorMessage = errorData.message || errorData.error || errorMessage
-      } catch (e) {
-        // If JSON parsing fails, use the status text
-      }
-      throw new Error(errorMessage)
+      throw new Error(await buildContaErrorMessage(response))
     }
 
     return response.json()
@@ -129,14 +166,7 @@ export const contaClient = {
     })
 
     if (!response.ok) {
-      let errorMessage = `HTTP ${response.status}: ${response.statusText}`
-      try {
-        const errorData = await response.json()
-        errorMessage = errorData.message || errorData.error || errorMessage
-      } catch (e) {
-        // If JSON parsing fails, use the status text
-      }
-      throw new Error(errorMessage)
+      throw new Error(await buildContaErrorMessage(response))
     }
 
     return response.json()
@@ -152,14 +182,7 @@ export const contaClient = {
     const response = await contaRequest(endpoint, { method: 'DELETE' })
 
     if (!response.ok) {
-      let errorMessage = `HTTP ${response.status}: ${response.statusText}`
-      try {
-        const errorData = await response.json()
-        errorMessage = errorData.message || errorData.error || errorMessage
-      } catch (e) {
-        // If JSON parsing fails, use the status text
-      }
-      throw new Error(errorMessage)
+      throw new Error(await buildContaErrorMessage(response))
     }
 
     return response.json()

@@ -42,6 +42,7 @@
     "@fullcalendar/list": "^6.1.19",
     "@fullcalendar/react": "^6.1.19",
     "@fullcalendar/timegrid": "^6.1.19",
+    "@glowstudent/youversion": "^2.2.2",
     "@radix-ui/themes": "^3.2.1",
     "@supabase/supabase-js": "^2.87.1",
     "@tailwindcss/vite": "^4.0.6",

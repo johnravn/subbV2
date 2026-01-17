@@ -3,7 +3,12 @@ import * as React from 'react'
 import { createPortal } from 'react-dom'
 import * as Toast from '@radix-ui/react-toast'
 import { Button, Flex, Text } from '@radix-ui/themes'
-import { CheckCircleSolid, InfoCircle, WarningTriangle, Undo, Copy } from 'iconoir-react'
+import {
+  CheckCircleSolid,
+  InfoCircle,
+  Undo,
+  WarningTriangle,
+} from 'iconoir-react'
 
 type ToastKind = 'success' | 'error' | 'info'
 type ToastItem = {
@@ -18,7 +23,13 @@ type ToastItem = {
 
 type ToastContextValue = {
   show: (opts: Omit<ToastItem, 'id' | 'kind'> & { kind?: ToastKind }) => void
-  success: (title: string, description?: string, duration?: number, onUndo?: () => void, undoLabel?: string) => void
+  success: (
+    title: string,
+    description?: string,
+    duration?: number,
+    onUndo?: () => void,
+    undoLabel?: string,
+  ) => void
   error: (title: string, description?: string, duration?: number) => void
   info: (title: string, description?: string, duration?: number) => void
 }
@@ -41,18 +52,17 @@ function ToastItem({
 }) {
   const duration = t.duration ?? 3000
   const [timeRemaining, setTimeRemaining] = React.useState(duration)
-  const toastCtx = React.useContext(ToastCtx)
 
   // Timer effect
   React.useEffect(() => {
     if (duration <= 0) return
-    
+
     const startTime = Date.now()
     const interval = setInterval(() => {
       const elapsed = Date.now() - startTime
       const remaining = Math.max(0, duration - elapsed)
       setTimeRemaining(remaining)
-      
+
       if (remaining === 0) {
         clearInterval(interval)
         // Auto-dismiss when countdown reaches 0
@@ -68,34 +78,6 @@ function ToastItem({
       t.onUndo()
     }
     onRemove(t.id)
-  }
-
-  const handleCopyError = async () => {
-    const errorMessage = t.description ? `${t.title}\n\n${t.description}` : t.title
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(errorMessage)
-      } else {
-        // Fallback for older browsers
-        const ta = document.createElement('textarea')
-        ta.value = errorMessage
-        ta.style.position = 'fixed'
-        ta.style.left = '-9999px'
-        document.body.appendChild(ta)
-        ta.select()
-        document.execCommand('copy')
-        document.body.removeChild(ta)
-      }
-      // Show a brief success feedback if context is available
-      if (toastCtx) {
-        toastCtx.success('Copied to clipboard', undefined, 1500)
-      }
-    } catch (err) {
-      console.error('Failed to copy error message', err)
-      if (toastCtx) {
-        toastCtx.error('Failed to copy error message')
-      }
-    }
   }
 
   // Get border color based on toast kind
@@ -169,21 +151,6 @@ function ToastItem({
               {Math.ceil(timeRemaining / 1000)}s
             </Text>
           )}
-          {t.kind === 'error' && (
-            <Button
-              size="2"
-              variant="ghost"
-              color="gray"
-              onClick={handleCopyError}
-              title="Copy error message"
-              style={{
-                fontWeight: 500,
-              }}
-            >
-              <Copy width={14} height={14} />
-              Copy
-            </Button>
-          )}
           {t.onUndo && (
             <Button
               size="2"
@@ -200,7 +167,7 @@ function ToastItem({
           )}
         </div>
       )}
-      
+
       <div
         style={{
           lineHeight: 0,
@@ -227,7 +194,7 @@ function ToastItem({
                 fontSize: 14,
                 lineHeight: '20px',
                 marginBottom: t.description ? 4 : 0,
-                paddingRight: (t.onUndo || t.kind === 'error') ? 100 : 0, // Make room for timer and button(s)
+                paddingRight: t.onUndo || t.kind === 'error' ? 100 : 0, // Make room for timer and button(s)
               }}
             >
               {t.title}
@@ -282,7 +249,14 @@ export function AppToastProvider({ children }: { children: React.ReactNode }) {
       push({ kind, ...rest })
     },
     success: (title, description, duration, onUndo, undoLabel) =>
-      push({ kind: 'success', title, description, duration, onUndo, undoLabel }),
+      push({
+        kind: 'success',
+        title,
+        description,
+        duration,
+        onUndo,
+        undoLabel,
+      }),
     error: (title, description, duration) => {
       // Log error to console for debugging
       console.error('[Toast Error]', {
@@ -323,11 +297,7 @@ export function AppToastProvider({ children }: { children: React.ReactNode }) {
 
         {/* Render all active toasts */}
         {toasts.map((t) => (
-          <ToastItem
-            key={t.id}
-            toast={t}
-            onRemove={remove}
-          />
+          <ToastItem key={t.id} toast={t} onRemove={remove} />
         ))}
 
         {/* Portal viewport to document.body to ensure it's rendered after dialogs in DOM order */}

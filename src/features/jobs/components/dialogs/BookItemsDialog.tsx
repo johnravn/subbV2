@@ -103,7 +103,8 @@ export default function BookItemsDialog({
     type: 'error' | 'warning' | 'info'
     text: string
   } | null>(null)
-  const { success, error } = useToast()
+  const lastItemNameMapRef = React.useRef<Map<string, string>>(new Map())
+  const { success, error, info } = useToast()
 
   // State for custom time pickers when no equipment period exists
   const [customStartTime, setCustomStartTime] = React.useState<string | null>(
@@ -342,28 +343,17 @@ export default function BookItemsDialog({
         ? rows.find((x) => x.kind === 'item' && x.item_id === p.id)
         : rows.find((x) => x.kind === 'group' && x.group_id === p.id)
 
-    if (currentRow) {
-      const newQty = currentRow.quantity + 1
-      if (onHand > 0 && newQty > onHand) {
+    if (onHand > 0) {
+      const nextQty = currentRow ? currentRow.quantity + 1 : 1
+      if (nextQty > onHand) {
         setMessage({
-          type: 'error',
-          text: `Only ${onHand} ${p.name} available. Already booking ${currentRow.quantity}.`,
+          type: 'warning',
+          text: `Only ${onHand} ${p.name} available. Booking ${nextQty}.`,
         })
-        return
-      }
-    } else {
-      // Adding new item/group
-      if (onHand > 0 && 1 > onHand) {
-        setMessage({
-          type: 'error',
-          text: `Only ${onHand} ${p.name} available.`,
-        })
-        return
+      } else {
+        setMessage(null)
       }
     }
-
-    // Clear any previous messages on success
-    setMessage(null)
 
     setRows((r) => {
       if (p.kind === 'item') {
@@ -405,17 +395,16 @@ export default function BookItemsDialog({
   }
 
   function updateQty(target: Row, qty: number, maxAvailable: number | null) {
-    // Validate against available quantity
+    // Warn against available quantity
     if (maxAvailable !== null && maxAvailable > 0 && qty > maxAvailable) {
       setMessage({
-        type: 'error',
-        text: `Only ${maxAvailable} available. Cannot book ${qty}.`,
+        type: 'warning',
+        text: `Only ${maxAvailable} available. Booking ${qty}.`,
       })
-      return
+    } else {
+      // Clear any previous messages on success
+      setMessage(null)
     }
-
-    // Clear any previous messages on success
-    setMessage(null)
 
     setRows((prevRows) =>
       prevRows.map((x) =>
@@ -696,6 +685,35 @@ export default function BookItemsDialog({
       const payload = [...itemPayload, ...groupPayload]
       if (payload.length === 0) return
 
+      // Build item name map early for better error messaging
+      const allItemIds = new Set<string>()
+      for (const item of payload) {
+        allItemIds.add(item.item_id)
+      }
+
+      const itemNameMap = new Map<string, string>()
+      const itemOnHandMap = new Map<string, number>()
+
+      if (allItemIds.size > 0) {
+        const { data: itemDetails, error: itemDetailsErr } = await supabase
+          .from('inventory_index')
+          .select('id, name, on_hand')
+          .eq('company_id', companyId)
+          .eq('is_group', false)
+          .in('id', Array.from(allItemIds))
+
+        if (itemDetailsErr) throw itemDetailsErr
+
+        for (const item of itemDetails || []) {
+          if (item.id && typeof item.id === 'string') {
+            itemOnHandMap.set(item.id, item.on_hand ?? 0)
+            itemNameMap.set(item.id, item.name || 'Item')
+          }
+        }
+      }
+
+      lastItemNameMapRef.current = itemNameMap
+
       // 3) Split into updates and inserts
       const toUpdate: Array<{ id: string; quantity: number }> = []
       const toInsert: Array<any> = []
@@ -726,31 +744,6 @@ export default function BookItemsDialog({
       }
 
       // Check availability before saving
-      // Fetch current on_hand for all items being booked from inventory_index
-      const allItemIds = new Set<string>()
-      for (const item of payload) {
-        allItemIds.add(item.item_id)
-      }
-
-      const { data: itemDetails, error: itemDetailsErr } = await supabase
-        .from('inventory_index')
-        .select('id, name, on_hand')
-        .eq('company_id', companyId)
-        .eq('is_group', false)
-        .in('id', Array.from(allItemIds))
-
-      if (itemDetailsErr) throw itemDetailsErr
-
-      // Create maps for lookup
-      const itemOnHandMap = new Map<string, number>()
-      const itemNameMap = new Map<string, string>()
-      for (const item of itemDetails) {
-        if (item.id && typeof item.id === 'string') {
-          itemOnHandMap.set(item.id, item.on_hand ?? 0)
-          itemNameMap.set(item.id, item.name || 'Item')
-        }
-      }
-
       // Get time period details for the periods we're booking
       const { data: bookingTimePeriods, error: tpDetailsErr } = await supabase
         .from('time_periods')
@@ -769,7 +762,7 @@ export default function BookItemsDialog({
       const overlappingTimePeriodIds = new Set<string>(
         bookingTimePeriods.map((tp) => tp.id),
       )
-      
+
       // Get all equipment time periods for the company to check for overlaps
       const { data: allEquipmentPeriods, error: allTpErr } = await supabase
         .from('time_periods')
@@ -787,7 +780,9 @@ export default function BookItemsDialog({
         start2: string,
         end2: string,
       ): boolean => {
-        return new Date(start1) < new Date(end2) && new Date(start2) < new Date(end1)
+        return (
+          new Date(start1) < new Date(end2) && new Date(start2) < new Date(end1)
+        )
       }
 
       // Find overlapping time periods (excluding the booking periods themselves since we already added them)
@@ -795,7 +790,7 @@ export default function BookItemsDialog({
         for (const otherPeriod of allEquipmentPeriods || []) {
           // Skip if it's one of our booking periods (already included)
           if (overlappingTimePeriodIds.has(otherPeriod.id)) continue
-          
+
           if (
             periodsOverlap(
               bookingPeriod.start_at,
@@ -810,20 +805,27 @@ export default function BookItemsDialog({
       }
 
       // Get reservations only from overlapping time periods
-      const { data: overlappingReservations, error: overlapResErr } = await supabase
-        .from('reserved_items')
-        .select('item_id, quantity, time_period_id')
-        .in('item_id', Array.from(allItemIds))
-        .in('time_period_id', Array.from(overlappingTimePeriodIds))
+      const { data: overlappingReservations, error: overlapResErr } =
+        await supabase
+          .from('reserved_items')
+          .select('item_id, quantity, time_period_id, status')
+          .in('item_id', Array.from(allItemIds))
+          .in('time_period_id', Array.from(overlappingTimePeriodIds))
 
       if (overlapResErr) throw overlapResErr
 
       // Calculate total reserved per item (only from overlapping time periods)
       // Note: This includes updated quantities from the booking periods (after updates executed above)
       const existingReservedMap = new Map<string, number>()
+      const plannedReservedMap = new Map<string, number>()
       for (const res of overlappingReservations || []) {
+        if (res.status === 'canceled') continue
         const current = existingReservedMap.get(res.item_id) ?? 0
         existingReservedMap.set(res.item_id, current + res.quantity)
+        if (res.status === 'planned') {
+          const plannedCurrent = plannedReservedMap.get(res.item_id) ?? 0
+          plannedReservedMap.set(res.item_id, plannedCurrent + res.quantity)
+        }
       }
 
       // Calculate new bookings per item (only for inserts, not updates)
@@ -834,8 +836,8 @@ export default function BookItemsDialog({
         newBookingMap.set(item.item_id, current + item.quantity)
       }
 
-      // Check for availability issues
-      const availabilityErrors: Array<string> = []
+      // Track potential conflicts as warnings (do not block booking)
+      const bookingWarnings: Array<string> = []
       for (const itemId of allItemIds) {
         const onHand = itemOnHandMap.get(itemId) ?? 0
         if (onHand > 0) {
@@ -850,20 +852,19 @@ export default function BookItemsDialog({
             const itemName = itemNameMap.get(itemId) ?? 'Item'
             const existingPart =
               existingQty > 0 ? ` (${existingQty} already booked)` : ''
-            availabilityErrors.push(
-              `${itemName}: Trying to book ${newQty}${existingPart}, but only ${onHand} available`,
+            bookingWarnings.push(
+              `${itemName}: Booking ${newQty}${existingPart}, but only ${onHand} available`,
             )
           }
         }
-      }
 
-      if (availabilityErrors.length > 0) {
-        // Throw a special error that we'll catch in onError to show in message area
-        // This prevents onSuccess from being called
-        const availabilityError = new Error('Availability issues')
-        ;(availabilityError as any).isAvailabilityError = true
-        ;(availabilityError as any).availabilityErrors = availabilityErrors
-        throw availabilityError
+        const plannedQty = plannedReservedMap.get(itemId) ?? 0
+        if (plannedQty > 0 && (newBookingMap.get(itemId) ?? 0) > 0) {
+          const itemName = itemNameMap.get(itemId) ?? 'Item'
+          bookingWarnings.push(
+            `${itemName}: ${plannedQty} already planned in overlapping period`,
+          )
+        }
       }
 
       // 5) Execute inserts
@@ -873,8 +874,11 @@ export default function BookItemsDialog({
           .insert(toInsert)
         if (insErr) throw insErr
       }
+
+      return { warnings: bookingWarnings }
     },
-    onSuccess: async () => {
+    onSuccess: async (result) => {
+      lastItemNameMapRef.current = new Map()
       await qc.invalidateQueries({ queryKey: ['jobs.equipment', jobId] })
       await qc.invalidateQueries({ queryKey: ['jobs', jobId, 'time_periods'] })
       await qc.invalidateQueries({ queryKey: ['jobs-detail', jobId] })
@@ -887,19 +891,25 @@ export default function BookItemsDialog({
       onSaved?.()
       setRows([])
       success('Success', 'Items are reserved')
+      if (result?.warnings?.length) {
+        info('Booking warnings', result.warnings.join('\n'), 6000)
+      }
     },
     onError: (e: any) => {
-      // Check if this is an availability error
-      if (e?.isAvailabilityError) {
-        // Show availability errors in message area, don't show toast, keep dialog open
-        setMessage({
-          type: 'error',
-          text: `Availability issues:\n${e.availabilityErrors.join('\n')}`,
-        })
-        return
-      }
+      const uuidRegex =
+        /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/g
+      const rawMessage = e?.hint || e?.message || 'Please try again.'
+      const itemNameMap = lastItemNameMapRef.current
+      const friendlyMessage =
+        itemNameMap.size > 0
+          ? rawMessage.replace(uuidRegex, (match) => {
+              const name = itemNameMap.get(match)
+              return name ? `${name} (${match})` : match
+            })
+          : rawMessage
+
       // For other errors, show toast
-      error('Failed to update', e?.hint || e?.message || 'Please try again.')
+      error('Failed to update', friendlyMessage)
     },
   })
 

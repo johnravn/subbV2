@@ -434,52 +434,52 @@ export default function PublicOfferPage() {
     })
   }
 
-const formatDateTimeShort = (dateString: string | null) => {
-  if (!dateString) return '—'
-  const date = new Date(dateString)
-  if (Number.isNaN(date.getTime())) return '—'
-  return date.toLocaleString('nb-NO', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-const formatDuration = (startString: string, endString: string) => {
-  const start = new Date(startString)
-  const end = new Date(endString)
-  if (
-    Number.isNaN(start.getTime()) ||
-    Number.isNaN(end.getTime()) ||
-    end.getTime() <= start.getTime()
-  )
-    return '–'
-
-  const diffMinutes = Math.max(0, (end.getTime() - start.getTime()) / 60000)
-  const totalMinutes = Math.floor(diffMinutes)
-  const days = Math.floor(totalMinutes / (60 * 24))
-  const hours = Math.floor((totalMinutes % (60 * 24)) / 60)
-  const minutes = totalMinutes % 60
-
-  const parts: string[] = []
-  if (days > 0) {
-    parts.push(`${days} day${days !== 1 ? 's' : ''}`)
-  }
-  if (hours > 0) {
-    parts.push(`${hours} hr${hours !== 1 ? 's' : ''}`)
-  }
-  if (minutes > 0 && days === 0) {
-    parts.push(`${minutes} min`)
+  const formatDateTimeShort = (dateString: string | null) => {
+    if (!dateString) return '—'
+    const date = new Date(dateString)
+    if (Number.isNaN(date.getTime())) return '—'
+    return date.toLocaleString('nb-NO', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
   }
 
-  if (parts.length === 0) {
-    return 'Less than 1 hr'
-  }
+  const formatDuration = (startString: string, endString: string) => {
+    const start = new Date(startString)
+    const end = new Date(endString)
+    if (
+      Number.isNaN(start.getTime()) ||
+      Number.isNaN(end.getTime()) ||
+      end.getTime() <= start.getTime()
+    )
+      return '–'
 
-  return parts.join(' ')
-}
+    const diffMinutes = Math.max(0, (end.getTime() - start.getTime()) / 60000)
+    const totalMinutes = Math.floor(diffMinutes)
+    const days = Math.floor(totalMinutes / (60 * 24))
+    const hours = Math.floor((totalMinutes % (60 * 24)) / 60)
+    const minutes = totalMinutes % 60
+
+    const parts: string[] = []
+    if (days > 0) {
+      parts.push(`${days} day${days !== 1 ? 's' : ''}`)
+    }
+    if (hours > 0) {
+      parts.push(`${hours} hr${hours !== 1 ? 's' : ''}`)
+    }
+    if (minutes > 0 && days === 0) {
+      parts.push(`${minutes} min`)
+    }
+
+    if (parts.length === 0) {
+      return 'Less than 1 hr'
+    }
+
+    return parts.join(' ')
+  }
 
   // Check if phone number has 8 digits (national number part)
   const has8Digits = (phone: string) => {
@@ -570,6 +570,7 @@ const formatDuration = (startString: string, endString: string) => {
   const canAccept = offer.status === 'sent'
   const isAccepted = offer.status === 'accepted'
   const isRejected = offer.status === 'rejected'
+  const isSuperseded = offer.status === 'superseded'
 
   return (
     <Box
@@ -875,13 +876,15 @@ const formatDuration = (startString: string, endString: string) => {
                               {group.items.map((item) => (
                                 <Table.Row key={item.id}>
                                   <Table.Cell>
-                                    {item.item?.name || 'Unknown Item'}
+                                    {item.group
+                                      ? `${item.group.name} (Group)`
+                                      : item.item?.name || 'Unknown Item'}
                                   </Table.Cell>
                                   <Table.Cell>
-                                    {item.item?.brand?.name || '—'}
+                                    {item.item?.brand?.name ?? '—'}
                                   </Table.Cell>
                                   <Table.Cell>
-                                    {item.item?.model || '—'}
+                                    {item.item?.model ?? '—'}
                                   </Table.Cell>
                                   <Table.Cell style={{ textAlign: 'right' }}>
                                     {item.quantity}
@@ -942,13 +945,17 @@ const formatDuration = (startString: string, endString: string) => {
                         <Table.Root variant="surface">
                           <Table.Header>
                             <Table.Row>
-                              <Table.ColumnHeaderCell>Role</Table.ColumnHeaderCell>
+                              <Table.ColumnHeaderCell>
+                                Role
+                              </Table.ColumnHeaderCell>
                               <Table.ColumnHeaderCell
                                 style={{ textAlign: 'right' }}
                               >
                                 Count
                               </Table.ColumnHeaderCell>
-                              <Table.ColumnHeaderCell>Schedule</Table.ColumnHeaderCell>
+                              <Table.ColumnHeaderCell>
+                                Schedule
+                              </Table.ColumnHeaderCell>
                               <Table.ColumnHeaderCell
                                 style={{ textAlign: 'right' }}
                               >
@@ -984,7 +991,10 @@ const formatDuration = (startString: string, endString: string) => {
                                   </Flex>
                                 </Table.Cell>
                                 <Table.Cell style={{ textAlign: 'right' }}>
-                                  {formatDuration(item.start_date, item.end_date)}
+                                  {formatDuration(
+                                    item.start_date,
+                                    item.end_date,
+                                  )}
                                 </Table.Cell>
                                 <Table.Cell style={{ textAlign: 'right' }}>
                                   {formatCurrency(item.daily_rate)}
@@ -1122,9 +1132,7 @@ const formatDuration = (startString: string, endString: string) => {
                             ))}
                             {/* Total row for transport items */}
                             <Table.Row style={{ fontWeight: 'bold' }}>
-                              <Table.Cell colSpan={4}>
-                                Total
-                              </Table.Cell>
+                              <Table.Cell colSpan={4}>Total</Table.Cell>
                               <Table.Cell style={{ textAlign: 'right' }}>
                                 {formatCurrency(transportTotal)}
                               </Table.Cell>
@@ -1204,6 +1212,24 @@ const formatDuration = (startString: string, endString: string) => {
               </Box>
 
               {/* Acceptance Section */}
+              {isSuperseded && (
+                <Box
+                  p="4"
+                  style={{
+                    background: 'var(--orange-a3)',
+                    borderRadius: 8,
+                    border: '1px solid var(--orange-a6)',
+                  }}
+                >
+                  <Heading size="4" mb="2" color="orange">
+                    Offer Expired
+                  </Heading>
+                  <Text size="2" color="gray">
+                    A newer version of this offer has been sent. Please refer to
+                    the latest version for acceptance.
+                  </Text>
+                </Box>
+              )}
               {isAccepted && (
                 <Box
                   p="4"

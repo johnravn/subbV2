@@ -1,7 +1,17 @@
 // src/features/jobs/components/tabs/MoneyTab.tsx
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Box, Card, Flex, Heading, Text } from '@radix-ui/themes'
+import {
+  Badge,
+  Box,
+  Button,
+  Card,
+  Flex,
+  Heading,
+  SegmentedControl,
+  Table,
+  Text,
+} from '@radix-ui/themes'
 import { CheckCircle, XmarkCircle, InfoCircle } from 'iconoir-react'
 import { supabase } from '@shared/api/supabase'
 import { useCompany } from '@shared/companies/CompanyProvider'
@@ -9,13 +19,48 @@ import {
   IncomeExpensesChart,
   ChartTypeSelector,
 } from '@shared/ui/components/IncomeExpensesChart'
+import { contaClient } from '@shared/api/conta/client'
+import { findContaProjectId } from '../../utils/contaProjects'
 import type { JobOffer } from '../../types'
+
+type ContaLedgerLine = {
+  id?: number
+  date?: string
+  dueDate?: string
+  description?: string
+  amount?: number
+  invoiceNo?: string
+  projectId?: number
+  bookkeepingAccountName?: string
+  supplierName?: string
+}
+
+type MoneyItemSource = 'offer' | 'crew' | 'conta'
+
+type MoneyItem = {
+  id: string
+  description: string
+  date: string | null
+  amount: number
+  source: MoneyItemSource
+  reference?: string
+}
 
 export default function MoneyTab({ jobId }: { jobId: string }) {
   const { companyId } = useCompany()
   const [chartType, setChartType] = React.useState<
     'bar' | 'line' | 'area' | 'composed'
   >('area')
+  const [listView, setListView] = React.useState<'income' | 'expenses'>('income')
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return '—'
+    return new Date(dateString).toLocaleDateString('nb-NO', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    })
+  }
 
   // Fetch accepted offers for this job
   const { data: acceptedOffers = [], isLoading } = useQuery({
@@ -30,6 +75,25 @@ export default function MoneyTab({ jobId }: { jobId: string }) {
 
       if (error) throw error
       return data as Array<JobOffer>
+    },
+  })
+
+  const { data: jobInfo } = useQuery({
+    queryKey: ['jobs', jobId, 'money', 'job-info'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('jobs')
+        .select('id, title, jobnr, start_at, end_at')
+        .eq('id', jobId)
+        .single()
+      if (error) throw error
+      return data as {
+        id: string
+        title: string
+        jobnr: number | null
+        start_at: string | null
+        end_at: string | null
+      }
     },
   })
 
@@ -51,6 +115,114 @@ export default function MoneyTab({ jobId }: { jobId: string }) {
       } | null
     },
     enabled: !!companyId,
+  })
+
+  const { data: contaProjectId } = useQuery({
+    queryKey: [
+      'conta',
+      'project',
+      accountingConfig?.accounting_organization_id,
+      jobId,
+      jobInfo?.jobnr,
+    ],
+    queryFn: async () => {
+      if (!accountingConfig?.accounting_organization_id || !jobInfo) {
+        return null
+      }
+      return findContaProjectId(accountingConfig.accounting_organization_id, {
+        jobTitle: jobInfo.title,
+        jobnr: jobInfo.jobnr,
+        jobId,
+      })
+    },
+    enabled: !!accountingConfig?.accounting_organization_id && !!jobInfo,
+  })
+
+  const jobNumberTokens = React.useMemo(() => {
+    if (!jobInfo?.jobnr) return []
+    const raw = String(jobInfo.jobnr)
+    const padded = String(jobInfo.jobnr).padStart(6, '0')
+    return [
+      raw,
+      padded,
+      `#${raw}`,
+      `#${padded}`,
+      `job ${raw}`,
+      `job ${padded}`,
+      `job #${raw}`,
+      `job #${padded}`,
+    ].map((token) => token.toLowerCase())
+  }, [jobInfo?.jobnr])
+
+  const matchesJobNumber = React.useCallback(
+    (line: ContaLedgerLine) => {
+      if (!jobNumberTokens.length) return false
+      const haystack = `${line.description || ''} ${line.invoiceNo || ''}`.toLowerCase()
+      return jobNumberTokens.some((token) => haystack.includes(token))
+    },
+    [jobNumberTokens],
+  )
+
+  const {
+    data: contaLedgerLines = [],
+    isLoading: isContaExpensesLoading,
+    refetch: refetchContaExpenses,
+  } = useQuery({
+    queryKey: [
+      'conta',
+      'job-expenses',
+      accountingConfig?.accounting_organization_id,
+      contaProjectId,
+      jobInfo?.jobnr,
+      jobInfo?.start_at,
+      jobInfo?.end_at,
+    ],
+    queryFn: async () => {
+      if (!accountingConfig?.accounting_organization_id) {
+        return [] as Array<ContaLedgerLine>
+      }
+      if (!contaProjectId && jobNumberTokens.length === 0) {
+        return [] as Array<ContaLedgerLine>
+      }
+
+      const params = new URLSearchParams({
+        includeLedgerLines: 'true',
+        includeClosedLedgerLines: 'true',
+        includeOldTransactions: 'true',
+        maxTransactionsPerPage: '200',
+      })
+
+      if (contaProjectId) {
+        params.set('projectId', String(contaProjectId))
+      }
+      if (jobInfo?.start_at) {
+        params.set('startDate', jobInfo.start_at.split('T')[0])
+      }
+      if (jobInfo?.end_at) {
+        params.set('endDate', jobInfo.end_at.split('T')[0])
+      }
+
+      const report = (await contaClient.get(
+        `/accounting/organizations/${accountingConfig.accounting_organization_id}/reports/supplier-ledger?${params.toString()}`,
+      )) as {
+        bookkeepingAccountLedgers?: Array<{
+          name?: string
+          ledgerLines?: Array<ContaLedgerLine>
+        }>
+      }
+
+      const lines = (report.bookkeepingAccountLedgers || []).flatMap((ledger) =>
+        (ledger.ledgerLines || []).map((line) => ({
+          ...line,
+          supplierName: ledger.name,
+        })),
+      )
+      if (contaProjectId) return lines
+      return lines.filter(matchesJobNumber)
+    },
+    enabled:
+      !!accountingConfig?.accounting_organization_id &&
+      (!!contaProjectId || jobNumberTokens.length > 0),
   })
 
   // Fetch company general rates
@@ -203,24 +375,62 @@ export default function MoneyTab({ jobId }: { jobId: string }) {
           description: `${booking.user_name} (${booking.role || 'unknown'})`,
           amount,
           date: booking.start_at,
+          reference: undefined,
           booking,
         }
       })
       .filter((exp): exp is NonNullable<typeof exp> => exp !== null)
   }, [crewBookings, companyRates])
 
-  // Placeholder for expenses from accounting API
-  // TODO: Implement actual expense fetching from accounting software
   const accountingExpenses = React.useMemo(() => {
-    // For now, return empty array - expenses will be fetched from accounting API
-    // when integration is complete
-    return []
-  }, [])
+    return contaLedgerLines
+      .map((line) => {
+        const amount = Number(line.amount ?? 0)
+        if (!amount) return null
+        return {
+          id: `conta-${line.id ?? `${line.description}-${line.date}`}`,
+          type: 'conta' as const,
+          description:
+            line.description ||
+            line.bookkeepingAccountName ||
+            line.supplierName ||
+            'Accounting expense',
+          amount: Math.abs(amount),
+          date: line.date || line.dueDate || null,
+          reference: line.invoiceNo || undefined,
+          line,
+        }
+      })
+      .filter((exp): exp is NonNullable<typeof exp> => exp !== null)
+  }, [contaLedgerLines])
 
   // Combine all expenses
   const expenses = React.useMemo(() => {
     return [...crewExpenses, ...accountingExpenses]
   }, [crewExpenses, accountingExpenses])
+
+  const incomeItems = React.useMemo<MoneyItem[]>(() => {
+    return acceptedOffers.map((offer) => ({
+      id: `offer-${offer.id}`,
+      description: offer.title || `Offer v${offer.version_number}`,
+      amount: offer.total_with_vat,
+      date: offer.accepted_at || null,
+      source: 'offer',
+    }))
+  }, [acceptedOffers])
+
+  const expenseItems = React.useMemo<MoneyItem[]>(() => {
+    return expenses.map((expense) => ({
+      id: expense.id,
+      description: expense.description,
+      amount: expense.amount,
+      date: expense.date || null,
+      source: expense.type === 'crew' ? 'crew' : 'conta',
+      reference: expense.reference,
+    }))
+  }, [expenses])
+
+  const visibleItems = listView === 'income' ? incomeItems : expenseItems
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('nb-NO', {
@@ -236,7 +446,11 @@ export default function MoneyTab({ jobId }: { jobId: string }) {
     0,
   )
 
-  // Calculate total expenses (placeholder - will come from accounting API)
+  const totalExpenseCount = expenses.length
+  const crewExpenseCount = crewExpenses.length
+  const contaExpenseCount = accountingExpenses.length
+
+  // Calculate total expenses
   const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0)
 
   // Calculate profit/loss
@@ -346,10 +560,10 @@ export default function MoneyTab({ jobId }: { jobId: string }) {
               {formatCurrency(totalExpenses)}
             </Heading>
             <Text size="1" color="gray">
-              {crewExpenses.length > 0
-                ? `${crewExpenses.length} crew expense${crewExpenses.length !== 1 ? 's' : ''}`
+              {totalExpenseCount > 0
+                ? `${totalExpenseCount} expense${totalExpenseCount !== 1 ? 's' : ''} (${crewExpenseCount} crew, ${contaExpenseCount} Conta)`
                 : accountingConfig?.accounting_organization_id
-                  ? 'From accounting software'
+                  ? 'No Conta expenses yet'
                   : 'No expenses yet'}
             </Text>
           </Flex>
@@ -377,94 +591,108 @@ export default function MoneyTab({ jobId }: { jobId: string }) {
         </Card>
       </Flex>
 
-      {/* Accepted Offers Breakdown */}
-      {acceptedOffers.length > 0 && (
-        <Card mb="4">
-          <Heading size="4" mb="3">
-            Accepted Offers
-          </Heading>
-          <Flex direction="column" gap="2">
-            {acceptedOffers.map((offer) => (
-              <Flex
-                key={offer.id}
-                justify="between"
-                align="center"
-                p="2"
-                style={{
-                  background: 'var(--gray-a2)',
-                  borderRadius: 6,
-                }}
-              >
-                <Flex direction="column" gap="1">
-                  <Text weight="medium">{offer.title}</Text>
-                  <Text size="1" color="gray">
-                    Accepted{' '}
-                    {offer.accepted_at
-                      ? new Date(offer.accepted_at).toLocaleDateString(
-                          'nb-NO',
-                          {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                          },
-                        )
-                      : '—'}
-                  </Text>
-                </Flex>
-                <Text size="4" weight="medium" color="green">
-                  {formatCurrency(offer.total_with_vat)}
-                </Text>
-              </Flex>
-            ))}
+      {/* Income / Expense Items */}
+      <Card mb="4">
+        <Flex justify="between" align="center" mb="3" gap="3" wrap="wrap">
+          <Heading size="4">Items</Heading>
+          <Flex align="center" gap="2" wrap="wrap">
+            {listView === 'expenses' &&
+              accountingConfig?.accounting_organization_id && (
+                <Button
+                  size="2"
+                  variant="soft"
+                  onClick={() => refetchContaExpenses()}
+                  disabled={isContaExpensesLoading}
+                >
+                  Sync Conta
+                </Button>
+              )}
+            <SegmentedControl.Root
+              value={listView}
+              onValueChange={(value) =>
+                setListView(value as 'income' | 'expenses')
+              }
+              size="2"
+            >
+              <SegmentedControl.Item value="income">
+                Income ({incomeItems.length})
+              </SegmentedControl.Item>
+              <SegmentedControl.Item value="expenses">
+                Expenses ({expenseItems.length})
+              </SegmentedControl.Item>
+            </SegmentedControl.Root>
           </Flex>
-        </Card>
-      )}
+        </Flex>
 
-      {/* Crew Expenses Breakdown */}
-      {crewExpenses.length > 0 && (
-        <Card mb="4">
-          <Heading size="4" mb="3">
-            Crew Expenses
-          </Heading>
-          <Flex direction="column" gap="2">
-            {crewExpenses.map((expense) => (
-              <Flex
-                key={expense.id}
-                justify="between"
-                align="center"
-                p="2"
-                style={{
-                  background: 'var(--gray-a2)',
-                  borderRadius: 6,
-                }}
-              >
-                <Flex direction="column" gap="1">
-                  <Text weight="medium">{expense.description}</Text>
-                  <Text size="1" color="gray">
-                    {expense.booking.rate_type === 'daily'
-                      ? `${expense.booking.rate?.toFixed(2)} kr per day`
-                      : `${expense.booking.rate?.toFixed(2)} kr per hour`}
-                    {' · '}
-                    {expense.booking.start_at && expense.booking.end_at
-                      ? new Date(expense.booking.start_at).toLocaleDateString(
-                          'nb-NO',
-                          {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                          },
-                        )
-                      : '—'}
-                  </Text>
-                </Flex>
-                <Text size="4" weight="medium" color="red">
-                  {formatCurrency(expense.amount)}
-                </Text>
-              </Flex>
-            ))}
-          </Flex>
-        </Card>
-      )}
+        {listView === 'expenses' &&
+          accountingConfig?.accounting_organization_id &&
+          !contaProjectId && (
+            <Card mb="3" style={{ background: 'var(--yellow-a2)' }}>
+              <Text size="2" color="gray">
+                {jobNumberTokens.length > 0
+                  ? 'No Conta project linked yet. Showing expenses that match the job number in invoice reference or description.'
+                  : 'No Conta project linked yet. Create a Conta invoice to link the job number, or ensure the project exists in Conta.'}
+              </Text>
+            </Card>
+          )}
+
+        {visibleItems.length === 0 ? (
+          <Text size="2" color="gray">
+            {listView === 'income'
+              ? 'No income items yet.'
+              : 'No expense items yet.'}
+          </Text>
+        ) : (
+          <Table.Root variant="surface">
+            <Table.Header>
+              <Table.Row>
+                <Table.ColumnHeaderCell>Description</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>Date</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>Reference</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>Source</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell align="right">
+                  Amount
+                </Table.ColumnHeaderCell>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              {visibleItems.map((item) => (
+                <Table.Row key={item.id}>
+                  <Table.Cell>{item.description}</Table.Cell>
+                  <Table.Cell>{formatDate(item.date)}</Table.Cell>
+                  <Table.Cell>{item.reference || '—'}</Table.Cell>
+                  <Table.Cell>
+                    <Badge
+                      color={
+                        item.source === 'offer'
+                          ? 'green'
+                          : item.source === 'crew'
+                            ? 'red'
+                            : 'blue'
+                      }
+                      variant="soft"
+                    >
+                      {item.source === 'offer'
+                        ? 'Offer'
+                        : item.source === 'crew'
+                          ? 'Crew'
+                          : 'Conta'}
+                    </Badge>
+                  </Table.Cell>
+                  <Table.Cell align="right">
+                    <Text
+                      weight="medium"
+                      color={item.source === 'offer' ? 'green' : 'red'}
+                    >
+                      {formatCurrency(item.amount)}
+                    </Text>
+                  </Table.Cell>
+                </Table.Row>
+              ))}
+            </Table.Body>
+          </Table.Root>
+        )}
+      </Card>
 
       {/* Chart */}
       {chartData.length > 0 ? (

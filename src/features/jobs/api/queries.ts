@@ -290,9 +290,9 @@ export function jobDetailQuery({ jobId }: { jobId: string }) {
         .from('jobs')
         .select(
           `
-          id, company_id, title, jobnr, description, status, start_at, end_at, archived,
+          id, company_id, title, jobnr, description, status, start_at, end_at, archived, invoice_basis,
           project_lead_user_id, customer_id, customer_user_id, customer_contact_id, job_address_id,
-          customer:customer_id ( id, name, email, phone ),
+          customer:customer_id ( id, name, email, phone, address, vat_number ),
           customer_user:customer_user_id ( user_id, display_name, email, phone ),
           project_lead:project_lead_user_id ( user_id, display_name, email ),
           customer_contact:customer_contact_id ( id, name, email, phone, title ),

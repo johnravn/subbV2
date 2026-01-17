@@ -91,4 +91,3 @@ resetWithData().catch((error) => {
   log(`❌ Error: ${error.message}`, 'red')
   process.exit(1)
 })
-

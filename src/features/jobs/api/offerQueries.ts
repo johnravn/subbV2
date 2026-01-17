@@ -53,7 +53,47 @@ export function offerDetailQuery(offerId: string) {
       // Fetch main offer
       const { data: offer, error: offerError } = await supabase
         .from('job_offers')
-        .select('*')
+        .select(
+          `
+          *,
+          job:jobs!job_offers_job_id_fkey (
+            id,
+            title,
+            customer_id,
+            customer_contact_id,
+            project_lead_user_id,
+            customer:customer_id (
+              id,
+              name,
+              email,
+              phone,
+              address,
+              logo_path
+            ),
+            customer_contact:contacts!jobs_customer_contact_id_fkey (
+              id,
+              name,
+              phone,
+              email,
+              title
+            ),
+            project_lead:profiles!jobs_project_lead_user_id_fkey (
+              user_id,
+              display_name,
+              email,
+              phone
+            )
+          ),
+          company:companies!job_offers_company_id_fkey (
+            id,
+            name,
+            address,
+            logo_light_path,
+            logo_dark_path,
+            accent_color
+          )
+        `,
+        )
         .eq('id', offerId)
         .maybeSingle()
 
@@ -81,12 +121,27 @@ export function offerDetailQuery(offerId: string) {
 
           if (itemsError) throw itemsError
 
-          // Fetch item details separately
+          // Fetch item/group details separately
           const itemIds = (items || [])
             .map((item: any) => item.item_id)
             .filter((id): id is string => id !== null && id !== undefined)
+          const groupIds = (items || [])
+            .map((item: any) => item.group_id)
+            .filter((id): id is string => id !== null && id !== undefined)
 
           const itemMap = new Map<
+            string,
+            {
+              id: string
+              name: string
+              internally_owned: boolean
+              external_owner_id: string | null
+              external_owner_name: string | null
+              brand?: { id: string; name: string } | null
+              model?: string | null
+            }
+          >()
+          const groupMap = new Map<
             string,
             {
               id: string
@@ -107,7 +162,9 @@ export function offerDetailQuery(offerId: string) {
                 name,
                 internally_owned,
                 external_owner_id,
-                external_owner:customers!items_external_owner_id_fkey ( id, name )
+                model,
+                external_owner:customers!items_external_owner_id_fkey ( id, name ),
+                brand:item_brands ( id, name )
               `,
                 )
                 .in('id', itemIds)
@@ -116,12 +173,47 @@ export function offerDetailQuery(offerId: string) {
 
             if (itemDetails) {
               itemDetails.forEach((item: any) => {
+                const brand = Array.isArray(item.brand)
+                  ? item.brand[0]
+                  : item.brand
                 itemMap.set(item.id, {
                   id: item.id,
                   name: item.name,
                   internally_owned: !!item.internally_owned,
                   external_owner_id: item.external_owner_id ?? null,
                   external_owner_name: item.external_owner?.name ?? null,
+                  brand: brand || null,
+                  model: item.model || null,
+                })
+              })
+            }
+          }
+
+          if (groupIds.length > 0) {
+            const { data: groupDetails, error: groupDetailsError } =
+              await supabase
+                .from('item_groups')
+                .select(
+                  `
+                id,
+                name,
+                internally_owned,
+                external_owner_id,
+                external_owner:customers!item_groups_external_owner_id_fkey ( id, name )
+              `,
+                )
+                .in('id', groupIds)
+
+            if (groupDetailsError) throw groupDetailsError
+
+            if (groupDetails) {
+              groupDetails.forEach((group: any) => {
+                groupMap.set(group.id, {
+                  id: group.id,
+                  name: group.name,
+                  internally_owned: !!group.internally_owned,
+                  external_owner_id: group.external_owner_id ?? null,
+                  external_owner_name: group.external_owner?.name ?? null,
                 })
               })
             }
@@ -131,6 +223,7 @@ export function offerDetailQuery(offerId: string) {
           const itemsWithDetails = (items || []).map((item: any) => ({
             ...item,
             item: item.item_id ? itemMap.get(item.item_id) || null : null,
+            group: item.group_id ? groupMap.get(item.group_id) || null : null,
           }))
 
           return {
@@ -204,13 +297,95 @@ export function offerDetailQuery(offerId: string) {
         prettySections = (sections || []) as Array<OfferPrettySection>
       }
 
-      return {
+      const offerDetail: OfferDetail = {
         ...offer,
         groups: groupsWithItems,
         crew_items: (crewItems || []) as Array<OfferCrewItem>,
         transport_items: (transportItems || []) as Array<OfferTransportItem>,
         pretty_sections: prettySections,
       } as OfferDetail
+
+      // Add customer, contact, project lead, and company info
+      const job = (offer as any).job
+      if (job) {
+        const jobData = Array.isArray(job) ? job[0] : job
+        offerDetail.job_title = jobData?.title ?? null
+
+        const customer = Array.isArray(jobData?.customer)
+          ? jobData.customer[0]
+          : jobData?.customer
+        if (customer) {
+          offerDetail.customer = {
+            id: customer.id,
+            name: customer.name,
+            email: customer.email,
+            phone: customer.phone,
+            address: customer.address,
+            logo_path: customer.logo_path,
+          }
+        }
+
+        const customerContact = Array.isArray(jobData?.customer_contact)
+          ? jobData.customer_contact[0]
+          : jobData?.customer_contact
+        if (customerContact) {
+          offerDetail.customer_contact = {
+            id: customerContact.id,
+            name: customerContact.name,
+            phone: customerContact.phone,
+            email: customerContact.email,
+          }
+        }
+
+        const projectLead = Array.isArray(jobData?.project_lead)
+          ? jobData.project_lead[0]
+          : jobData?.project_lead
+        if (projectLead) {
+          offerDetail.project_lead = {
+            user_id: projectLead.user_id,
+            display_name: projectLead.display_name,
+            email: projectLead.email,
+            phone: projectLead.phone,
+          }
+        }
+      }
+
+      const offerCompany = (offer as any).company
+      if (offerCompany) {
+        const companyData = Array.isArray(offerCompany)
+          ? offerCompany[0]
+          : offerCompany
+        if (companyData) {
+          offerDetail.company = {
+            id: companyData.id,
+            name: companyData.name,
+            address: companyData.address,
+            logo_light_path: companyData.logo_light_path ?? null,
+            logo_dark_path: companyData.logo_dark_path ?? null,
+            accent_color: companyData.accent_color ?? null,
+          }
+        }
+      }
+
+      // Add company expansion rates for transport defaults
+      const { data: expansion, error: expansionError } = await supabase
+        .from('company_expansions')
+        .select(
+          'vehicle_daily_rate, vehicle_distance_rate, vehicle_distance_increment',
+        )
+        .eq('company_id', offer.company_id)
+        .maybeSingle()
+
+      if (!expansionError && expansion) {
+        offerDetail.company_expansion = {
+          vehicle_daily_rate: expansion.vehicle_daily_rate ?? null,
+          vehicle_distance_rate: expansion.vehicle_distance_rate ?? null,
+          vehicle_distance_increment:
+            expansion.vehicle_distance_increment ?? null,
+        }
+      }
+
+      return offerDetail
     },
   })
 }
@@ -259,7 +434,8 @@ export function publicOfferQuery(accessToken: string) {
             name,
             address,
             logo_light_path,
-            logo_dark_path
+            logo_dark_path,
+            accent_color
           )
         `,
         )
@@ -364,9 +540,11 @@ export function publicOfferQuery(accessToken: string) {
 
       // Fetch item details separately to avoid PostgREST relationship ambiguity
       const allItemIds = new Set<string>()
+      const allGroupIds = new Set<string>()
       offerDetail.groups?.forEach((group: any) => {
         group.items?.forEach((item: any) => {
           if (item.item_id) allItemIds.add(item.item_id)
+          if (item.group_id) allGroupIds.add(item.group_id)
         })
       })
 
@@ -417,12 +595,53 @@ export function publicOfferQuery(accessToken: string) {
         }
       }
 
+      const groupMap = new Map<
+        string,
+        {
+          id: string
+          name: string
+          internally_owned: boolean
+          external_owner_id: string | null
+          external_owner_name: string | null
+        }
+      >()
+
+      if (allGroupIds.size > 0) {
+        const { data: groupDetails, error: groupDetailsError } = await supabase
+          .from('item_groups')
+          .select(
+            `
+            id,
+            name,
+            internally_owned,
+            external_owner_id,
+            external_owner:customers!item_groups_external_owner_id_fkey ( id, name )
+          `,
+          )
+          .in('id', Array.from(allGroupIds))
+
+        if (groupDetailsError) throw groupDetailsError
+
+        if (groupDetails) {
+          groupDetails.forEach((group: any) => {
+            groupMap.set(group.id, {
+              id: group.id,
+              name: group.name,
+              internally_owned: !!group.internally_owned,
+              external_owner_id: group.external_owner_id ?? null,
+              external_owner_name: group.external_owner?.name ?? null,
+            })
+          })
+        }
+      }
+
       // Attach item details to each equipment item
       offerDetail.groups?.forEach((group: any) => {
         if (group.items) {
           group.items = group.items.map((item: any) => ({
             ...item,
             item: item.item_id ? itemMap.get(item.item_id) || null : null,
+            group: item.group_id ? groupMap.get(item.group_id) || null : null,
           }))
         }
       })
@@ -453,9 +672,12 @@ export function publicOfferQuery(accessToken: string) {
       // Add customer info from job
       const job = offer.job
       if (job) {
-        const customer = Array.isArray(job.customer)
-          ? job.customer[0]
-          : job.customer
+        const jobData = Array.isArray(job) ? job[0] : job
+        offerDetail.job_title = jobData?.title ?? null
+
+        const customer = Array.isArray(jobData.customer)
+          ? jobData.customer[0]
+          : jobData.customer
         if (customer) {
           offerDetail.customer = {
             id: customer.id,
@@ -468,9 +690,9 @@ export function publicOfferQuery(accessToken: string) {
         }
 
         // Add customer contact
-        const customerContact = Array.isArray(job.customer_contact)
-          ? job.customer_contact[0]
-          : job.customer_contact
+        const customerContact = Array.isArray(jobData.customer_contact)
+          ? jobData.customer_contact[0]
+          : jobData.customer_contact
         if (customerContact) {
           offerDetail.customer_contact = {
             id: customerContact.id,
@@ -481,9 +703,9 @@ export function publicOfferQuery(accessToken: string) {
         }
 
         // Add project lead
-        const projectLead = Array.isArray(job.project_lead)
-          ? job.project_lead[0]
-          : job.project_lead
+        const projectLead = Array.isArray(jobData.project_lead)
+          ? jobData.project_lead[0]
+          : jobData.project_lead
         if (projectLead) {
           offerDetail.project_lead = {
             user_id: projectLead.user_id,
@@ -507,7 +729,25 @@ export function publicOfferQuery(accessToken: string) {
             address: companyData.address,
             logo_light_path: companyData.logo_light_path ?? null,
             logo_dark_path: companyData.logo_dark_path ?? null,
+            accent_color: companyData.accent_color ?? null,
           }
+        }
+      }
+
+      const { data: expansion, error: expansionError } = await supabase
+        .from('company_expansions')
+        .select(
+          'vehicle_daily_rate, vehicle_distance_rate, vehicle_distance_increment',
+        )
+        .eq('company_id', offer.company_id)
+        .maybeSingle()
+
+      if (!expansionError && expansion) {
+        offerDetail.company_expansion = {
+          vehicle_daily_rate: expansion.vehicle_daily_rate ?? null,
+          vehicle_distance_rate: expansion.vehicle_distance_rate ?? null,
+          vehicle_distance_increment:
+            expansion.vehicle_distance_increment ?? null,
         }
       }
 
@@ -574,6 +814,437 @@ export async function createOffer(payload: {
 
   if (error) throw error
   return data.id as string
+}
+
+/**
+ * Create a technical offer based on existing bookings.
+ */
+export async function createTechnicalOfferFromBookings({
+  jobId,
+  companyId,
+}: {
+  jobId: string
+  companyId: string
+}): Promise<string> {
+  const { data: job, error: jobError } = await supabase
+    .from('jobs')
+    .select('title, start_at, end_at')
+    .eq('id', jobId)
+    .single()
+
+  if (jobError) throw jobError
+
+  const jobTitle = job?.title?.trim()
+  const title = jobTitle
+    ? `Offer for ${jobTitle} (bookings)`
+    : 'Offer based on bookings'
+
+  const calculateDays = (start?: string | null, end?: string | null) => {
+    if (!start || !end) return 1
+    const startDate = new Date(start)
+    const endDate = new Date(end)
+    const diffMs = endDate.getTime() - startDate.getTime()
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+    return Math.max(1, diffDays)
+  }
+
+  const daysOfUse = calculateDays(job?.start_at ?? null, job?.end_at ?? null)
+
+  const offerId = await createOffer({
+    jobId,
+    companyId,
+    offerType: 'technical',
+    title,
+    daysOfUse,
+    discountPercent: 0,
+    vatPercent: 25,
+    showPricePerLine: true,
+  })
+
+  const { data: companyExpansion } = await supabase
+    .from('company_expansions')
+    .select(
+      'crew_rate_per_day, vehicle_daily_rate, vehicle_distance_rate, vehicle_distance_increment',
+    )
+    .eq('company_id', companyId)
+    .maybeSingle()
+
+  const { data: timePeriods, error: timePeriodError } = await supabase
+    .from('time_periods')
+    .select(
+      'id, title, start_at, end_at, category, needed_count, role_category',
+    )
+    .eq('job_id', jobId)
+    .eq('deleted', false)
+    .order('start_at', { ascending: true })
+
+  if (timePeriodError) throw timePeriodError
+
+  if (!timePeriods || timePeriods.length === 0) {
+    await recalculateOfferTotals(offerId)
+    return offerId
+  }
+
+  const timePeriodIds = timePeriods.map((period) => period.id)
+  const timePeriodMap = new Map(
+    timePeriods.map((period, index) => [
+      period.id,
+      { ...period, sort_order: index },
+    ]),
+  )
+
+  // Equipment bookings
+  const { data: equipmentBookings, error: equipmentError } = await supabase
+    .from('reserved_items')
+    .select(
+      'id, time_period_id, item_id, quantity, source_kind, source_group_id',
+    )
+    .in('time_period_id', timePeriodIds)
+
+  if (equipmentError) throw equipmentError
+
+  const equipmentDirectBookings =
+    equipmentBookings?.filter((booking) => booking.source_kind !== 'group') ??
+    []
+  const equipmentGroupBookings =
+    equipmentBookings?.filter(
+      (booking) => booking.source_kind === 'group' && booking.source_group_id,
+    ) ?? []
+
+  const equipmentItemIds =
+    equipmentDirectBookings
+      .map((booking) => booking.item_id)
+      .filter((id): id is string => !!id) ?? []
+
+  const itemInternalMap = new Map<string, boolean>()
+  if (equipmentItemIds.length > 0) {
+    const { data: items, error: itemsError } = await supabase
+      .from('items')
+      .select('id, internally_owned')
+      .in('id', equipmentItemIds)
+
+    if (itemsError) throw itemsError
+
+    if (items) {
+      for (const item of items) {
+        itemInternalMap.set(item.id, !!item.internally_owned)
+      }
+    }
+  }
+
+  const itemPriceMap = new Map<string, number>()
+  const itemCategoryMap = new Map<string, string | null>()
+  if (equipmentItemIds.length > 0) {
+    const { data: itemsWithPrice, error: itemsWithPriceError } = await supabase
+      .from('items_with_price')
+      .select('id, current_price, category_name')
+      .in('id', equipmentItemIds)
+
+    if (itemsWithPriceError) throw itemsWithPriceError
+
+    if (itemsWithPrice) {
+      for (const item of itemsWithPrice) {
+        if (!item.id) continue
+        itemPriceMap.set(item.id, item.current_price ?? 0)
+        itemCategoryMap.set(item.id, item.category_name ?? null)
+      }
+    }
+  }
+
+  const groupIds =
+    equipmentGroupBookings
+      .map((booking) => booking.source_group_id)
+      .filter((id): id is string => !!id) ?? []
+
+  const groupInfoMap = new Map<
+    string,
+    {
+      category_name: string | null
+      current_price: number
+      internally_owned: boolean
+    }
+  >()
+
+  if (groupIds.length > 0) {
+    const { data: groupInfo, error: groupInfoError } = await supabase
+      .from('inventory_index')
+      .select('id, category_name, current_price, internally_owned, is_group')
+      .in('id', groupIds)
+
+    if (groupInfoError) throw groupInfoError
+
+    for (const row of groupInfo || []) {
+      if (!row.id || !row.is_group) continue
+      groupInfoMap.set(row.id, {
+        category_name: row.category_name ?? null,
+        current_price: row.current_price ?? 0,
+        internally_owned: !!row.internally_owned,
+      })
+    }
+  }
+
+  const groupItemsMap = new Map<
+    string,
+    Array<{ item_id: string; quantity: number }>
+  >()
+  if (groupIds.length > 0) {
+    const { data: groupItems, error: groupItemsError } = await supabase
+      .from('group_items')
+      .select('group_id, item_id, quantity')
+      .in('group_id', groupIds)
+
+    if (groupItemsError) throw groupItemsError
+
+    for (const row of groupItems || []) {
+      if (!row.item_id) continue
+      const list = groupItemsMap.get(row.group_id) ?? []
+      list.push({ item_id: row.item_id, quantity: row.quantity ?? 1 })
+      groupItemsMap.set(row.group_id, list)
+    }
+  }
+
+  const groupBookingQuantities = new Map<string, Map<string, number>>()
+  for (const booking of equipmentGroupBookings) {
+    if (!booking.source_group_id || !booking.item_id) continue
+    const byItem =
+      groupBookingQuantities.get(booking.source_group_id) ?? new Map()
+    const currentQty = byItem.get(booking.item_id) ?? 0
+    byItem.set(booking.item_id, currentQty + (booking.quantity ?? 0))
+    groupBookingQuantities.set(booking.source_group_id, byItem)
+  }
+
+  const groupQuantityMap = new Map<string, number>()
+  for (const groupId of groupIds) {
+    const groupItems = groupItemsMap.get(groupId) ?? []
+    if (groupItems.length === 0) continue
+    let minRatio = Number.POSITIVE_INFINITY
+    for (const groupItem of groupItems) {
+      if (!groupItem.item_id || groupItem.quantity <= 0) continue
+      const bookedQty =
+        groupBookingQuantities.get(groupId)?.get(groupItem.item_id) ?? 0
+      const ratio = bookedQty / groupItem.quantity
+      minRatio = Math.min(minRatio, ratio)
+    }
+    const computedQty =
+      Number.isFinite(minRatio) && minRatio > 0 ? Math.floor(minRatio) : 1
+    groupQuantityMap.set(groupId, Math.max(1, computedQty))
+  }
+
+  const equipmentByCategory = new Map<
+    string,
+    { items: Map<string, number>; groups: Map<string, number> }
+  >()
+
+  const ensureCategory = (categoryName: string) => {
+    if (!equipmentByCategory.has(categoryName)) {
+      equipmentByCategory.set(categoryName, {
+        items: new Map(),
+        groups: new Map(),
+      })
+    }
+    return equipmentByCategory.get(categoryName)!
+  }
+
+  for (const booking of equipmentDirectBookings || []) {
+    if (!booking.item_id) continue
+    const categoryName = itemCategoryMap.get(booking.item_id) ?? 'Uncategorized'
+    const quantity = booking.quantity ?? 1
+    const category = ensureCategory(categoryName)
+    const currentQty = category.items.get(booking.item_id) ?? 0
+    category.items.set(booking.item_id, currentQty + quantity)
+  }
+
+  for (const groupId of groupIds) {
+    const info = groupInfoMap.get(groupId)
+    if (!info) continue
+    const categoryName = info.category_name ?? 'Uncategorized'
+    const quantity = groupQuantityMap.get(groupId) ?? 1
+    const category = ensureCategory(categoryName)
+    const currentQty = category.groups.get(groupId) ?? 0
+    category.groups.set(groupId, currentQty + quantity)
+  }
+
+  const sortedCategoryNames = Array.from(equipmentByCategory.keys()).sort(
+    (a, b) => a.localeCompare(b),
+  )
+
+  for (const [index, categoryName] of sortedCategoryNames.entries()) {
+    const category = equipmentByCategory.get(categoryName)
+    if (!category) continue
+
+    const { data: group, error: groupError } = await supabase
+      .from('offer_equipment_groups')
+      .insert({
+        offer_id: offerId,
+        group_name: categoryName,
+        sort_order: index,
+      })
+      .select('id')
+      .single()
+
+    if (groupError) throw groupError
+
+    const itemLines = Array.from(category.items.entries()).map(
+      ([itemId, quantity], itemIndex) => {
+        const unitPrice = itemPriceMap.get(itemId) ?? 0
+        return {
+          offer_group_id: group.id,
+          item_id: itemId,
+          group_id: null,
+          quantity,
+          unit_price: unitPrice,
+          total_price: unitPrice * quantity,
+          is_internal: itemInternalMap.get(itemId) ?? true,
+          sort_order: itemIndex,
+        }
+      },
+    )
+
+    const groupLines = Array.from(category.groups.entries()).map(
+      ([groupId, quantity], groupIndex) => {
+        const info = groupInfoMap.get(groupId)
+        const unitPrice = info?.current_price ?? 0
+        return {
+          offer_group_id: group.id,
+          item_id: null,
+          group_id: groupId,
+          quantity,
+          unit_price: unitPrice,
+          total_price: unitPrice * quantity,
+          is_internal: info?.internally_owned ?? true,
+          sort_order: itemLines.length + groupIndex,
+        }
+      },
+    )
+
+    const itemsToInsert = [...itemLines, ...groupLines]
+
+    if (itemsToInsert.length > 0) {
+      const { error: itemsError } = await supabase
+        .from('offer_equipment_items')
+        .insert(itemsToInsert)
+
+      if (itemsError) throw itemsError
+    }
+  }
+
+  // Crew roles (time periods with needed_count)
+  const crewPeriods = timePeriods.filter((period) => period.category === 'crew')
+  for (const [index, period] of crewPeriods.entries()) {
+    const crewCount = Math.max(0, period.needed_count ?? 0)
+    if (crewCount === 0) continue
+
+    const startDate =
+      period.start_at || job?.start_at || new Date().toISOString()
+    const endDate = period.end_at || job?.end_at || new Date().toISOString()
+    const dailyRate = companyExpansion?.crew_rate_per_day ?? 0
+    const totalPrice = dailyRate * crewCount * calculateDays(startDate, endDate)
+
+    const { error: crewInsertError } = await supabase
+      .from('offer_crew_items')
+      .insert({
+        offer_id: offerId,
+        role_title: period.title?.trim() || 'Crew',
+        role_category: period.role_category ?? null,
+        crew_count: crewCount,
+        start_date: startDate,
+        end_date: endDate,
+        daily_rate: dailyRate,
+        total_price: totalPrice,
+        sort_order: index,
+      })
+
+    if (crewInsertError) throw crewInsertError
+  }
+
+  // Transport bookings
+  const { data: transportBookings, error: transportError } = await supabase
+    .from('reserved_vehicles')
+    .select('id, time_period_id, vehicle_id')
+    .in('time_period_id', timePeriodIds)
+
+  if (transportError) throw transportError
+
+  const vehicleIds =
+    transportBookings
+      ?.map((booking) => booking.vehicle_id)
+      .filter((id): id is string => !!id) ?? []
+
+  const vehicleMap = new Map<
+    string,
+    {
+      name: string
+      vehicle_category: OfferTransportItem['vehicle_category']
+      internally_owned: boolean
+    }
+  >()
+  if (vehicleIds.length > 0) {
+    const { data: vehicles, error: vehiclesError } = await supabase
+      .from('vehicles')
+      .select('id, name, vehicle_category, internally_owned')
+      .in('id', vehicleIds)
+
+    if (vehiclesError) throw vehiclesError
+
+    if (vehicles) {
+      for (const vehicle of vehicles) {
+        vehicleMap.set(vehicle.id, {
+          name: vehicle.name,
+          vehicle_category: vehicle.vehicle_category ?? null,
+          internally_owned: !!vehicle.internally_owned,
+        })
+      }
+    }
+  }
+
+  let transportSortOrder = 0
+  for (const booking of transportBookings || []) {
+    const period = timePeriodMap.get(booking.time_period_id)
+    if (!period) continue
+    const vehicle = booking.vehicle_id
+      ? vehicleMap.get(booking.vehicle_id)
+      : null
+
+    const startDate =
+      period.start_at || job?.start_at || new Date().toISOString()
+    const endDate = period.end_at || job?.end_at || new Date().toISOString()
+    const dailyRate = companyExpansion?.vehicle_daily_rate ?? 0
+    const distanceIncrement = Math.max(
+      1,
+      companyExpansion?.vehicle_distance_increment ?? 150,
+    )
+    const distanceKm = distanceIncrement
+    const distanceRate = companyExpansion?.vehicle_distance_rate ?? 0
+    const distanceIncrements = Math.ceil(distanceKm / distanceIncrement)
+    const distanceCost =
+      distanceRate > 0 && distanceIncrements > 0
+        ? distanceRate * distanceIncrements
+        : 0
+    const totalPrice =
+      dailyRate * calculateDays(startDate, endDate) + distanceCost
+
+    const { error: transportInsertError } = await supabase
+      .from('offer_transport_items')
+      .insert({
+        offer_id: offerId,
+        vehicle_name: vehicle?.name || 'Vehicle',
+        vehicle_id: booking.vehicle_id ?? null,
+        vehicle_category: vehicle?.vehicle_category ?? null,
+        distance_km: distanceKm,
+        start_date: startDate,
+        end_date: endDate,
+        daily_rate: dailyRate,
+        total_price: totalPrice,
+        is_internal: vehicle?.internally_owned ?? true,
+        sort_order: transportSortOrder,
+      })
+
+    if (transportInsertError) throw transportInsertError
+    transportSortOrder += 1
+  }
+
+  await recalculateOfferTotals(offerId)
+  return offerId
 }
 
 /**
@@ -660,6 +1331,14 @@ export async function recalculateOfferTotals(offerId: string): Promise<void> {
  * Lock an offer (prevents further editing)
  */
 export async function lockOffer(offerId: string): Promise<void> {
+  const { data: offer, error: offerError } = await supabase
+    .from('job_offers')
+    .select('id, job_id, version_number')
+    .eq('id', offerId)
+    .single()
+
+  if (offerError) throw offerError
+
   const { error } = await supabase
     .from('job_offers')
     .update({
@@ -670,6 +1349,18 @@ export async function lockOffer(offerId: string): Promise<void> {
     .eq('id', offerId)
 
   if (error) throw error
+
+  const { error: supersedeError } = await supabase
+    .from('job_offers')
+    .update({
+      status: 'superseded',
+      locked: true,
+    })
+    .eq('job_id', offer.job_id)
+    .lt('version_number', offer.version_number)
+    .in('status', ['draft', 'sent', 'viewed'])
+
+  if (supersedeError) throw supersedeError
 }
 
 /**
@@ -679,6 +1370,38 @@ export async function acceptOffer(
   accessToken: string,
   acceptance: OfferAcceptance,
 ): Promise<void> {
+  const { data: offer, error: offerError } = await supabase
+    .from('job_offers')
+    .select('id, job_id, version_number, status')
+    .eq('access_token', accessToken)
+    .maybeSingle()
+
+  if (offerError) throw offerError
+  if (!offer) throw new Error('Offer not found')
+  if (offer.status === 'superseded') {
+    throw new Error(
+      'This offer can no longer be accepted because a newer version has been sent.',
+    )
+  }
+  if (offer.status !== 'sent') {
+    throw new Error('This offer can no longer be accepted.')
+  }
+
+  const { data: newerOffers, error: newerError } = await supabase
+    .from('job_offers')
+    .select('id')
+    .eq('job_id', offer.job_id)
+    .gt('version_number', offer.version_number)
+    .in('status', ['sent', 'viewed', 'accepted'])
+    .limit(1)
+
+  if (newerError) throw newerError
+  if (newerOffers && newerOffers.length > 0) {
+    throw new Error(
+      'This offer can no longer be accepted because a newer version has been sent.',
+    )
+  }
+
   const fullName = `${acceptance.first_name} ${acceptance.last_name}`.trim()
   const { error } = await supabase
     .from('job_offers')
@@ -796,6 +1519,7 @@ export async function duplicateOffer(offerId: string): Promise<string> {
         const itemsToInsert = group.items.map((item) => ({
           offer_group_id: newGroup.id,
           item_id: item.item_id,
+          group_id: item.group_id ?? null,
           quantity: item.quantity,
           unit_price: item.unit_price,
           total_price: item.total_price,
@@ -817,6 +1541,7 @@ export async function duplicateOffer(offerId: string): Promise<string> {
     const crewItemsToInsert = offer.crew_items.map((item) => ({
       offer_id: newOfferId,
       role_title: item.role_title,
+      role_category: item.role_category ?? null,
       crew_count: item.crew_count,
       start_date: item.start_date,
       end_date: item.end_date,
@@ -1001,19 +1726,36 @@ export async function createBookingsFromOffer(
       string | null,
       {
         ownerName: string
-        items: Array<{
-          item_id: string | null
-          quantity: number
-          is_internal: boolean
-        }>
+        items: Array<
+          | {
+              kind: 'item'
+              item_id: string
+              quantity: number
+              is_internal: boolean
+            }
+          | {
+              kind: 'group'
+              group_id: string
+              quantity: number
+              is_internal: boolean
+            }
+        >
       }
     >()
 
+    const groupIds = new Set<string>()
+
     for (const group of offer.groups) {
       for (const item of group.items) {
-        const ownerId = item.item?.external_owner_id || null
+        if (item.group_id) {
+          groupIds.add(item.group_id)
+        }
+
+        const ownerId = item.group_id
+          ? item.group?.external_owner_id || null
+          : item.item?.external_owner_id || null
         const ownerName = ownerId
-          ? `External Owner ${ownerId}` // We'll need to fetch actual owner name
+          ? `External Owner ${ownerId}` // We'll fetch actual owner name
           : 'Internal Equipment'
 
         if (!equipmentByOwner.has(ownerId)) {
@@ -1023,11 +1765,44 @@ export async function createBookingsFromOffer(
           })
         }
 
-        equipmentByOwner.get(ownerId)!.items.push({
-          item_id: item.item_id,
-          quantity: item.quantity,
-          is_internal: item.is_internal,
+        if (item.group_id) {
+          equipmentByOwner.get(ownerId)!.items.push({
+            kind: 'group',
+            group_id: item.group_id,
+            quantity: item.quantity,
+            is_internal: item.is_internal,
+          })
+        } else if (item.item_id) {
+          equipmentByOwner.get(ownerId)!.items.push({
+            kind: 'item',
+            item_id: item.item_id,
+            quantity: item.quantity,
+            is_internal: item.is_internal,
+          })
+        }
+      }
+    }
+
+    const groupItemsMap = new Map<
+      string,
+      Array<{ item_id: string; quantity: number }>
+    >()
+    if (groupIds.size > 0) {
+      const { data: groupItems, error: groupItemsError } = await supabase
+        .from('group_items')
+        .select('group_id, item_id, quantity')
+        .in('group_id', Array.from(groupIds))
+
+      if (groupItemsError) throw groupItemsError
+
+      for (const row of groupItems || []) {
+        if (!row.item_id) continue
+        const list = groupItemsMap.get(row.group_id) ?? []
+        list.push({
+          item_id: row.item_id,
+          quantity: row.quantity ?? 1,
         })
+        groupItemsMap.set(row.group_id, list)
       }
     }
 
@@ -1061,20 +1836,52 @@ export async function createBookingsFromOffer(
       )
 
       // Create reserved items
-      const reservedItems = data.items
-        .filter((item) => item.item_id !== null)
-        .map((item) => ({
-          time_period_id: timePeriodId,
-          item_id: item.item_id!,
-          quantity: item.quantity,
-          source_kind: 'direct' as const,
-          source_group_id: null,
-          forced: false,
-          start_at: null,
-          end_at: null,
-          external_status: item.is_internal ? null : ('planned' as const),
-          external_note: null,
-        }))
+      const reservedItems: Array<{
+        time_period_id: string
+        item_id: string
+        quantity: number
+        source_kind: 'direct' | 'group'
+        source_group_id: string | null
+        forced: boolean
+        start_at: null
+        end_at: null
+        external_status: 'planned' | null
+        external_note: null
+      }> = []
+
+      for (const entry of data.items) {
+        if (entry.kind === 'item') {
+          reservedItems.push({
+            time_period_id: timePeriodId,
+            item_id: entry.item_id,
+            quantity: entry.quantity,
+            source_kind: 'direct',
+            source_group_id: null,
+            forced: false,
+            start_at: null,
+            end_at: null,
+            external_status: entry.is_internal ? null : 'planned',
+            external_note: null,
+          })
+          continue
+        }
+
+        const groupItems = groupItemsMap.get(entry.group_id) ?? []
+        for (const groupItem of groupItems) {
+          reservedItems.push({
+            time_period_id: timePeriodId,
+            item_id: groupItem.item_id,
+            quantity: groupItem.quantity * entry.quantity,
+            source_kind: 'group',
+            source_group_id: entry.group_id,
+            forced: false,
+            start_at: null,
+            end_at: null,
+            external_status: entry.is_internal ? null : 'planned',
+            external_note: null,
+          })
+        }
+      }
 
       if (reservedItems.length > 0) {
         const { error: itemsError } = await supabase
@@ -1093,6 +1900,7 @@ export async function createBookingsFromOffer(
       start_at: string
       end_at: string
       needed_count: number
+      role_category?: string | null
     }
 
     const crewAggregates = new Map<string, CrewAggregate>()
@@ -1106,12 +1914,16 @@ export async function createBookingsFromOffer(
       const existing = crewAggregates.get(key)
       if (existing) {
         existing.needed_count += crewItem.crew_count
+        if (!existing.role_category && crewItem.role_category) {
+          existing.role_category = crewItem.role_category
+        }
       } else {
         crewAggregates.set(key, {
           title: roleTitle,
           start_at: startAt,
           end_at: endAt,
           needed_count: crewItem.crew_count,
+          role_category: crewItem.role_category ?? null,
         })
       }
     }
@@ -1137,6 +1949,7 @@ export async function createBookingsFromOffer(
             deleted: false,
             reserved_by_user_id: userId,
             company_id: companyId,
+            role_category: aggregate.role_category ?? null,
           })
           .eq('id', existingPeriod.id)
 
@@ -1154,6 +1967,7 @@ export async function createBookingsFromOffer(
             needed_count: aggregate.needed_count,
             reserved_by_user_id: userId,
             deleted: false,
+            role_category: aggregate.role_category ?? null,
           })
 
         if (insertError) throw insertError
@@ -1262,7 +2076,7 @@ export async function createBookingsFromOffer(
             internally_owned: transportItem.is_internal,
             external_owner_id: transportItem.is_internal
               ? null
-              : transportItem.vehicle?.external_owner_id ?? null,
+              : (transportItem.vehicle?.external_owner_id ?? null),
             vehicle_category: category,
           }
         }
@@ -1272,10 +2086,12 @@ export async function createBookingsFromOffer(
         )
 
         const internalMatch = matches.find(
-          (vehicle) => vehicle.internally_owned && !usedVehicleIds.has(vehicle.id),
+          (vehicle) =>
+            vehicle.internally_owned && !usedVehicleIds.has(vehicle.id),
         )
         const externalMatch = matches.find(
-          (vehicle) => !vehicle.internally_owned && !usedVehicleIds.has(vehicle.id),
+          (vehicle) =>
+            !vehicle.internally_owned && !usedVehicleIds.has(vehicle.id),
         )
 
         chosenVehicle = internalMatch ?? externalMatch ?? undefined
@@ -1331,6 +2147,236 @@ export async function createBookingsFromOffer(
       }
     }
   }
+}
+
+async function getEquipmentConflictWarningsFromOffer(
+  offer: OfferDetail,
+  companyId: string,
+  defaultStart: string,
+  defaultEnd: string,
+): Promise<Array<string>> {
+  if (!offer.groups || offer.groups.length === 0) return []
+
+  const groupIds = new Set<string>()
+  const groupEntries: Array<{ group_id: string; quantity: number }> = []
+  const itemQuantityMap = new Map<string, number>()
+
+  for (const group of offer.groups) {
+    for (const item of group.items) {
+      if (item.group_id) {
+        groupIds.add(item.group_id)
+        groupEntries.push({ group_id: item.group_id, quantity: item.quantity })
+        continue
+      }
+      if (item.item_id) {
+        const current = itemQuantityMap.get(item.item_id) ?? 0
+        itemQuantityMap.set(item.item_id, current + item.quantity)
+      }
+    }
+  }
+
+  if (groupIds.size > 0) {
+    const { data: groupItems, error: groupItemsError } = await supabase
+      .from('group_items')
+      .select('group_id, item_id, quantity')
+      .in('group_id', Array.from(groupIds))
+
+    if (groupItemsError) throw groupItemsError
+
+    const groupItemsMap = new Map<
+      string,
+      Array<{ item_id: string; quantity: number }>
+    >()
+    for (const row of groupItems || []) {
+      if (!row.item_id) continue
+      const list = groupItemsMap.get(row.group_id) ?? []
+      list.push({
+        item_id: row.item_id,
+        quantity: row.quantity ?? 1,
+      })
+      groupItemsMap.set(row.group_id, list)
+    }
+
+    for (const entry of groupEntries) {
+      const members = groupItemsMap.get(entry.group_id) ?? []
+      for (const member of members) {
+        const current = itemQuantityMap.get(member.item_id) ?? 0
+        itemQuantityMap.set(
+          member.item_id,
+          current + member.quantity * entry.quantity,
+        )
+      }
+    }
+  }
+
+  if (itemQuantityMap.size === 0) return []
+
+  const allItemIds = Array.from(itemQuantityMap.keys())
+  const { data: inventoryRows, error: inventoryErr } = await supabase
+    .from('inventory_index')
+    .select('id, name, on_hand')
+    .eq('company_id', companyId)
+    .eq('is_group', false)
+    .in('id', allItemIds)
+
+  if (inventoryErr) throw inventoryErr
+
+  const itemNameMap = new Map<string, string>()
+  const itemOnHandMap = new Map<string, number>()
+  for (const row of inventoryRows || []) {
+    if (!row.id) continue
+    itemNameMap.set(row.id, row.name || 'Item')
+    itemOnHandMap.set(row.id, row.on_hand ?? 0)
+  }
+
+  const { data: equipmentPeriods, error: periodsErr } = await supabase
+    .from('time_periods')
+    .select('id, start_at, end_at, job_id')
+    .eq('company_id', companyId)
+    .eq('category', 'equipment')
+    .eq('deleted', false)
+
+  if (periodsErr) throw periodsErr
+
+  const periodsOverlap = (
+    start1: string,
+    end1: string,
+    start2: string,
+    end2: string,
+  ): boolean => {
+    return (
+      new Date(start1) < new Date(end2) && new Date(start2) < new Date(end1)
+    )
+  }
+
+  const overlappingPeriodIds = (equipmentPeriods || [])
+    .filter(
+      (period) =>
+        period.job_id !== offer.job_id &&
+        periodsOverlap(
+          defaultStart,
+          defaultEnd,
+          period.start_at,
+          period.end_at,
+        ),
+    )
+    .map((period) => period.id)
+
+  if (overlappingPeriodIds.length === 0) return []
+
+  const { data: reservations, error: reservationsErr } = await supabase
+    .from('reserved_items')
+    .select('item_id, quantity, status, time_period_id')
+    .in('item_id', allItemIds)
+    .in('time_period_id', overlappingPeriodIds)
+
+  if (reservationsErr) throw reservationsErr
+
+  const existingReservedMap = new Map<string, number>()
+  const plannedReservedMap = new Map<string, number>()
+  for (const res of reservations || []) {
+    if (res.status === 'canceled') continue
+    const current = existingReservedMap.get(res.item_id) ?? 0
+    existingReservedMap.set(res.item_id, current + res.quantity)
+    if (res.status === 'planned') {
+      const plannedCurrent = plannedReservedMap.get(res.item_id) ?? 0
+      plannedReservedMap.set(res.item_id, plannedCurrent + res.quantity)
+    }
+  }
+
+  const warnings: Array<string> = []
+  for (const [itemId, newQty] of itemQuantityMap.entries()) {
+    const itemName = itemNameMap.get(itemId) ?? 'Item'
+    const plannedQty = plannedReservedMap.get(itemId) ?? 0
+    if (plannedQty > 0) {
+      warnings.push(
+        `${itemName}: ${plannedQty} already planned in overlapping period`,
+      )
+    }
+
+    const onHand = itemOnHandMap.get(itemId) ?? 0
+    if (onHand > 0) {
+      const existingQty = existingReservedMap.get(itemId) ?? 0
+      const finalTotal = existingQty + newQty
+      if (finalTotal > onHand) {
+        warnings.push(
+          `${itemName}: total booked ${finalTotal} exceeds ${onHand} on hand`,
+        )
+      }
+    }
+  }
+
+  return warnings
+}
+
+/**
+ * Sync bookings to match the offer.
+ * Clears existing equipment/crew/transport bookings for the job
+ * and recreates them from the offer.
+ */
+export async function syncBookingsFromOffer(
+  offerId: string,
+  userId: string,
+): Promise<Array<string>> {
+  const offer = await offerDetailQuery(offerId).queryFn()
+  if (!offer) throw new Error('Offer not found')
+
+  const { data: job, error: jobError } = await supabase
+    .from('jobs')
+    .select('id, start_at, end_at, company_id')
+    .eq('id', offer.job_id)
+    .single()
+
+  if (jobError) throw jobError
+  if (!job) throw new Error('Job not found')
+
+  const defaultStart = job.start_at || new Date().toISOString()
+  const defaultEnd = job.end_at || new Date().toISOString()
+  const warnings = await getEquipmentConflictWarningsFromOffer(
+    offer,
+    job.company_id,
+    defaultStart,
+    defaultEnd,
+  )
+
+  const { data: timePeriods, error: timePeriodsError } = await supabase
+    .from('time_periods')
+    .select('id')
+    .eq('job_id', offer.job_id)
+    .in('category', ['equipment', 'crew', 'transport'])
+
+  if (timePeriodsError) throw timePeriodsError
+
+  const timePeriodIds = (timePeriods || []).map((period) => period.id)
+
+  if (timePeriodIds.length > 0) {
+    const { error: itemsError } = await supabase
+      .from('reserved_items')
+      .delete()
+      .in('time_period_id', timePeriodIds)
+    if (itemsError) throw itemsError
+
+    const { error: crewError } = await supabase
+      .from('reserved_crew')
+      .delete()
+      .in('time_period_id', timePeriodIds)
+    if (crewError) throw crewError
+
+    const { error: vehiclesError } = await supabase
+      .from('reserved_vehicles')
+      .delete()
+      .in('time_period_id', timePeriodIds)
+    if (vehiclesError) throw vehiclesError
+
+    const { error: periodsError } = await supabase
+      .from('time_periods')
+      .delete()
+      .in('id', timePeriodIds)
+    if (periodsError) throw periodsError
+  }
+
+  await createBookingsFromOffer(offerId, userId)
+  return warnings
 }
 
 /**

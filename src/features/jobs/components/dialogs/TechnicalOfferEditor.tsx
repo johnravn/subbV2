@@ -66,10 +66,18 @@ type LocalEquipmentGroup = {
 type LocalEquipmentItem = {
   id: string // temp ID for new items
   item_id: string | null
+  group_id: string | null
   quantity: number
   unit_price: number
   is_internal: boolean
   sort_order: number
+  group_items?: Array<{
+    id: string
+    name: string
+    brand_name: string | null
+    model: string | null
+    quantity: number
+  }>
   item?: {
     id: string
     name: string
@@ -78,6 +86,13 @@ type LocalEquipmentItem = {
     external_owner_name?: string | null
     brand?: { id: string; name: string } | null
     model?: string | null
+  } | null
+  group?: {
+    id: string
+    name: string
+    externally_owned?: boolean | null
+    external_owner_id?: UUID | null
+    external_owner_name?: string | null
   } | null
 }
 
@@ -402,25 +417,41 @@ export default function TechnicalOfferEditor({
           id: group.id,
           group_name: group.group_name,
           sort_order: group.sort_order,
-          items: group.items.map((item) => ({
-            id: item.id,
-            item_id: item.item_id,
-            quantity: item.quantity,
-            unit_price: item.unit_price,
-            is_internal: item.is_internal,
-            sort_order: item.sort_order,
-            item: item.item
-              ? {
-                  id: item.item.id,
-                  name: item.item.name,
-                  externally_owned: !(item.item as any).internally_owned,
-                  external_owner_id:
-                    (item.item as any).external_owner_id ?? null,
-                  external_owner_name:
-                    (item.item as any).external_owner?.name ?? null,
-                }
-              : null,
-          })),
+          items: group.items.map((item) => {
+            const rawItem = item.item as any
+            const rawBrand = rawItem?.brand
+            const brand = Array.isArray(rawBrand) ? rawBrand[0] : rawBrand
+            const rawGroup = (item as any).group
+            return {
+              id: item.id,
+              item_id: item.item_id,
+              group_id: item.group_id ?? null,
+              quantity: item.quantity,
+              unit_price: item.unit_price,
+              is_internal: item.is_internal,
+              sort_order: item.sort_order,
+              item: rawItem
+                ? {
+                    id: rawItem.id,
+                    name: rawItem.name,
+                    externally_owned: !rawItem.internally_owned,
+                    external_owner_id: rawItem.external_owner_id ?? null,
+                    external_owner_name: rawItem.external_owner?.name ?? null,
+                    brand: brand ?? null,
+                    model: rawItem.model ?? null,
+                  }
+                : null,
+              group: rawGroup
+                ? {
+                    id: rawGroup.id,
+                    name: rawGroup.name,
+                    externally_owned: !rawGroup.internally_owned,
+                    external_owner_id: rawGroup.external_owner_id ?? null,
+                    external_owner_name: rawGroup.external_owner?.name ?? null,
+                  }
+                : null,
+            }
+          }),
         })) || []
       setEquipmentGroups(groups)
 
@@ -466,7 +497,7 @@ export default function TechnicalOfferEditor({
             hours_per_day: billingType === 'hourly' ? baseHoursPerDay : null,
             billing_type: billingType,
             sort_order: item.sort_order,
-            role_category: null, // Will be derived or set by user
+            role_category: rawItem?.role_category ?? null,
           }
         }) || []
       setCrewItems(crew)
@@ -539,12 +570,14 @@ export default function TechnicalOfferEditor({
           id: item.id,
           offer_group_id: group.id,
           item_id: item.item_id,
+          group_id: item.group_id ?? null,
           quantity: item.quantity,
           unit_price: item.unit_price,
           total_price: item.unit_price * item.quantity,
           is_internal: item.is_internal,
           sort_order: item.sort_order,
           item: item.item,
+          group: item.group ?? undefined,
         })),
     )
 
@@ -552,6 +585,7 @@ export default function TechnicalOfferEditor({
       id: item.id,
       offer_id: offerId || '',
       role_title: item.role_title,
+      role_category: item.role_category ?? null,
       crew_count: item.crew_count,
       start_date: item.start_date,
       end_date: item.end_date,
@@ -755,6 +789,7 @@ export default function TechnicalOfferEditor({
                 id: item.id,
                 offer_group_id: groupId,
                 item_id: item.item_id,
+                group_id: item.group_id ?? null,
                 quantity: item.quantity,
                 unit_price: item.unit_price,
                 total_price: item.unit_price * item.quantity,
@@ -770,6 +805,7 @@ export default function TechnicalOfferEditor({
               .insert({
                 offer_group_id: groupId,
                 item_id: item.item_id,
+                group_id: item.group_id ?? null,
                 quantity: item.quantity,
                 unit_price: item.unit_price,
                 total_price: item.unit_price * item.quantity,
@@ -790,7 +826,16 @@ export default function TechnicalOfferEditor({
             new Date(item.start_date).getTime()) /
             (1000 * 60 * 60 * 24),
         )
-        const totalPrice = item.daily_rate * item.crew_count * Math.max(1, days)
+        const safeDays = Math.max(1, days)
+        let totalPrice = item.daily_rate * item.crew_count * safeDays
+        if (item.billing_type === 'hourly' && item.hourly_rate !== null) {
+          const hoursPerDay =
+            item.hours_per_day ??
+            calculateHoursPerDay(item.start_date, item.end_date) ??
+            0
+          totalPrice =
+            item.hourly_rate * hoursPerDay * item.crew_count * safeDays
+        }
 
         if (isExistingItem) {
           const { error: itemErr } = await supabase
@@ -799,10 +844,16 @@ export default function TechnicalOfferEditor({
               id: item.id,
               offer_id: workingOfferId,
               role_title: item.role_title,
+              role_category: item.role_category ?? null,
               crew_count: item.crew_count,
               start_date: item.start_date,
               end_date: item.end_date,
               daily_rate: item.daily_rate,
+              hourly_rate:
+                item.billing_type === 'hourly' ? item.hourly_rate : null,
+              hours_per_day:
+                item.billing_type === 'hourly' ? item.hours_per_day : null,
+              billing_type: item.billing_type,
               total_price: totalPrice,
               sort_order: item.sort_order,
             })
@@ -814,10 +865,16 @@ export default function TechnicalOfferEditor({
             .insert({
               offer_id: workingOfferId,
               role_title: item.role_title,
+              role_category: item.role_category ?? null,
               crew_count: item.crew_count,
               start_date: item.start_date,
               end_date: item.end_date,
               daily_rate: item.daily_rate,
+              hourly_rate:
+                item.billing_type === 'hourly' ? item.hourly_rate : null,
+              hours_per_day:
+                item.billing_type === 'hourly' ? item.hours_per_day : null,
+              billing_type: item.billing_type,
               total_price: totalPrice,
               sort_order: item.sort_order,
             })
@@ -1306,6 +1363,8 @@ function ItemSearchField({
   searchResults: Array<{
     id: string
     name: string
+    is_group: boolean
+    on_hand: number | null
     price: number | null
     internally_owned: boolean
     external_owner_name: string | null
@@ -1354,7 +1413,7 @@ function ItemSearchField({
   return (
     <Box mb="3" ref={containerRef} style={{ position: 'relative' }}>
       <TextField.Root
-        placeholder="Search items to add..."
+        placeholder="Search items or groups to add..."
         value={searchTerm}
         onChange={(e) => onSearchChange(e.target.value)}
       />
@@ -1392,17 +1451,30 @@ function ItemSearchField({
               }}
             >
               <Flex justify="between" align="center" gap="2">
-                <Flex align="center" gap="2" style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={{ flex: 1, minWidth: 0 }}>{item.name}</Text>
-                  {item.internally_owned ? (
-                    <Badge size="1" variant="soft" color="indigo">
-                      Internal
-                    </Badge>
-                  ) : (
-                    <Badge size="1" variant="soft" color="amber">
-                      {item.external_owner_name ?? 'External'}
-                    </Badge>
-                  )}
+                <Flex
+                  direction="column"
+                  gap="1"
+                  style={{ flex: 1, minWidth: 0 }}
+                >
+                  <Flex align="center" gap="2" style={{ minWidth: 0 }}>
+                    <Text style={{ flex: 1, minWidth: 0 }}>{item.name}</Text>
+                    {item.internally_owned ? (
+                      <Badge size="1" variant="soft" color="indigo">
+                        Internal
+                      </Badge>
+                    ) : (
+                      <Badge size="1" variant="soft" color="amber">
+                        {item.external_owner_name ?? 'External'}
+                      </Badge>
+                    )}
+                  </Flex>
+                  <Text size="1" color="gray">
+                    {item.is_group
+                      ? `Group | Qty: ${item.on_hand ?? 'N/A'}`
+                      : `Brand: ${item.brand_name ?? 'N/A'} | Model: ${
+                          item.model ?? 'N/A'
+                        } | Qty: ${item.on_hand ?? 'N/A'}`}
+                  </Text>
                 </Flex>
                 {item.price !== null && (
                   <Text size="2" color="gray" style={{ flexShrink: 0 }}>
@@ -1445,6 +1517,8 @@ function EquipmentSection({
     Array<{
       id: string
       name: string
+      is_group: boolean
+      on_hand: number | null
       price: number | null
       internally_owned: boolean
       external_owner_name: string | null
@@ -1452,8 +1526,28 @@ function EquipmentSection({
       model: string | null
     }>
   >([])
+  const groupItemsCacheRef = React.useRef<
+    Map<
+      string,
+      Array<{
+        id: string
+        name: string
+        brand_name: string | null
+        model: string | null
+        quantity: number
+      }>
+    >
+  >(new Map())
+  const groupsRef = React.useRef(groups)
+  const [expandedGroupItems, setExpandedGroupItems] = React.useState<
+    Set<string>
+  >(new Set())
 
   const groupNameSuggestions = ['Audio', 'Lights', 'Rigging', 'AV', 'General']
+
+  React.useEffect(() => {
+    groupsRef.current = groups
+  }, [groups])
 
   // Get search term for a specific group
   const getSearchTerm = (groupId: string) => {
@@ -1477,21 +1571,24 @@ function EquipmentSection({
       }
 
       const { data, error } = await supabase
-        .from('items')
+        .from('inventory_index')
         .select(
           `
           id,
           name,
+          is_group,
+          on_hand,
+          current_price,
           internally_owned,
-          external_owner_id,
-          model,
-          brand:item_brands ( id, name ),
-          external_owner:customers!items_external_owner_id_fkey ( id, name )
+          external_owner_name,
+          brand_name,
+          model
         `,
         )
         .eq('company_id', companyId)
         .eq('active', true)
         .or('deleted.is.null,deleted.eq.false')
+        .or('is_group.eq.true,allow_individual_booking.eq.true')
         .ilike('name', `%${term}%`)
         .limit(20)
 
@@ -1500,34 +1597,17 @@ function EquipmentSection({
         return
       }
 
-      const ids = data.map((r: any) => r.id)
-      let prices: Record<string, number | null> = {}
-      if (ids.length) {
-        const { data: cp } = await supabase
-          .from('item_current_price')
-          .select('item_id, current_price')
-          .in('item_id', ids)
-
-        if (cp) {
-          prices = cp.reduce((acc: Record<string, number | null>, r) => {
-            if (r.item_id != null) {
-              acc[r.item_id] = r.current_price
-            }
-            return acc
-          }, {})
-        }
-      }
-
       setSearchResults(
         data.map((r: any) => {
-          const brand = Array.isArray(r.brand) ? r.brand[0] : r.brand
           return {
             id: r.id,
             name: r.name,
-            price: r.id ? (prices[r.id] ?? null) : null,
+            is_group: !!r.is_group,
+            on_hand: r.on_hand != null ? Number(r.on_hand) : null,
+            price: r.current_price ?? null,
             internally_owned: !!r.internally_owned,
-            external_owner_name: r.external_owner?.name ?? null,
-            brand_name: brand?.name ?? null,
+            external_owner_name: r.external_owner_name ?? null,
+            brand_name: r.brand_name ?? null,
             model: r.model ?? null,
           }
         }),
@@ -1568,14 +1648,17 @@ function EquipmentSection({
     if (!group) return
 
     const selectedItem = searchResults.find((r) => r.id === itemId)
+    if (!selectedItem) return
+    const isGroup = selectedItem.is_group
     const newItem: LocalEquipmentItem = {
       id: `temp-${Date.now()}-${Math.random()}`,
-      item_id: itemId || null,
+      item_id: isGroup ? null : itemId || null,
+      group_id: isGroup ? itemId || null : null,
       quantity: 1,
       unit_price: selectedItem?.price || 0,
       is_internal: selectedItem?.internally_owned ?? true,
       sort_order: group.items.length,
-      item: selectedItem
+      item: !isGroup
         ? {
             id: selectedItem.id,
             name: selectedItem.name,
@@ -1592,6 +1675,15 @@ function EquipmentSection({
             model: selectedItem.model ?? null,
           }
         : null,
+      group: isGroup
+        ? {
+            id: selectedItem.id,
+            name: selectedItem.name,
+            externally_owned: !selectedItem.internally_owned,
+            external_owner_id: null,
+            external_owner_name: selectedItem.external_owner_name,
+          }
+        : null,
     }
 
     updateGroup(groupId, {
@@ -1600,6 +1692,10 @@ function EquipmentSection({
     setSearchTerm(groupId, '')
     setActiveSearchGroupId(null)
     setSearchResults([])
+
+    if (isGroup && itemId) {
+      void loadGroupItems(itemId, groupId, newItem.id)
+    }
   }
 
   // Derive active search term for dependency tracking
@@ -1650,6 +1746,108 @@ function EquipmentSection({
       ),
     })
   }
+
+  const applyGroupItems = (
+    groupId: string,
+    groupItemId: string,
+    groupItems: Array<{
+      id: string
+      name: string
+      brand_name: string | null
+      model: string | null
+      quantity: number
+    }>,
+  ) => {
+    const currentGroups = groupsRef.current
+    const group = currentGroups.find((g) => g.id === groupId)
+    if (!group) return
+
+    onGroupsChange(
+      currentGroups.map((g) =>
+        g.id !== groupId
+          ? g
+          : {
+              ...g,
+              items: g.items.map((item) =>
+                item.id === groupItemId
+                  ? { ...item, group_items: groupItems }
+                  : item,
+              ),
+            },
+      ),
+    )
+  }
+
+  const loadGroupItems = React.useCallback(
+    async (groupId: string, targetGroupId: string, groupItemId: string) => {
+      const cached = groupItemsCacheRef.current.get(groupId)
+      if (cached) {
+        applyGroupItems(targetGroupId, groupItemId, cached)
+        return
+      }
+
+      const { data, error } = await supabase
+        .from('group_items')
+        .select(
+          `
+          item_id,
+          quantity,
+          item:items (
+            id,
+            name,
+            model,
+            brand:item_brands ( id, name )
+          )
+        `,
+        )
+        .eq('group_id', groupId)
+
+      if (error) {
+        console.error('Failed to load group items:', error)
+        return
+      }
+
+      const groupItems =
+        data?.map((row: any) => {
+          const rawItem = Array.isArray(row.item) ? row.item[0] : row.item
+          const rawBrand = rawItem?.brand
+          const brand = Array.isArray(rawBrand) ? rawBrand[0] : rawBrand
+          return {
+            id: rawItem?.id ?? row.item_id,
+            name: rawItem?.name ?? 'Unknown item',
+            brand_name: brand?.name ?? null,
+            model: rawItem?.model ?? null,
+            quantity: row.quantity ?? 1,
+          }
+        }) ?? []
+
+      groupItemsCacheRef.current.set(groupId, groupItems)
+      applyGroupItems(targetGroupId, groupItemId, groupItems)
+    },
+    [],
+  )
+
+  const toggleGroupItems = (itemId: string) => {
+    setExpandedGroupItems((prev) => {
+      const next = new Set(prev)
+      if (next.has(itemId)) {
+        next.delete(itemId)
+      } else {
+        next.add(itemId)
+      }
+      return next
+    })
+  }
+
+  React.useEffect(() => {
+    for (const group of groups) {
+      for (const item of group.items) {
+        if (item.group_id && !item.group_items) {
+          void loadGroupItems(item.group_id, group.id, item.id)
+        }
+      }
+    }
+  }, [groups, loadGroupItems])
 
   const deleteItem = (groupId: string, itemId: string) => {
     const group = groups.find((g) => g.id === groupId)
@@ -1831,95 +2029,194 @@ function EquipmentSection({
                           </Table.Row>
                         </Table.Header>
                         <Table.Body>
-                          {group.items.map((item) => (
-                            <Table.Row key={item.id}>
-                              <Table.Cell>
-                                <Flex align="center" gap="2" wrap="wrap">
-                                  <Text>{item.item?.name || '—'}</Text>
-                                  {item.item?.externally_owned ? (
-                                    <Badge
-                                      size="1"
-                                      variant="soft"
-                                      color="amber"
-                                    >
-                                      {item.item?.external_owner_name ??
-                                        'External'}
-                                    </Badge>
-                                  ) : (
-                                    <Badge
-                                      size="1"
-                                      variant="soft"
-                                      color="indigo"
-                                    >
-                                      Internal
-                                    </Badge>
+                          {group.items.map((item) => {
+                            const isGroupExpanded = expandedGroupItems.has(
+                              item.id,
+                            )
+                            return (
+                              <React.Fragment key={item.id}>
+                                <Table.Row>
+                                  <Table.Cell>
+                                    <Flex align="center" gap="2" wrap="wrap">
+                                      {item.group && (
+                                        <IconButton
+                                          variant="ghost"
+                                          size="1"
+                                          onClick={() =>
+                                            toggleGroupItems(item.id)
+                                          }
+                                          style={{
+                                            width: 20,
+                                            height: 20,
+                                            padding: 0,
+                                          }}
+                                        >
+                                          {isGroupExpanded ? (
+                                            <NavArrowDown
+                                              width={12}
+                                              height={12}
+                                            />
+                                          ) : (
+                                            <NavArrowRight
+                                              width={12}
+                                              height={12}
+                                            />
+                                          )}
+                                        </IconButton>
+                                      )}
+                                      <Text>
+                                        {item.item?.name ||
+                                          item.group?.name ||
+                                          '—'}
+                                      </Text>
+                                      {item.group ? (
+                                        <Badge
+                                          size="1"
+                                          variant="soft"
+                                          color="gray"
+                                        >
+                                          Group
+                                        </Badge>
+                                      ) : null}
+                                      {item.group?.externally_owned ||
+                                      item.item?.externally_owned ? (
+                                        <Badge
+                                          size="1"
+                                          variant="soft"
+                                          color="amber"
+                                        >
+                                          {item.group?.external_owner_name ??
+                                            item.item?.external_owner_name ??
+                                            'External'}
+                                        </Badge>
+                                      ) : (
+                                        <Badge
+                                          size="1"
+                                          variant="soft"
+                                          color="indigo"
+                                        >
+                                          Internal
+                                        </Badge>
+                                      )}
+                                    </Flex>
+                                  </Table.Cell>
+                                  <Table.Cell>
+                                    <Text>{item.item?.brand?.name ?? '—'}</Text>
+                                  </Table.Cell>
+                                  <Table.Cell>
+                                    <Text>{item.item?.model ?? '—'}</Text>
+                                  </Table.Cell>
+                                  <Table.Cell>
+                                    <TextField.Root
+                                      type="number"
+                                      min="1"
+                                      value={String(item.quantity)}
+                                      onChange={(e) =>
+                                        updateItem(group.id, item.id, {
+                                          quantity: Math.max(
+                                            1,
+                                            Number(e.target.value) || 1,
+                                          ),
+                                        })
+                                      }
+                                      style={{ width: 80 }}
+                                      readOnly={readOnly}
+                                    />
+                                  </Table.Cell>
+                                  <Table.Cell>
+                                    <TextField.Root
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={String(item.unit_price)}
+                                      onChange={(e) =>
+                                        updateItem(group.id, item.id, {
+                                          unit_price: Math.max(
+                                            0,
+                                            Number(e.target.value) || 0,
+                                          ),
+                                        })
+                                      }
+                                      style={{ width: 120 }}
+                                      readOnly={readOnly}
+                                    />
+                                  </Table.Cell>
+                                  <Table.Cell>
+                                    <Text>
+                                      {formatCurrency(
+                                        item.unit_price * item.quantity,
+                                      )}
+                                    </Text>
+                                  </Table.Cell>
+                                  {!readOnly && (
+                                    <Table.Cell align="right">
+                                      <Button
+                                        size="1"
+                                        variant="soft"
+                                        color="red"
+                                        onClick={() =>
+                                          deleteItem(group.id, item.id)
+                                        }
+                                      >
+                                        <Trash width={14} height={14} />
+                                      </Button>
+                                    </Table.Cell>
                                   )}
-                                </Flex>
-                              </Table.Cell>
-                              <Table.Cell>
-                                <Text>{item.item?.brand?.name ?? '—'}</Text>
-                              </Table.Cell>
-                              <Table.Cell>
-                                <Text>{item.item?.model ?? '—'}</Text>
-                              </Table.Cell>
-                              <Table.Cell>
-                                <TextField.Root
-                                  type="number"
-                                  min="1"
-                                  value={String(item.quantity)}
-                                  onChange={(e) =>
-                                    updateItem(group.id, item.id, {
-                                      quantity: Math.max(
-                                        1,
-                                        Number(e.target.value) || 1,
-                                      ),
-                                    })
-                                  }
-                                  style={{ width: 80 }}
-                                  readOnly={readOnly}
-                                />
-                              </Table.Cell>
-                              <Table.Cell>
-                                <TextField.Root
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={String(item.unit_price)}
-                                  onChange={(e) =>
-                                    updateItem(group.id, item.id, {
-                                      unit_price: Math.max(
-                                        0,
-                                        Number(e.target.value) || 0,
-                                      ),
-                                    })
-                                  }
-                                  style={{ width: 120 }}
-                                  readOnly={readOnly}
-                                />
-                              </Table.Cell>
-                              <Table.Cell>
-                                <Text>
-                                  {formatCurrency(
-                                    item.unit_price * item.quantity,
-                                  )}
-                                </Text>
-                              </Table.Cell>
-                              {!readOnly && (
-                                <Table.Cell align="right">
-                                  <Button
-                                    size="1"
-                                    variant="soft"
-                                    color="red"
-                                    onClick={() =>
-                                      deleteItem(group.id, item.id)
-                                    }
-                                  >
-                                    <Trash width={14} height={14} />
-                                  </Button>
-                                </Table.Cell>
-                              )}
-                            </Table.Row>
-                          ))}
+                                </Table.Row>
+                                {item.group &&
+                                  isGroupExpanded &&
+                                  item.group_items?.map((groupItem) => {
+                                    const totalQty =
+                                      groupItem.quantity * item.quantity
+                                    return (
+                                      <Table.Row
+                                        key={`${item.id}-group-${groupItem.id}`}
+                                        style={{
+                                          background: 'var(--gray-a2)',
+                                          opacity: 0.75,
+                                        }}
+                                      >
+                                        <Table.Cell>
+                                          <Text
+                                            size="1"
+                                            color="gray"
+                                            style={{ paddingLeft: 16 }}
+                                          >
+                                            {groupItem.name}
+                                          </Text>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                          <Text size="1" color="gray">
+                                            {groupItem.brand_name ?? '—'}
+                                          </Text>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                          <Text size="1" color="gray">
+                                            {groupItem.model ?? '—'}
+                                          </Text>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                          <Text size="1" color="gray">
+                                            {totalQty}
+                                          </Text>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                          <Text size="1" color="gray">
+                                            Included
+                                          </Text>
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                          <Text size="1" color="gray">
+                                            Included
+                                          </Text>
+                                        </Table.Cell>
+                                        {!readOnly && <Table.Cell />}
+                                      </Table.Row>
+                                    )
+                                  })}
+                              </React.Fragment>
+                            )
+                          })}
                         </Table.Body>
                       </Table.Root>
                     ) : (
@@ -1962,9 +2259,7 @@ function EquipmentSection({
         <Flex direction="column" align="center" gap="2">
           {!readOnly && <Plus width={24} height={24} />}
           <Text size="2" color="gray">
-            {readOnly
-              ? 'No equipment groups yet'
-              : 'Add another equipment group'}
+            {readOnly ? 'No equipment groups yet' : 'Add equipment group'}
           </Text>
         </Flex>
       </Box>
@@ -2693,7 +2988,7 @@ function CrewSection({
         <Flex direction="column" align="center" gap="2">
           {!readOnly && <Plus width={24} height={24} />}
           <Text size="2" color="gray">
-            {readOnly ? 'No crew items yet' : 'Add another crew item'}
+            {readOnly ? 'No crew items yet' : 'Add crew item'}
           </Text>
         </Flex>
       </Box>
@@ -3184,7 +3479,7 @@ function TransportSection({
         <Flex direction="column" align="center" gap="2">
           {!readOnly && <Plus width={24} height={24} />}
           <Text size="2" color="gray">
-            {readOnly ? 'No transport items yet' : 'Add another transport item'}
+            {readOnly ? 'No transport items yet' : 'Add transport item'}
           </Text>
         </Flex>
       </Box>

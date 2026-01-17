@@ -6,6 +6,8 @@ export type BookingInvoiceLine = {
   id: string
   type: 'equipment' | 'crew' | 'transport'
   description: string
+  brandName?: string | null
+  model?: string | null
   quantity: number
   unitPrice: number // Price ex VAT per unit
   totalPrice: number // Total ex VAT
@@ -97,7 +99,8 @@ export function jobBookingsForInvoiceQuery({
           `
           id, time_period_id, item_id, quantity,
           item:item_id (
-            id, name
+            id, name, model,
+            brand:brand_id ( name )
           )
         `,
         )
@@ -179,6 +182,7 @@ export function jobBookingsForInvoiceQuery({
           const item = Array.isArray(booking.item) ? booking.item[0] : booking.item
           const timePeriod = timePeriodMap.get(booking.time_period_id)
           if (!item || !timePeriod) continue
+          const brand = Array.isArray(item.brand) ? item.brand[0] : item.brand
 
           const unitPrice = pricesMap.get(booking.item_id) ?? 0
           const quantity = booking.quantity
@@ -188,6 +192,8 @@ export function jobBookingsForInvoiceQuery({
             id: booking.id,
             type: 'equipment',
             description: item.name || 'Equipment',
+            brandName: brand?.name ?? null,
+            model: item.model ?? null,
             quantity,
             unitPrice,
             totalPrice,
@@ -227,6 +233,8 @@ export function jobBookingsForInvoiceQuery({
             id: booking.id,
             type: 'crew',
             description: `${user.display_name || user.email || 'Crew member'}`,
+            brandName: null,
+            model: null,
             quantity,
             unitPrice,
             totalPrice,
@@ -266,6 +274,8 @@ export function jobBookingsForInvoiceQuery({
             id: booking.id,
             type: 'transport',
             description: vehicle.name || 'Vehicle',
+            brandName: null,
+            model: null,
             quantity,
             unitPrice,
             totalPrice,

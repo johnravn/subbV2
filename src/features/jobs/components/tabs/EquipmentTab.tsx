@@ -49,6 +49,12 @@ export default function EquipmentTab({ jobId }: { jobId: string }) {
   const { companyRole } = useAuthz()
   const canBook = !!companyId && companyRole !== 'freelancer'
 
+  const handleViewChange = (value: string) => {
+    if (value === 'internal' || value === 'external') {
+      setView(value)
+    }
+  }
+
   const { data } = useQuery({
     queryKey: ['jobs.equipment', jobId],
     queryFn: async () => {
@@ -90,8 +96,9 @@ export default function EquipmentTab({ jobId }: { jobId: string }) {
           id, time_period_id, item_id, quantity, source_group_id, source_kind,
           status, external_status, external_note, forced,
           item:item_id (
-            id, name, category_id,
+            id, name, category_id, brand_id, model,
             category:category_id ( name ),
+            brand:brand_id ( name ),
             external_owner_id,
             external_owner:external_owner_id ( name )
           ),
@@ -130,7 +137,7 @@ export default function EquipmentTab({ jobId }: { jobId: string }) {
           editMode={editMode}
           setEditMode={setEditMode}
           view={view}
-          onViewChange={(v) => setView(v as 'internal' | 'external')}
+          onViewChange={handleViewChange}
         />
       )}
 
@@ -144,6 +151,8 @@ export default function EquipmentTab({ jobId }: { jobId: string }) {
           companyId={companyId}
           editMode={externalEditMode}
           setEditMode={setExternalEditMode}
+          view={view}
+          onViewChange={handleViewChange}
         />
       )}
     </Box>
@@ -336,6 +345,12 @@ function InternalEquipmentTable({
     })
   }
 
+  const handleViewChange = (value: string) => {
+    if (value === 'internal' || value === 'external') {
+      onViewChange(value)
+    }
+  }
+
   return (
     <Box>
       <Box
@@ -388,7 +403,7 @@ function InternalEquipmentTable({
             </Button>
             <SegmentedControl.Root
               value={view}
-              onValueChange={(v) => onViewChange(v as 'internal' | 'external')}
+              onValueChange={handleViewChange}
               size="2"
             >
               <SegmentedControl.Item value="internal">
@@ -417,6 +432,8 @@ function InternalEquipmentTable({
           <Table.Row>
             <Table.ColumnHeaderCell>Item</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Qty</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>Brand</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>Model</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Category</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Time period</Table.ColumnHeaderCell>
@@ -470,6 +487,8 @@ function InternalEquipmentTable({
                   <Table.Cell>
                     <Text weight="bold">{totalQty}</Text>
                   </Table.Cell>
+                  <Table.Cell>—</Table.Cell>
+                  <Table.Cell>—</Table.Cell>
                   <Table.Cell>{groupCategory ?? '—'}</Table.Cell>
                   <Table.Cell>
                     {isReadOnly ? (
@@ -534,6 +553,8 @@ function InternalEquipmentTable({
                           <Text color="gray">↳ {item?.name ?? '—'}</Text>
                         </Table.Cell>
                         <Table.Cell>{r.quantity}</Table.Cell>
+                        <Table.Cell>{item?.brand?.name ?? '—'}</Table.Cell>
+                        <Table.Cell>{item?.model ?? '—'}</Table.Cell>
                         <Table.Cell>{item?.category?.name ?? '—'}</Table.Cell>
                         <Table.Cell>—</Table.Cell>
                         <Table.Cell>—</Table.Cell>
@@ -586,6 +607,8 @@ function InternalEquipmentTable({
                     r.quantity
                   )}
                 </Table.Cell>
+                <Table.Cell>{item?.brand?.name ?? '—'}</Table.Cell>
+                <Table.Cell>{item?.model ?? '—'}</Table.Cell>
                 <Table.Cell>{item?.category?.name ?? '—'}</Table.Cell>
                 <Table.Cell
                   onMouseEnter={() => !isReadOnly && setHoveredRowId(r.id)}
@@ -740,6 +763,8 @@ function ExternalEquipmentTable({
   companyId,
   editMode,
   setEditMode,
+  view,
+  onViewChange,
 }: {
   rows: Array<any>
   externalTimePeriods: Array<{
@@ -753,6 +778,8 @@ function ExternalEquipmentTable({
   companyId: string | null
   editMode: boolean
   setEditMode: (v: boolean) => void
+  view: 'internal' | 'external'
+  onViewChange: (v: 'internal' | 'external') => void
 }) {
   const qc = useQueryClient()
   const { success, error } = useToast()
@@ -1114,6 +1141,12 @@ function ExternalEquipmentTable({
     })
   }
 
+  const handleViewChange = (value: string) => {
+    if (value === 'internal' || value === 'external') {
+      onViewChange(value)
+    }
+  }
+
   return (
     <Box>
       <Box
@@ -1139,6 +1172,20 @@ function ExternalEquipmentTable({
                 <Select.Item value="confirmed">Confirmed</Select.Item>
               </Select.Content>
             </Select.Root>
+          )}
+          {companyRole !== 'freelancer' && (
+            <SegmentedControl.Root
+              value={view}
+              onValueChange={handleViewChange}
+              size="2"
+            >
+              <SegmentedControl.Item value="internal">
+                Internal equipment
+              </SegmentedControl.Item>
+              <SegmentedControl.Item value="external">
+                External equipment
+              </SegmentedControl.Item>
+            </SegmentedControl.Root>
           )}
         </Flex>
       </Box>
@@ -1352,6 +1399,12 @@ function ExternalEquipmentTable({
                                   Qty
                                 </Table.ColumnHeaderCell>
                                 <Table.ColumnHeaderCell>
+                                  Brand
+                                </Table.ColumnHeaderCell>
+                                <Table.ColumnHeaderCell>
+                                  Model
+                                </Table.ColumnHeaderCell>
+                                <Table.ColumnHeaderCell>
                                   Status
                                 </Table.ColumnHeaderCell>
                                 {editMode && <Table.ColumnHeaderCell />}
@@ -1411,6 +1464,12 @@ function ExternalEquipmentTable({
                                       ) : (
                                         r.quantity
                                       )}
+                                    </Table.Cell>
+                                    <Table.Cell>
+                                      {rowItem?.brand?.name ?? '—'}
+                                    </Table.Cell>
+                                    <Table.Cell>
+                                      {rowItem?.model ?? '—'}
                                     </Table.Cell>
                                     <Table.Cell
                                       onMouseEnter={() =>

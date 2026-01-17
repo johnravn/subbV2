@@ -15,6 +15,8 @@ export type JobStatus =
   | 'invoiced'
   | 'paid'
 
+export type InvoiceBasis = 'offer' | 'bookings'
+
 export type JobListRow = {
   id: UUID
   company_id: UUID
@@ -66,6 +68,7 @@ export type JobDetail = {
   load_in_at: string | null
   load_out_at: string | null
   archived: boolean
+  invoice_basis: InvoiceBasis | null
 
   project_lead_user_id: UUID | null
   customer_id: UUID | null
@@ -78,6 +81,8 @@ export type JobDetail = {
     name: string | null
     email: string | null
     phone: string | null
+    address: string | null
+    vat_number: string | null
   } | null
 
   customer_user?: {
@@ -311,6 +316,7 @@ export type OfferEquipmentItem = {
   id: UUID
   offer_group_id: UUID
   item_id: UUID | null
+  group_id: UUID | null
   quantity: number
   unit_price: number
   total_price: number
@@ -326,16 +332,27 @@ export type OfferEquipmentItem = {
     brand?: { id: UUID; name: string } | null
     model?: string | null
   } | null
+  group?: {
+    id: UUID
+    name: string
+    externally_owned?: boolean | null
+    external_owner_id?: UUID | null
+    external_owner_name?: string | null
+  } | null
 }
 
 export type OfferCrewItem = {
   id: UUID
   offer_id: UUID
   role_title: string
+  role_category?: string | null
   crew_count: number
   start_date: string
   end_date: string
   daily_rate: number
+  hourly_rate?: number | null
+  hours_per_day?: number | null
+  billing_type?: 'daily' | 'hourly' | null
   total_price: number
   sort_order: number
 }
@@ -389,10 +406,16 @@ export type OfferDetail = JobOffer & {
   crew_items?: Array<OfferCrewItem>
   transport_items?: Array<OfferTransportItem>
   pretty_sections?: Array<OfferPrettySection>
+  job_title?: string | null
   company_terms?: {
     type: 'pdf' | 'text' | null
     text: string | null
     pdf_path: string | null
+  }
+  company_expansion?: {
+    vehicle_daily_rate: number | null
+    vehicle_distance_rate: number | null
+    vehicle_distance_increment: number | null
   }
   customer?: {
     id: string
@@ -420,6 +443,7 @@ export type OfferDetail = JobOffer & {
     address: string | null
     logo_light_path: string | null
     logo_dark_path: string | null
+    accent_color?: string | null
   }
 }
 
