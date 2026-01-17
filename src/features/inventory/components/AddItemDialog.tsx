@@ -166,8 +166,12 @@ export default function AddItemDialog({
         .select('id, name')
         .eq('company_id', companyId)
         .ilike('name', initialData.brandName)
-        .single()
-        .then(({ data }) => {
+        .maybeSingle()
+        .then(({ data, error }) => {
+          if (error) {
+            console.error('Failed to preload brand:', error)
+            return
+          }
           if (data) {
             set('brandId', data.id)
           }
@@ -218,12 +222,13 @@ export default function AddItemDialog({
       if (brandName && brandName.trim() && !brandId) {
         const brandNameTrimmed = brandName.trim()
         // Try to find existing brand first (case-insensitive)
-        const { data: existing } = await supabase
+        const { data: existing, error: existingError } = await supabase
           .from('item_brands')
           .select('id')
           .eq('company_id', companyId)
           .ilike('name', brandNameTrimmed)
-          .single()
+          .maybeSingle()
+        if (existingError) throw existingError
 
         if (existing) {
           brandId = existing.id
@@ -333,12 +338,13 @@ export default function AddItemDialog({
       if (brandName && brandName.trim() && !brandId) {
         const brandNameTrimmed = brandName.trim()
         // Try to find existing brand first (case-insensitive)
-        const { data: existing } = await supabase
+        const { data: existing, error: existingError } = await supabase
           .from('item_brands')
           .select('id')
           .eq('company_id', companyId)
           .ilike('name', brandNameTrimmed)
-          .single()
+          .maybeSingle()
+        if (existingError) throw existingError
 
         if (existing) {
           brandId = existing.id
@@ -569,6 +575,9 @@ export default function AddItemDialog({
               </Button>
             )}
           </Flex>
+          <Dialog.Description size="2" color="gray" mt="1">
+            Add item details, including category, brand, and pricing.
+          </Dialog.Description>
 
           <Flex direction="column" gap="3" mt="1">
             {/* Name */}

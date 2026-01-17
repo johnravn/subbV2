@@ -33,7 +33,7 @@ export default function BrandAutocomplete({
   placeholder = 'Type brand name...',
 }: Props) {
   const qc = useQueryClient()
-  const { success } = useToast()
+  const { success, error: toastError } = useToast()
   const [inputValue, setInputValue] = React.useState(value || '')
   const [showSuggestions, setShowSuggestions] = React.useState(false)
   const inputRef = React.useRef<HTMLInputElement>(null)
@@ -152,24 +152,32 @@ export default function BrandAutocomplete({
             .select('id, name')
             .eq('company_id', companyId)
             .ilike('name', brandName)
-            .single()
-            .then(({ data: existing }) => {
+            .maybeSingle()
+            .then(({ data: existing, error: findError }) => {
+              if (findError) {
+                toastError('Failed to save brand', findError.message)
+                return
+              }
               if (existing) {
                 onBrandIdChange?.(existing.id)
-                qc.invalidateQueries({ 
+                qc.invalidateQueries({
                   queryKey: ['company', companyId, 'item_brands'],
                   exact: false,
                 })
+              } else {
+                toastError('Failed to save brand', error.message)
               }
             })
-        } else if (data) {
+          return
+        }
+        if (data) {
           lastCreatedBrandRef.current = { id: data.id, name: data.name }
           onBrandIdChange?.(data.id)
-          qc.invalidateQueries({ 
+          qc.invalidateQueries({
             queryKey: ['company', companyId, 'item_brands'],
             exact: false,
           })
-          
+
           // Show toast with undo
           success(
             'Brand saved',
@@ -183,7 +191,7 @@ export default function BrandAutocomplete({
                   .delete()
                   .eq('id', lastCreatedBrandRef.current.id)
                   .then(() => {
-                    qc.invalidateQueries({ 
+                    qc.invalidateQueries({
                       queryKey: ['company', companyId, 'item_brands'],
                       exact: false,
                     })
@@ -195,7 +203,7 @@ export default function BrandAutocomplete({
                 lastCreatedBrandRef.current = null
               }
             },
-            'Undo'
+            'Undo',
           )
         }
       })
