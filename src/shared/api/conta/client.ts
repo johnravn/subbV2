@@ -8,8 +8,14 @@
 import { supabase } from '../supabase'
 
 // Get API base URL from environment
-const contaApiUrl =
-  import.meta.env.VITE_CONTA_API_URL || 'https://api.gateway.conta.no'
+const contaApiUrlProd =
+  import.meta.env.VITE_CONTA_API_URL_PROD ||
+  import.meta.env.VITE_CONTA_API_URL ||
+  'https://api.gateway.conta.no'
+const contaApiUrlSandbox =
+  import.meta.env.VITE_CONTA_API_URL_SANDBOX ||
+  import.meta.env.VITE_CONTA_API_URL ||
+  'https://api.gateway.conta.no'
 
 /**
  * Get the Conta API key for the current user's company
@@ -21,6 +27,15 @@ async function getContaApiKey(): Promise<string | null> {
   if (error) throw error
 
   return data as string | null
+}
+
+/**
+ * Get the selected Conta API environment for the current user's company
+ */
+async function getAccountingEnvironment(): Promise<'production' | 'sandbox'> {
+  const { data, error } = await supabase.rpc('get_accounting_api_environment')
+  if (error) return 'production'
+  return data === 'sandbox' ? 'sandbox' : 'production'
 }
 
 /**
@@ -48,7 +63,10 @@ export async function contaRequest(
     throw new Error('No Conta API key configured for this company')
   }
 
-  const url = `${contaApiUrl}${endpoint}`
+  const environment = await getAccountingEnvironment()
+  const baseUrl =
+    environment === 'sandbox' ? contaApiUrlSandbox : contaApiUrlProd
+  const url = `${baseUrl}${endpoint}`
   const method = (options.method || 'GET').toUpperCase()
   const hasBody = options.body !== undefined && options.body !== null
   const normalizedHeaders = new Headers(options.headers || {})

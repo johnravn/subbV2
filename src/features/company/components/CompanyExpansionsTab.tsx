@@ -8,6 +8,7 @@ import {
   Flex,
   Heading,
   IconButton,
+  SegmentedControl,
   Select,
   Separator,
   Switch,
@@ -20,15 +21,18 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCompany } from '@shared/companies/CompanyProvider'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { getAvailableOrganizations } from '@features/home/api/queries'
+import { contaClient } from '@shared/api/conta/client'
 import { companyExpansionQuery, updateCompanyExpansion } from '../api/queries'
 import DeleteAccountingConfigDialog from './dialogs/DeleteAccountingConfigDialog'
 import RemoveApiKeyDialog from './dialogs/RemoveApiKeyDialog'
 
 type AccountingSoftware = 'none' | 'conta'
+type AccountingEnvironment = 'production' | 'sandbox'
 
 type ExpansionConfig = {
   accounting_software?: AccountingSoftware
   accounting_api_key?: string | null
+  accounting_api_environment?: AccountingEnvironment
   accounting_organization_id?: string | null
   accounting_api_read_only?: boolean
 }
@@ -64,6 +68,7 @@ export default function CompanyExpansionsTab() {
   const [form, setForm] = React.useState<ExpansionConfig>({
     accounting_software: 'none',
     accounting_api_key: null,
+    accounting_api_environment: 'production',
     accounting_organization_id: null,
     accounting_api_read_only: true,
   })
@@ -72,7 +77,17 @@ export default function CompanyExpansionsTab() {
   const [permissionsChanged, setPermissionsChanged] = React.useState(false)
 
   // Determine configuration state
-  const hasApiKeyConfigured = !!expansionData?.accounting_api_key_encrypted
+  const apiEnvironment: AccountingEnvironment =
+    form.accounting_api_environment ??
+    expansionData?.accounting_api_environment ??
+    'production'
+  const hasProdApiKeyConfigured = !!expansionData?.accounting_api_key_encrypted
+  const hasSandboxApiKeyConfigured =
+    !!expansionData?.accounting_api_key_sandbox_encrypted
+  const hasApiKeyConfigured =
+    apiEnvironment === 'sandbox'
+      ? hasSandboxApiKeyConfigured
+      : hasProdApiKeyConfigured
   const hasOrganizationConfigured = !!expansionData?.accounting_organization_id
   const isContaSelected =
     form.accounting_software === 'conta' ||
@@ -92,14 +107,25 @@ export default function CompanyExpansionsTab() {
 
   // Auto-show configuration UI only if not fully configured (allow user to configure)
   // If fully configured, require Edit button click
+  const hasAutoOpenedConfig = React.useRef(false)
   React.useEffect(() => {
-    if (isContaSelected && !isFullyConfigured) {
-      setIsConfiguring(true)
-    } else if (isFullyConfigured) {
+    if (!isContaSelected) {
       setIsConfiguring(false)
       setIsEditing(false)
+      return
+    }
+    if (!hasAutoOpenedConfig.current && !isFullyConfigured) {
+      setIsConfiguring(true)
+      hasAutoOpenedConfig.current = true
     }
   }, [isContaSelected, isFullyConfigured])
+
+  // Auto-collapse when configuration becomes fully complete (unless editing)
+  React.useEffect(() => {
+    if (isFullyConfigured && !isEditing) {
+      setIsConfiguring(false)
+    }
+  }, [isFullyConfigured, isEditing])
 
   // Fetch available organizations when Conta is selected and API key is configured
   const {
@@ -108,11 +134,27 @@ export default function CompanyExpansionsTab() {
     error: orgsError,
     refetch: refetchOrganizations,
   } = useQuery({
-    queryKey: ['conta', 'organizations', companyId],
+    queryKey: ['conta', 'organizations', companyId, apiEnvironment],
     queryFn: getAvailableOrganizations,
     enabled: isContaSelected && hasApiKeyConfigured,
     staleTime: 5 * 60 * 1000, // 5 minutes
     retry: 1,
+  })
+
+  const {
+    data: healthOk,
+    isLoading: healthLoading,
+    error: healthError,
+    refetch: refetchHealth,
+  } = useQuery({
+    queryKey: ['conta', 'health', companyId, apiEnvironment],
+    queryFn: async () => {
+      await contaClient.get('/invoice/ping')
+      return true
+    },
+    enabled: isContaSelected && hasApiKeyConfigured,
+    staleTime: 60 * 1000,
+    retry: 0,
   })
 
   // Hydrate form from query data
@@ -122,6 +164,8 @@ export default function CompanyExpansionsTab() {
         accounting_software:
           expansionData.accounting_software === 'conta' ? 'conta' : 'none',
         accounting_api_key: null, // Never display existing keys for security
+        accounting_api_environment:
+          expansionData.accounting_api_environment ?? 'production',
         accounting_organization_id:
           expansionData.accounting_organization_id || null,
         accounting_api_read_only: expansionData.accounting_api_read_only,
@@ -131,6 +175,7 @@ export default function CompanyExpansionsTab() {
       setForm({
         accounting_software: 'none',
         accounting_api_key: null,
+        accounting_api_environment: 'production',
         accounting_organization_id: null,
         accounting_api_read_only: true,
       })
@@ -145,10 +190,21 @@ export default function CompanyExpansionsTab() {
       if (!form.accounting_software || form.accounting_software === 'none') {
         throw new Error('Please select an accounting software first')
       }
+      if (apiEnvironment === 'sandbox') {
+        return updateCompanyExpansion({
+          companyId,
+          accountingSoftware: form.accounting_software,
+          sandboxApiKey: apiKey,
+          apiEnvironment,
+          organizationId: form.accounting_organization_id || undefined,
+          readOnly: form.accounting_api_read_only,
+        })
+      }
       return updateCompanyExpansion({
         companyId,
         accountingSoftware: form.accounting_software,
-        apiKey: apiKey,
+        apiKey,
+        apiEnvironment,
         organizationId: form.accounting_organization_id || undefined,
         readOnly: form.accounting_api_read_only,
       })
@@ -214,10 +270,21 @@ export default function CompanyExpansionsTab() {
   const removeApiKeyMutation = useMutation({
     mutationFn: async () => {
       if (!companyId) throw new Error('No company selected')
+      if (apiEnvironment === 'sandbox') {
+        return updateCompanyExpansion({
+          companyId,
+          accountingSoftware: undefined, // Preserve existing
+          sandboxApiKey: null, // Remove the sandbox API key
+          apiEnvironment,
+          organizationId: null, // Also remove organization when API key is removed
+          readOnly: undefined, // Preserve existing
+        })
+      }
       return updateCompanyExpansion({
         companyId,
         accountingSoftware: undefined, // Preserve existing
         apiKey: null, // Remove the API key
+        apiEnvironment,
         organizationId: null, // Also remove organization when API key is removed
         readOnly: undefined, // Preserve existing
       })
@@ -251,6 +318,7 @@ export default function CompanyExpansionsTab() {
         companyId,
         accountingSoftware: 'none',
         apiKey: null, // Remove the API key
+        sandboxApiKey: null, // Remove sandbox API key
         organizationId: null, // Remove organization
         readOnly: true, // Reset to default
       })
@@ -315,6 +383,8 @@ export default function CompanyExpansionsTab() {
         accounting_software:
           expansionData.accounting_software === 'conta' ? 'conta' : 'none',
         accounting_api_key: null,
+        accounting_api_environment:
+          expansionData.accounting_api_environment ?? 'production',
         accounting_organization_id:
           expansionData.accounting_organization_id || null,
         accounting_api_read_only: expansionData.accounting_api_read_only,
@@ -323,6 +393,7 @@ export default function CompanyExpansionsTab() {
       setForm({
         accounting_software: 'none',
         accounting_api_key: null,
+        accounting_api_environment: 'production',
         accounting_organization_id: null,
         accounting_api_read_only: true,
       })
@@ -389,6 +460,10 @@ export default function CompanyExpansionsTab() {
           )
         })
     }
+  }
+
+  const handleEnvironmentChange = (value: AccountingEnvironment) => {
+    setForm((s) => ({ ...s, accounting_api_environment: value }))
   }
 
   if (configLoading) {
@@ -525,6 +600,10 @@ export default function CompanyExpansionsTab() {
                     <Text as="div" size="2" color="gray">
                       API key: •••••••••••••••• (configured)
                     </Text>
+                    <Text as="div" size="2" color="gray">
+                      Environment:{' '}
+                      {apiEnvironment === 'sandbox' ? 'Sandbox' : 'Production'}
+                    </Text>
                     {expansionData.accounting_organization_id && (
                       <Text as="div" size="2" color="gray">
                         Organization:{' '}
@@ -594,14 +673,30 @@ export default function CompanyExpansionsTab() {
                       {/* API Key Column */}
                       <Field label="API Key">
                         <Flex direction="column" gap="2">
+                          <SegmentedControl.Root
+                            value={apiEnvironment}
+                            onValueChange={(value) =>
+                              handleEnvironmentChange(
+                                value as AccountingEnvironment,
+                              )
+                            }
+                            size="1"
+                          >
+                            <SegmentedControl.Item value="production">
+                              Production
+                            </SegmentedControl.Item>
+                            <SegmentedControl.Item value="sandbox">
+                              Sandbox
+                            </SegmentedControl.Item>
+                          </SegmentedControl.Root>
                           <TextField.Root
                             type="password"
                             value={apiKeyInput}
                             onChange={(e) => setApiKeyInput(e.target.value)}
                             placeholder={
                               step2Completed
-                                ? 'Enter new API key to update...'
-                                : 'Enter API key...'
+                                ? `Enter new ${apiEnvironment} API key to update...`
+                                : `Enter ${apiEnvironment} API key...`
                             }
                             disabled={saveApiKeyMutation.isPending}
                           >
@@ -626,6 +721,11 @@ export default function CompanyExpansionsTab() {
                               <>
                                 <Badge color="green" variant="soft" size="1">
                                   Configured
+                                </Badge>
+                                <Badge color="blue" variant="soft" size="1">
+                                  {apiEnvironment === 'sandbox'
+                                    ? 'Sandbox key'
+                                    : 'Production key'}
                                 </Badge>
                                 <Button
                                   size="1"
@@ -659,6 +759,70 @@ export default function CompanyExpansionsTab() {
                               </Button>
                             )}
                           </Flex>
+                          <Box
+                            mt="2"
+                            style={{
+                              padding: 12,
+                              background: 'var(--gray-a2)',
+                              borderRadius: 6,
+                              border: '1px solid var(--gray-a6)',
+                            }}
+                          >
+                            <Flex align="center" justify="between" gap="3">
+                              <Flex direction="column" gap="1">
+                                <Text size="2" weight="medium">
+                                  Health Check
+                                </Text>
+                                {!hasApiKeyConfigured ? (
+                                  <Text size="1" color="gray">
+                                    Add a {apiEnvironment} API key to run the
+                                    check.
+                                  </Text>
+                                ) : healthLoading ? (
+                                  <Text size="1" color="gray">
+                                    Checking connectivity...
+                                  </Text>
+                                ) : healthOk ? (
+                                  <Text size="1" color="gray">
+                                    API responded OK for {apiEnvironment}.
+                                  </Text>
+                                ) : (
+                                  <Text size="1" color="red">
+                                    {healthError instanceof Error
+                                      ? healthError.message
+                                      : 'Health check failed.'}
+                                  </Text>
+                                )}
+                              </Flex>
+                              <Flex direction="column" align="end" gap="2">
+                                <Badge
+                                  color={
+                                    !hasApiKeyConfigured || healthLoading
+                                      ? 'gray'
+                                      : healthOk
+                                        ? 'green'
+                                        : 'red'
+                                  }
+                                  variant="soft"
+                                  size="1"
+                                >
+                                  {!hasApiKeyConfigured || healthLoading
+                                    ? 'Pending'
+                                    : healthOk
+                                      ? 'Healthy'
+                                      : 'Failed'}
+                                </Badge>
+                                <Button
+                                  size="1"
+                                  variant="soft"
+                                  onClick={() => refetchHealth()}
+                                  disabled={!hasApiKeyConfigured || healthLoading}
+                                >
+                                  Check now
+                                </Button>
+                              </Flex>
+                            </Flex>
+                          </Box>
                         </Flex>
                       </Field>
 
@@ -798,22 +962,6 @@ export default function CompanyExpansionsTab() {
                               disabled={savePermissionsMutation.isPending}
                             />
                           </Flex>
-                          {permissionsChanged && (
-                            <Button
-                              size="2"
-                              onClick={() => {
-                                savePermissionsMutation.mutate(
-                                  form.accounting_api_read_only ?? true,
-                                )
-                              }}
-                              disabled={savePermissionsMutation.isPending}
-                              style={{ alignSelf: 'flex-start' }}
-                            >
-                              {savePermissionsMutation.isPending
-                                ? 'Saving...'
-                                : 'Save Permissions'}
-                            </Button>
-                          )}
                         </Flex>
                       </Field>
                     </Box>
@@ -836,8 +984,8 @@ export default function CompanyExpansionsTab() {
                   </Text>
                 </Box>
 
-                {/* Action Buttons - Show when editing */}
-                {isEditing && (
+                {/* Action Buttons - Show when configuring or editing */}
+                {(isEditing || isConfiguring) && (
                   <Flex
                     justify="end"
                     gap="3"
@@ -846,37 +994,41 @@ export default function CompanyExpansionsTab() {
                   >
                     <Button
                       variant="soft"
-                      onClick={() => {
-                        setIsEditing(false)
-                        // Reset form to saved state
-                        if (expansionData) {
-                          setForm({
-                            accounting_software:
-                              expansionData.accounting_software === 'conta'
-                                ? 'conta'
-                                : 'none',
-                            accounting_api_key: null,
-                            accounting_organization_id:
-                              expansionData.accounting_organization_id || null,
-                            accounting_api_read_only:
-                              expansionData.accounting_api_read_only,
-                          })
-                          setApiKeyInput('')
-                          setPermissionsChanged(false)
-                        }
-                      }}
+                      onClick={handleCancelConfig}
                     >
-                      Close
+                      Cancel
                     </Button>
                     <Button
                       onClick={async () => {
                         // Save all pending changes
                         try {
+                          const currentEnv =
+                            expansionData?.accounting_api_environment ??
+                            'production'
+
                           // Save API key if entered
                           if (apiKeyInput.trim()) {
                             await saveApiKeyMutation.mutateAsync(
                               apiKeyInput.trim(),
                             )
+                          }
+
+                          if (apiEnvironment !== currentEnv) {
+                            await updateCompanyExpansion({
+                              companyId: companyId!,
+                              accountingSoftware: undefined,
+                              apiEnvironment,
+                              apiKey: undefined,
+                              sandboxApiKey: undefined,
+                              organizationId: undefined,
+                              readOnly: undefined,
+                            })
+                            qc.invalidateQueries({
+                              queryKey: ['company', companyId, 'expansion'],
+                            })
+                            qc.invalidateQueries({
+                              queryKey: ['conta', 'organizations', companyId],
+                            })
                           }
 
                           // Confirm organization if changed
@@ -897,6 +1049,7 @@ export default function CompanyExpansionsTab() {
                             )
                           }
 
+                          setIsConfiguring(false)
                           setIsEditing(false)
                           setApiKeyInput('')
                           setPermissionsChanged(false)
@@ -911,7 +1064,10 @@ export default function CompanyExpansionsTab() {
                         (!apiKeyInput.trim() &&
                           !permissionsChanged &&
                           form.accounting_organization_id ===
-                            expansionData?.accounting_organization_id)
+                            expansionData?.accounting_organization_id &&
+                          apiEnvironment ===
+                            (expansionData?.accounting_api_environment ??
+                              'production'))
                       }
                     >
                       {saveApiKeyMutation.isPending ||
