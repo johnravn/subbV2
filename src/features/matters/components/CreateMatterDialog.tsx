@@ -69,11 +69,8 @@ export default function CreateMatterDialog({
     }
   }, [])
 
-  // Check if user can see group selection buttons (employees and above)
-  const canUseGroupSelection =
-    companyRole === 'employee' ||
-    companyRole === 'owner' ||
-    companyRole === 'super_user'
+  // Check if user can see group selection buttons (any company member)
+  const canUseGroupSelection = !!companyRole
 
   // Search for users in the company with their roles
   const { data: people = [], isFetching } = useQuery({

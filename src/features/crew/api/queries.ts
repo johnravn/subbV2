@@ -179,30 +179,16 @@ export function crewDetailQuery({
   }
 }
 // src/features/crew/api/queries.ts
-export function myPendingInvitesQuery({
-  companyId,
-  inviterId, // or inviterUserId if you kept that name
-}: {
-  companyId: string
-  inviterId?: string | null
-}) {
-  const key = [
-    'company',
-    companyId,
-    'pending-invites',
-    inviterId ?? '__none__',
-  ] as const
+export function pendingInvitesQuery({ companyId }: { companyId: string }) {
+  const key = ['company', companyId, 'pending-invites'] as const
 
   return {
     queryKey: key,
     queryFn: async (): Promise<Array<PendingInvite>> => {
-      if (!inviterId) return []
-
       const { data, error } = await supabase
         .from('pending_invites')
         .select('id, email, role, inviter_user_id, created_at, expires_at')
         .eq('company_id', companyId)
-        .eq('inviter_user_id', inviterId)
         .gt('expires_at', new Date().toISOString())
         .order('created_at', { ascending: false })
 

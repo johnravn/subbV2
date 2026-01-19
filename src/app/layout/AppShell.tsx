@@ -13,6 +13,7 @@ import { supabase } from '@shared/api/supabase'
 import { useQuery } from '@tanstack/react-query'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { NAV, Sidebar } from './Sidebar'
+import { useCompany } from '@shared/companies/CompanyProvider'
 import { AnimatedBackground } from '@shared/ui/components/AnimatedBackground'
 import { getInitials } from '@shared/lib/generalFunctions'
 
@@ -22,6 +23,7 @@ export default function AppShell() {
   const currentPath = routerState.location.pathname
   const isMobile = useMediaQuery('(max-width: 768px)')
   const navigate = useNavigate()
+  const { companies, loading: companyLoading } = useCompany()
 
   // Get user from shared query (already fetched by CompanyProvider)
   const { data: authUser } = useQuery({
@@ -115,6 +117,8 @@ export default function AppShell() {
     currentPath === '/legal' ||
     currentPath === '/' ||
     currentPath.startsWith('/offer/')
+  const showNoCompanyMessage =
+    !isPublic && !companyLoading && !!authUser?.id && companies.length === 0
 
   return (
     <Flex
@@ -132,7 +136,7 @@ export default function AppShell() {
         />
       )}
 
-      {!isPublic && (
+      {!isPublic && !showNoCompanyMessage && (
         <Sidebar
           open={open}
           onToggle={(next) => setOpen(next ?? !open)}
@@ -231,7 +235,24 @@ export default function AppShell() {
                 transition={{ duration: 0.18, ease: 'easeOut' }}
                 style={{ height: '100%' }}
               > */}
-            <Outlet />
+            {showNoCompanyMessage ? (
+              <Flex
+                direction="column"
+                align="center"
+                justify="center"
+                gap="3"
+                style={{ height: '100%' }}
+              >
+                <Text size="6" weight="medium">
+                  You are not part of any company.
+                </Text>
+                <Text size="3" color="gray">
+                  If this is wrong, contact support.
+                </Text>
+              </Flex>
+            ) : (
+              <Outlet />
+            )}
             {/* </motion.div>
             </AnimatePresence> */}
           </Box>

@@ -14,11 +14,7 @@ import { useCompany } from '@shared/companies/CompanyProvider'
 import { useToast } from '@shared/ui/toast/ToastProvider'
 import { ArrowDown, ArrowUp, Search, Trash } from 'iconoir-react'
 import { fuzzySearch } from '@shared/lib/generalFunctions'
-import {
-  crewIndexQuery,
-  deleteInvite,
-  myPendingInvitesQuery,
-} from '../api/queries'
+import { crewIndexQuery, deleteInvite, pendingInvitesQuery } from '../api/queries'
 import AddFreelancerDialog from './dialogs/AddFreelancerDialog'
 
 type Props = {
@@ -77,18 +73,8 @@ export default function CrewTable({
     enabled: !!companyId && true,
   })
 
-  const [inviterId, setInviterId] = React.useState<string | null>(null)
-  React.useEffect(() => {
-    ;(async () => {
-      const { data } = await (
-        await import('@shared/api/supabase')
-      ).supabase.auth.getUser()
-      setInviterId(data.user?.id ?? null)
-    })()
-  }, [])
-
   const { data: myInvites = [], isLoading: invLoading } = useQuery({
-    ...myPendingInvitesQuery({ companyId: companyId!, inviterId }),
+    ...pendingInvitesQuery({ companyId: companyId! }),
     enabled: !!companyId && showMyPending,
   })
 
@@ -315,12 +301,10 @@ export default function CrewTable({
   const delInvite = useMutation({
     mutationFn: (inviteId: string) => deleteInvite({ inviteId }),
     onSuccess: () => {
-      if (inviterId) {
-        qc.invalidateQueries({
-          queryKey: ['company', companyId, 'pending-invites', inviterId],
-        })
-        success('Success', 'Invite successfully deleted')
-      }
+      qc.invalidateQueries({
+        queryKey: ['company', companyId, 'pending-invites'],
+      })
+      success('Success', 'Invite successfully deleted')
     },
   })
 
@@ -360,10 +344,9 @@ export default function CrewTable({
             qc.invalidateQueries({
               queryKey: ['company', companyId, 'crew-index', 'freelancer'],
             })
-            if (inviterId)
-              qc.invalidateQueries({
-                queryKey: ['company', companyId, 'pending-invites', inviterId],
-              })
+            qc.invalidateQueries({
+              queryKey: ['company', companyId, 'pending-invites'],
+            })
           }}
         />
       </Flex>

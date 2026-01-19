@@ -31,7 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async function init() {
       const { data } = await supabase.auth.getSession()
       if (!mounted) return
-      previousUserIdRef.current = data.session?.user?.id ?? null
+      previousUserIdRef.current = data.session?.user.id ?? null
 
       // Set the user in query cache so CompanyProvider can use it immediately
       queryClient.setQueryData(['auth', 'user'], data.session?.user ?? null)
@@ -44,7 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     init()
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
-      const currentUserId = session?.user?.id ?? null
+      const currentUserId = session?.user.id ?? null
 
       // Update auth/user query cache immediately on auth state changes
       queryClient.setQueryData(['auth', 'user'], session?.user ?? null)
@@ -58,12 +58,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         queryClient.invalidateQueries({ queryKey: ['auth', 'user'] })
       }
 
+      // On first sign-in, company membership may be created by DB triggers.
+      // Refresh membership-related queries shortly after sign-in.
+      if (event === 'SIGNED_IN' && currentUserId) {
+        queryClient.invalidateQueries({ queryKey: ['my-companies'] })
+        queryClient.invalidateQueries({ queryKey: ['profile', currentUserId] })
+        queryClient.invalidateQueries({ queryKey: ['authz', currentUserId] })
+
+        window.setTimeout(() => {
+          queryClient.invalidateQueries({ queryKey: ['my-companies'] })
+          queryClient.invalidateQueries({ queryKey: ['authz', currentUserId] })
+        }, 500)
+      }
+
       // Clear cache on sign out or when user changes to a different user
       if (
         event === 'SIGNED_OUT' ||
         (previousUserIdRef.current &&
-          previousUserIdRef.current !== currentUserId &&
-          currentUserId !== null)
+          previousUserIdRef.current !== currentUserId)
       ) {
         queryClient.clear()
         // Ensure user query is cleared too

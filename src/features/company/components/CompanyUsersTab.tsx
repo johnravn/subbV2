@@ -397,7 +397,7 @@ function StatusDropdown({
               checked={showMyPending}
               onCheckedChange={onShowMyPendingChange}
             />
-            <Text>My pending invites</Text>
+            <Text>Pending invites</Text>
           </Flex>
         </DropdownMenu.Item>
       </DropdownMenu.Content>

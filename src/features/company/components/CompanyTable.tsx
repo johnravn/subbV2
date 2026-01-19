@@ -16,7 +16,7 @@ import { Search, Trash } from 'iconoir-react'
 import {
   crewIndexQuery,
   deleteInvite,
-  myPendingInvitesQuery,
+  pendingInvitesQuery,
 } from '../../crew/api/queries'
 import AddFreelancerDialog from '../../crew/components/dialogs/AddFreelancerDialog'
 import { removeCompanyUser } from '../api/queries'
@@ -67,17 +67,8 @@ export default function CompanyTable({
     enabled: !!companyId && showFreelancers,
   })
 
-  const [inviterId, setInviterId] = React.useState<string | null>(null)
-  React.useEffect(() => {
-    ;(async () => {
-      const { supabase } = await import('@shared/api/supabase')
-      const { data } = await supabase.auth.getUser()
-      setInviterId(data.user?.id ?? null)
-    })()
-  }, [])
-
   const { data: myInvites = [], isLoading: invLoading } = useQuery({
-    ...myPendingInvitesQuery({ companyId: companyId!, inviterId }),
+    ...pendingInvitesQuery({ companyId: companyId! }),
     enabled: !!companyId && showMyPending,
   })
 
