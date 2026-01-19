@@ -3308,8 +3308,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      get_accounting_api_environment: { Args: never; Returns: string }
       get_accounting_read_only: { Args: never; Returns: boolean }
       get_conta_api_key: { Args: never; Returns: string }
+      is_superuser: { Args: { p_user_id: string }; Returns: boolean }
       item_available_qty: {
         Args: {
           p_company_id: string
@@ -3373,6 +3375,10 @@ export type Database = {
       }
       user_is_company_member: {
         Args: { p_company_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      users_share_company: {
+        Args: { p_other_user_id: string; p_user_id: string }
         Returns: boolean
       }
     }
